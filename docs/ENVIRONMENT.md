@@ -10,6 +10,11 @@ revision 3. Google OAuth/Meta/Ads credentials are still missing. Rotate the AI
 and Supabase secrets shared in chat before customer data. See CONTINUATION.md
 for exact identities and VERIFICATION.md for current evidence.
 
+Google follow-up: the authorised dedicated project `tradie-ai-507211` (Tradie AI)
+is created. No billing was enabled and unrelated projects were not changed.
+Calendar API and OAuth branding are awaiting the owner's Google agreements;
+no Google credentials, scopes or account connection have been granted.
+
 ## Earlier environment checkpoint (historical; superseded above)
 
 - Repository: `outputs/tradie-ai`; private GitHub repository

@@ -84,10 +84,19 @@ verified. Workspace provider consent remains an explicit owner choice.
 
 ## 3. Google Calendar
 
-Current blocker: Google Cloud is signed in, but no Tradie AI project exists.
-The owner must approve creating a dedicated project or explicitly choose an
-existing one. No project was created and no existing project was modified.
-Creation consumes one project-quota slot; billing is not being enabled.
+The owner authorised a separate project; [Tradie AI (`tradie-ai-507211`)](https://console.cloud.google.com/home/dashboard?project=tradie-ai-507211)
+is created. Billing was not enabled and existing projects were not modified.
+Reuse this project. Calendar API activation and Google Auth Platform setup
+remain pending the owner's Google terms/consent approvals. No Google client
+credentials or Calendar account connection exist yet.
+
+The branding form has been prepared with app name Tradie AI, the owner's Google
+email as support/contact and External/Testing audience, but is not submitted.
+The final User Data Policy checkbox remains unchecked. The owner must approve
+the [API terms](https://console.cloud.google.com/tos?id=universal),
+[Calendar terms](https://console.cloud.google.com/tos?id=calendar) and
+[User Data Policy](https://developers.google.com/terms/api-services-user-data-policy)
+before completing this setup. Prepared form values may not survive tab cleanup.
 
 1. In [Google Cloud Console](https://console.cloud.google.com/), select the
    intended project, enable Google Calendar API and configure Google Auth Platform.

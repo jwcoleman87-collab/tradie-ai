@@ -89,16 +89,37 @@ working AI release. The current deployed runtime is version 6, listed below.
 
 ## Missing credentials
 
-Google Cloud is signed in as the owner. Project picker shows only Default Gemini
-Project (`gen-lang-client-0084405105`) and My First Project (`just-turbine-393809`),
-not a Tradie AI project. A dedicated-project creation form was prepared, but the
-creation action was blocked for lack of explicit resource-creation approval.
-**No Google project was created and neither existing project was changed.**
-The owner has been asked to authorise creating a separate "Tradie AI" project
-(one quota slot, persistent resource, no billing). Do not retry until approved;
-do not repurpose the unrelated projects to bypass that approval. Google terms,
-OAuth client creation/scopes and final Calendar consent will need their own
-appropriate owner approvals. No Google credentials were created or obtained.
+After being asked explicitly, the owner said "please continue" and authorised
+the separate Google project. **Tradie AI (`tradie-ai-507211`) is now created**
+under the owner's Google account, with No organization. No billing was enabled
+and the existing Gemini/My First Project resources were not changed. Do not
+create another project; reuse this exact ID.
+
+Calendar API activation is pending the owner's approval of Google's API/Calendar
+terms. The API product page currently shows Enable; no Calendar permission has
+been granted. Google Auth Platform is not configured yet. OAuth setup, its User
+Data Policy acceptance, client credentials and final Calendar consent remain.
+No Google client ID/secret or refresh token was created or obtained.
+
+The Google Auth Platform wizard was prepared but NOT submitted: app name Tradie
+AI, support/contact `j.w.coleman87@gmail.com`, External audience in Testing mode
+(Internal is unavailable for this personal account). It is at Finish with the
+Google API Services User Data Policy checkbox UNCHECKED. These are unsaved form
+values and may need re-entering if the browser tab is cleaned up. The owner must
+approve the agreements before checking the box/Continue/Create or enabling the
+Calendar API. This is not permission to grant Calendar access or create an event.
+
+- Calendar activation: https://console.cloud.google.com/apis/library/calendar-json.googleapis.com?project=tradie-ai-507211
+- Auth setup: https://console.cloud.google.com/auth/overview/create?project=tradie-ai-507211
+- API terms: https://console.cloud.google.com/tos?id=universal
+- Calendar terms: https://console.cloud.google.com/tos?id=calendar
+- User Data Policy: https://developers.google.com/terms/api-services-user-data-policy
+
+After approval, enable only Calendar API, finish testing-only branding, create
+the Web Application OAuth client with the exact callbacks in CONNECTIONS.md,
+store credentials privately and redeploy saved version 6 with the new environment
+revision. Add only the intended owner as a test user. Final Calendar account
+consent and any exact test event require separate appropriate owner approval.
 
 - `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, Calendar API/consent/test users.
 - `META_APP_ID`, `META_APP_SECRET`, `META_LOGIN_CONFIG_ID`, supported
