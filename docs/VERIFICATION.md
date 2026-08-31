@@ -14,6 +14,8 @@
 - The same HTTP checks pass against the packaged production Worker locally,
   not only the development server. The compatibility date is pinned to the
   runtime in the lockfile.
+- Packaged-server test state is kept outside the distributable build directory.
+  Release archives are checked for environment files and local database state.
 - Clean Linux GitHub CI passed install, type checking, all 53 tests, production
   build and dependency audit.
 
