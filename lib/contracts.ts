@@ -1,0 +1,196 @@
+import { z } from 'zod';
+
+export const agents = [
+  'finance',
+  'marketing',
+  'social',
+  'maintenance',
+  'website',
+] as const;
+export const Agent = z.enum(agents);
+export type AgentName = z.infer<typeof Agent>;
+export const Uuid = z.uuid();
+export const RecordKind = z.enum([
+  'asset',
+  'maintenance',
+  'customer',
+  'job',
+  'invoice',
+  'expense',
+  'campaign',
+  'website',
+  'social',
+  'note',
+]);
+const Title = z.string().trim().min(1).max(160);
+const Body = z.string().trim().min(1).max(12000);
+const ZonedDate = z.iso.datetime({ offset: true });
+export const CalendarPayload = z
+  .object({
+    summary: Title,
+    description: z.string().max(4000),
+    start: ZonedDate,
+    end: ZonedDate,
+    timeZone: z.string().min(1).max(80),
+  })
+  .strict()
+  .superRefine((p, ctx) => {
+    if (
+      Date.parse(p.end) <= Date.parse(p.start) ||
+      Date.parse(p.end) - Date.parse(p.start) > 7 * 86400000
+    )
+      ctx.addIssue({
+        code: 'custom',
+        message: 'The booking must end after it starts, within seven days.',
+      });
+    try {
+      new Intl.DateTimeFormat('en', { timeZone: p.timeZone });
+    } catch {
+      ctx.addIssue({ code: 'custom', message: 'Invalid time zone.' });
+    }
+  });
+export const RecordPayload = z
+  .object({ kind: RecordKind, title: Title, body: Body })
+  .strict();
+export const Proposal = z.discriminatedUnion('type', [
+  z
+    .object({
+      type: z.literal('calendar.create'),
+      summary: Title,
+      agent: Agent,
+      payload: CalendarPayload,
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal('draft.save'),
+      summary: Title,
+      agent: Agent,
+      payload: RecordPayload,
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal('record.create'),
+      summary: Title,
+      agent: Agent,
+      payload: RecordPayload,
+    })
+    .strict(),
+]);
+export type ProposalInput = z.infer<typeof Proposal>;
+export const ChatInput = z
+  .object({
+    workspaceId: Uuid,
+    conversationId: Uuid,
+    requestId: Uuid,
+    text: Body,
+    attachmentIds: z.array(Uuid).max(4).default([]),
+  })
+  .strict();
+export const RouteOutput = z
+  .object({ agents: z.array(Agent).min(1).max(5), reason: z.string().max(500) })
+  .strict();
+export const AgentOutput = z
+  .object({
+    reply: Body,
+    proposals: z.array(Proposal).max(5),
+    escalation: z.enum([
+      'none',
+      'missing_information',
+      'integration_error',
+      'safety_review',
+    ]),
+  })
+  .strict();
+export const CaseInput = z
+  .object({
+    workspaceId: Uuid,
+    conversationId: Uuid.nullable(),
+    agent: Agent,
+    category: z.enum([
+      'missing_information',
+      'integration_error',
+      'safety_review',
+      'general',
+    ]),
+    problem: z.string().min(1).max(2000),
+    shareWithSupport: z.boolean(),
+  })
+  .strict();
+export type ActionStatus =
+  | 'waiting_approval'
+  | 'approved'
+  | 'denied'
+  | 'executing'
+  | 'completed'
+  | 'failed'
+  | 'expired';
+export type Action = {
+  id: string;
+  workspace_id: string;
+  conversation_id: string;
+  connection_id: string | null;
+  agent: AgentName;
+  action_type: ProposalInput['type'];
+  summary: string;
+  payload: Record<string, unknown>;
+  status: ActionStatus;
+  expires_at: string;
+  error_code: string | null;
+  execution_result: Record<string, unknown> | null;
+  created_at: string;
+};
+export type ChatMessage = {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  created_at: string;
+  attachment_ids: string[];
+};
+export type WorkspaceData = {
+  id: string;
+  name: string;
+  time_zone: string;
+  ai_consent_at: string | null;
+};
+export type Conversation = { id: string; title: string; created_at: string };
+export type Upload = {
+  id: string;
+  filename: string;
+  mime_type: string;
+  size_bytes: number;
+  status: string;
+};
+export type Escalation = {
+  id: string;
+  case_id: string;
+  problem: string;
+  solution: string | null;
+  outcome: string | null;
+  status: string;
+  shared_with_support: boolean;
+};
+export type BusinessRecord = {
+  id: string;
+  kind: string;
+  title: string;
+  body: string;
+  source: string;
+  created_at: string;
+};
+export type Snapshot = {
+  workspaces: WorkspaceData[];
+  workspace: WorkspaceData;
+  role: string;
+  conversations: Conversation[];
+  conversationId: string | null;
+  messages: ChatMessage[];
+  actions: Action[];
+  uploads: Upload[];
+  cases: Escalation[];
+  records: BusinessRecord[];
+  audit: { id: number; event: string; created_at: string }[];
+  runs: { agents: AgentName[]; status: string }[];
+  calendarConnected: boolean;
+};

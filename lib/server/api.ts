@@ -1,0 +1,581 @@
+import { z } from 'zod';
+import { Uuid, ChatInput, CaseInput, type Action } from '../contracts';
+import { adminDb, authenticate, checked, membership, rpc } from './db';
+import { body, endpoint, json } from './http';
+import { publicConfig, required } from './config';
+import { AppError, requireValue } from './errors';
+import { runTeam, OpenAIProvider } from './ai';
+import { executeAction } from './actions';
+import { calendarContext } from './calendar';
+import { finishGoogle, startGoogle } from './oauth';
+import { readFileBody, safeFilename, validateFile } from './uploads';
+
+export const api = endpoint(async (request) => {
+  const url = new URL(request.url),
+    path = url.pathname.replace(/^\/api\/?/, '').replace(/\/$/, ''),
+    method = request.method;
+  if (path === 'config' && method === 'GET') return json(publicConfig());
+  if (path === 'health' && method === 'GET')
+    return json({
+      status: publicConfig().configured ? 'configured' : 'setup_required',
+    });
+  if (path === 'google/callback' && method === 'GET')
+    return finishGoogle(request);
+  const { db, user } = await authenticate(request);
+  const admin = adminDb();
+  if (path === 'bootstrap' && method === 'POST') {
+    const { name } = z
+      .object({ name: z.string().trim().min(1).max(120) })
+      .strict()
+      .parse(await body(request));
+    return json({
+      workspaceId: await rpc(db, 'bootstrap_workspace', { p_name: name }),
+    });
+  }
+  if (path === 'state' && method === 'GET') {
+    const workspaces =
+      checked(
+        await db
+          .from('workspaces')
+          .select('id,name,time_zone,ai_consent_at')
+          .order('created_at'),
+      ) || [];
+    if (!workspaces.length) return json({ workspaces: [] });
+    const workspaceId = Uuid.parse(
+      url.searchParams.get('workspaceId') || workspaces[0].id,
+    );
+    const role = await membership(db, user.id, workspaceId);
+    const workspace = workspaces.find((w) => w.id === workspaceId);
+    requireValue(workspace, 'NOT_FOUND', 404);
+    const conversations =
+      checked(
+        await db
+          .from('conversations')
+          .select('id,title,created_at')
+          .eq('workspace_id', workspaceId)
+          .order('created_at', { ascending: false })
+          .limit(100),
+      ) || [];
+    const conversationId =
+      url.searchParams.get('conversationId') || conversations[0]?.id || null;
+    if (conversationId) {
+      Uuid.parse(conversationId);
+      requireValue(
+        conversations.some((c) => c.id === conversationId),
+        'NOT_FOUND',
+        404,
+      );
+    }
+    const [
+      messages,
+      actions,
+      uploads,
+      cases,
+      records,
+      audit,
+      runs,
+      connection,
+    ] = await Promise.all([
+      conversationId
+        ? db
+            .from('messages')
+            .select('id,role,content,created_at,attachment_ids')
+            .eq('conversation_id', conversationId)
+            .order('created_at', { ascending: false })
+            .limit(200)
+        : Promise.resolve({ data: [], error: null }),
+      db
+        .from('proposed_actions')
+        .select(
+          'id,workspace_id,conversation_id,agent,action_type,summary,payload,status,expires_at,error_code,execution_result,created_at',
+        )
+        .eq('workspace_id', workspaceId)
+        .order('created_at', { ascending: false })
+        .limit(100),
+      conversationId
+        ? db
+            .from('uploaded_files')
+            .select('id,filename,mime_type,size_bytes,status')
+            .eq('conversation_id', conversationId)
+            .eq('status', 'ready')
+            .order('created_at', { ascending: false })
+            .limit(100)
+        : Promise.resolve({ data: [], error: null }),
+      db
+        .from('escalation_cases')
+        .select(
+          'id,case_id,problem,solution,outcome,status,shared_with_support',
+        )
+        .eq('workspace_id', workspaceId)
+        .order('created_at', { ascending: false })
+        .limit(100),
+      db
+        .from('business_records')
+        .select('id,kind,title,body,source,created_at')
+        .eq('workspace_id', workspaceId)
+        .order('created_at', { ascending: false })
+        .limit(100),
+      db
+        .from('audit_logs')
+        .select('id,event,created_at')
+        .eq('workspace_id', workspaceId)
+        .order('created_at', { ascending: false })
+        .limit(30),
+      conversationId
+        ? db
+            .from('agent_runs')
+            .select('agents,status')
+            .eq('conversation_id', conversationId)
+            .order('created_at', { ascending: false })
+            .limit(1)
+        : Promise.resolve({ data: [], error: null }),
+      admin
+        .from('integration_credentials')
+        .select('connection_id')
+        .eq('workspace_id', workspaceId)
+        .maybeSingle(),
+    ]);
+    return json({
+      workspaces,
+      workspace,
+      role,
+      conversations,
+      conversationId,
+      messages: (checked(messages) || []).reverse(),
+      actions: checked(actions),
+      uploads: checked(uploads),
+      cases: checked(cases),
+      records: checked(records),
+      audit: checked(audit),
+      runs: checked(runs),
+      calendarConnected: !!checked(connection),
+    });
+  }
+  if (path === 'consent' && method === 'POST') {
+    const input = z
+      .object({ workspaceId: Uuid, allowAI: z.boolean() })
+      .strict()
+      .parse(await body(request));
+    await membership(db, user.id, input.workspaceId, true);
+    checked(
+      await admin
+        .from('workspaces')
+        .update({
+          ai_consent_at: input.allowAI ? new Date().toISOString() : null,
+        })
+        .eq('id', input.workspaceId),
+    );
+    return json({ ok: true });
+  }
+  if (path === 'conversations' && method === 'POST') {
+    const input = z
+      .object({
+        workspaceId: Uuid,
+        title: z.string().trim().min(1).max(120).default('New conversation'),
+      })
+      .strict()
+      .parse(await body(request));
+    await membership(db, user.id, input.workspaceId);
+    await rpc(admin, 'consume_rate', {
+      p_workspace: input.workspaceId,
+      p_user: user.id,
+      p_operation: 'conversation',
+      p_limit: 10,
+    });
+    return json(
+      checked(
+        await admin
+          .from('conversations')
+          .insert({
+            workspace_id: input.workspaceId,
+            created_by: user.id,
+            title: input.title,
+          })
+          .select('id')
+          .single(),
+      ),
+      201,
+    );
+  }
+  if (path === 'chat' && method === 'POST') {
+    required('OPENAI_API_KEY');
+    const input = ChatInput.parse(await body(request));
+    await membership(db, user.id, input.workspaceId);
+    const run = await rpc<{ id: string; status: string; existing: boolean }>(
+      admin,
+      'begin_chat',
+      {
+        p_workspace: input.workspaceId,
+        p_conversation: input.conversationId,
+        p_user: user.id,
+        p_request: input.requestId,
+        p_text: input.text,
+        p_files: input.attachmentIds,
+      },
+    );
+    if (run.existing)
+      return json(
+        { runId: run.id, status: run.status },
+        run.status === 'working' ? 202 : 200,
+      );
+    try {
+      const history = (
+        checked(
+          await db
+            .from('messages')
+            .select('role,content')
+            .eq('conversation_id', input.conversationId)
+            .order('created_at', { ascending: false })
+            .limit(30),
+        ) || []
+      ).reverse();
+      const records =
+        checked(
+          await db
+            .from('business_records')
+            .select('kind,title,body,source')
+            .eq('workspace_id', input.workspaceId)
+            .order('created_at', { ascending: false })
+            .limit(30),
+        ) || [];
+      const workspace = checked(
+        await db
+          .from('workspaces')
+          .select('time_zone')
+          .eq('id', input.workspaceId)
+          .single(),
+      )!;
+      const connection = checked(
+        await admin
+          .from('integration_credentials')
+          .select('connection_id')
+          .eq('workspace_id', input.workspaceId)
+          .maybeSingle(),
+      );
+      const attachments: unknown[] = [];
+      let attachmentBytes = 0;
+      for (const id of new Set(input.attachmentIds)) {
+        const file = checked(
+          await db
+            .from('uploaded_files')
+            .select('filename,mime_type,object_path,size_bytes')
+            .eq('id', id)
+            .eq('workspace_id', input.workspaceId)
+            .eq('conversation_id', input.conversationId)
+            .eq('status', 'ready')
+            .single(),
+        )!;
+        attachmentBytes += file.size_bytes;
+        requireValue(
+          attachmentBytes <= 20 * 1024 * 1024,
+          'ATTACHMENT_TOTAL_TOO_LARGE',
+          413,
+          'Choose files totalling 20 MB or less per message.',
+        );
+        const data = checked(
+          await db.storage.from('workspace-files').download(file.object_path),
+        )!;
+        const bytes = Buffer.from(await data.arrayBuffer());
+        if (file.mime_type.startsWith('image/'))
+          attachments.push({
+            type: 'input_image',
+            image_url: `data:${file.mime_type};base64,${bytes.toString('base64')}`,
+            detail: 'auto',
+          });
+        else if (file.mime_type === 'application/pdf')
+          attachments.push({
+            type: 'input_file',
+            filename: file.filename,
+            file_data: `data:application/pdf;base64,${bytes.toString('base64')}`,
+          });
+        else
+          attachments.push({
+            type: 'input_text',
+            text: `Untrusted uploaded document ${file.filename}:\n${bytes.toString('utf8').slice(0, 20000)}`,
+          });
+      }
+      // Bound model context independently of the stored conversation length.
+      let remaining = 65000;
+      const bounded = history
+        .slice()
+        .reverse()
+        .filter((m) => {
+          remaining -= m.content.length;
+          return remaining >= 0;
+        })
+        .reverse();
+      const result = await runTeam(new OpenAIProvider(), {
+        history: bounded,
+        records: records.map((r) => ({ ...r, body: r.body.slice(0, 3000) })),
+        timeZone: workspace.time_zone,
+        calendar: connection
+          ? await calendarContext(input.workspaceId)
+          : { available: false },
+        attachments,
+      });
+      requireValue(
+        connection ||
+          !result.proposals.some((p) => p.type === 'calendar.create'),
+        'CALENDAR_NOT_CONNECTED',
+        409,
+        'Connect Google Calendar first, then ask your team to prepare the booking.',
+      );
+      await rpc(admin, 'complete_chat', {
+        p_run: run.id,
+        p_reply: result.reply,
+        p_agents: result.agents,
+        p_versions: result.versions,
+        p_model: result.model,
+        p_proposals: result.proposals.map((p) => ({
+          ...p,
+          connectionId:
+            p.type === 'calendar.create' ? connection?.connection_id : null,
+        })),
+      });
+      if (result.escalation !== 'none') {
+        // No AI-authored free text or transcript is included in escalation.
+        checked(
+          await admin.from('escalation_cases').insert({
+            workspace_id: input.workspaceId,
+            conversation_id: input.conversationId,
+            agent: result.agents[0],
+            category: result.escalation,
+            problem:
+              'The AI team needs clarification or a specialist review. Please review this conversation in your private workspace.',
+            created_by: user.id,
+          }),
+        );
+      }
+      return json({
+        runId: run.id,
+        status: 'completed',
+        agents: result.agents,
+      });
+    } catch (error) {
+      const code = error instanceof AppError ? error.code : 'AI_FAILED';
+      await admin
+        .from('agent_runs')
+        .update({
+          status: 'failed',
+          error_code: code,
+          finished_at: new Date().toISOString(),
+        })
+        .eq('id', run.id)
+        .eq('status', 'working');
+      throw error;
+    }
+  }
+  const decisionMatch = path.match(/^actions\/([^/]+)\/decision$/);
+  if (decisionMatch && method === 'POST') {
+    const actionId = Uuid.parse(decisionMatch[1]);
+    const input = z
+      .object({ decision: z.enum(['accept', 'deny']) })
+      .strict()
+      .parse(await body(request));
+    const action = checked(
+      await db
+        .from('proposed_actions')
+        .select('workspace_id')
+        .eq('id', actionId)
+        .maybeSingle(),
+    );
+    requireValue(action, 'NOT_FOUND', 404);
+    await membership(db, user.id, action.workspace_id, true);
+    return json(
+      await rpc<Action>(admin, 'decide_action', {
+        p_action: actionId,
+        p_user: user.id,
+        p_decision: input.decision,
+      }),
+    );
+  }
+  const executeMatch = path.match(/^actions\/([^/]+)\/execute$/);
+  if (executeMatch && method === 'POST') {
+    const id = Uuid.parse(executeMatch[1]);
+    z.object({})
+      .strict()
+      .parse(await body(request));
+    const action = checked(
+      await db
+        .from('proposed_actions')
+        .select('workspace_id')
+        .eq('id', id)
+        .maybeSingle(),
+    );
+    requireValue(action, 'NOT_FOUND', 404);
+    await membership(db, user.id, action.workspace_id, true);
+    return json(await executeAction(id, user.id));
+  }
+  if (path === 'uploads' && method === 'POST') {
+    const workspaceId = Uuid.parse(url.searchParams.get('workspaceId')),
+      conversationId = Uuid.parse(url.searchParams.get('conversationId'));
+    await membership(db, user.id, workspaceId);
+    const conversation = checked(
+      await db
+        .from('conversations')
+        .select('id')
+        .eq('workspace_id', workspaceId)
+        .eq('id', conversationId)
+        .maybeSingle(),
+    );
+    requireValue(conversation, 'NOT_FOUND', 404);
+    await rpc(admin, 'consume_rate', {
+      p_workspace: workspaceId,
+      p_user: user.id,
+      p_operation: 'upload',
+      p_limit: 10,
+    });
+    const bytes = await readFileBody(request),
+      mime = request.headers.get('content-type')?.split(';')[0] || '';
+    validateFile(bytes, mime);
+    const filename = safeFilename(url.searchParams.get('filename') || 'upload'),
+      id = crypto.randomUUID(),
+      objectPath = `${workspaceId}/${id}/${filename}`;
+    const hash = Buffer.from(
+      await crypto.subtle.digest('SHA-256', bytes),
+    ).toString('hex');
+    checked(
+      await admin.from('uploaded_files').insert({
+        id,
+        workspace_id: workspaceId,
+        conversation_id: conversationId,
+        uploaded_by: user.id,
+        filename,
+        object_path: objectPath,
+        mime_type: mime,
+        size_bytes: bytes.length,
+        sha256: hash,
+        status: 'uploading',
+      }),
+    );
+    try {
+      checked(
+        await admin.storage
+          .from('workspace-files')
+          .upload(objectPath, bytes, { contentType: mime, upsert: false }),
+      );
+      checked(
+        await admin
+          .from('uploaded_files')
+          .update({ status: 'ready' })
+          .eq('id', id),
+      );
+    } catch (error) {
+      await admin.storage.from('workspace-files').remove([objectPath]);
+      await admin
+        .from('uploaded_files')
+        .update({ status: 'failed' })
+        .eq('id', id);
+      throw error;
+    }
+    return json(
+      {
+        id,
+        filename,
+        mime_type: mime,
+        size_bytes: bytes.length,
+        status: 'ready',
+      },
+      201,
+    );
+  }
+  const fileMatch = path.match(/^uploads\/([^/]+)\/url$/);
+  if (fileMatch && method === 'GET') {
+    const id = Uuid.parse(fileMatch[1]);
+    const file = checked(
+      await db
+        .from('uploaded_files')
+        .select('object_path,filename')
+        .eq('id', id)
+        .eq('status', 'ready')
+        .maybeSingle(),
+    );
+    requireValue(file, 'NOT_FOUND', 404);
+    return json(
+      checked(
+        await db.storage
+          .from('workspace-files')
+          .createSignedUrl(file.object_path, 60, { download: file.filename }),
+      ),
+    );
+  }
+  if (path === 'cases' && method === 'POST') {
+    const input = CaseInput.parse(await body(request));
+    await membership(db, user.id, input.workspaceId, true);
+    return json(
+      await rpc(admin, 'create_case', {
+        p_workspace: input.workspaceId,
+        p_conversation: input.conversationId,
+        p_user: user.id,
+        p_agent: input.agent,
+        p_category: input.category,
+        p_problem: input.problem,
+        p_share: input.shareWithSupport,
+      }),
+      201,
+    );
+  }
+  const caseMatch = path.match(/^cases\/([^/]+)$/);
+  if (caseMatch && method === 'PATCH') {
+    const id = Uuid.parse(caseMatch[1]);
+    const input = z
+      .object({
+        solution: z.string().min(1).max(2000),
+        outcome: z.string().min(1).max(2000),
+      })
+      .strict()
+      .parse(await body(request));
+    await rpc(admin, 'resolve_case', {
+      p_case: id,
+      p_user: user.id,
+      p_solution: input.solution,
+      p_outcome: input.outcome,
+    });
+    return json({ ok: true });
+  }
+  if (path === 'support' && method === 'GET') {
+    requireValue(
+      await rpc(db, 'is_support_operator', {}),
+      'SUPPORT_FORBIDDEN',
+      403,
+    );
+    return json(
+      checked(
+        await db
+          .from('support_cases')
+          .select('case_id,payload,status,solution,outcome')
+          .order('updated_at', { ascending: false })
+          .limit(100),
+      ),
+    );
+  }
+  if (path === 'google/start' && method === 'POST') {
+    const input = z
+      .object({ workspaceId: Uuid })
+      .strict()
+      .parse(await body(request));
+    await membership(db, user.id, input.workspaceId, true);
+    await rpc(admin, 'consume_rate', {
+      p_workspace: input.workspaceId,
+      p_user: user.id,
+      p_operation: 'oauth',
+      p_limit: 5,
+    });
+    return startGoogle(input.workspaceId, user.id);
+  }
+  if (path === 'google/disconnect' && method === 'POST') {
+    const input = z
+      .object({ workspaceId: Uuid })
+      .strict()
+      .parse(await body(request));
+    await membership(db, user.id, input.workspaceId, true);
+    checked(
+      await admin
+        .from('integration_credentials')
+        .delete()
+        .eq('workspace_id', input.workspaceId),
+    );
+    return json({ ok: true });
+  }
+  throw new AppError('NOT_FOUND', 404, 'This endpoint does not exist.');
+});
