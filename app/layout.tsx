@@ -19,6 +19,9 @@ export const metadata: Metadata = {
   description:
     'One conversation. Five managed agents. Your approval before anything changes.',
   robots: { index: false, follow: false },
+  icons: {
+    icon: { url: '/favicon.svg?v=blue-tiles-1', type: 'image/svg+xml' },
+  },
   openGraph: {
     title: 'Tradie AI',
     description: 'Your private business team',

@@ -1,6 +1,7 @@
 'use client';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import type { Session, SupabaseClient } from '@supabase/supabase-js';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -8,7 +9,6 @@ import { Input } from '@/components/ui/input';
 import { ConnectionsPanel } from './connections-panel';
 import { eligibleAIProviders, aiProviderLabel } from '@/lib/ai-settings';
 import {
-  Sparkles,
   Wallet,
   Megaphone,
   Camera,
@@ -352,9 +352,15 @@ export default function Workspace() {
   return (
     <main className="app-shell">
       <header className="topbar">
-        <Link className="brand" href="/">
+        <Link className="brand" href="/" aria-label="Tradie AI home">
           <span className="brand-icon">
-            <Sparkles size={21} />
+            <Image
+              src="/favicon.svg"
+              alt=""
+              width={38}
+              height={38}
+              unoptimized
+            />
           </span>
           tradie<span>ai</span>
         </Link>
@@ -575,7 +581,13 @@ export default function Workspace() {
                 {!snapshot?.messages.length && (
                   <>
                     <div className="welcome-mark">
-                      <Sparkles size={27} />
+                      <Image
+                        src="/favicon.svg"
+                        alt=""
+                        width={50}
+                        height={50}
+                        unoptimized
+                      />
                     </div>
                     <h2>What’s on your plate?</h2>
                     <p className="muted">

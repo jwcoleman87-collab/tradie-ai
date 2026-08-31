@@ -30,11 +30,16 @@
 .welcome-mark {
   display: grid;
   place-items: center;
-  background: #8059bf;
-  color: white;
+  background: #f6f6f6;
   border-radius: 13px;
   width: 38px;
   height: 38px;
+}
+.brand-icon img,
+.welcome-mark img {
+  display: block;
+  width: 100%;
+  height: 100%;
 }
 .top-tag {
   color: #8a8197;

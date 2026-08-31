@@ -3,6 +3,15 @@
 Updated 31 August 2026 (Australia/Sydney). Read this before making changes.
 This file describes the current checkout; the hosted app is an earlier release.
 
+## Logo update
+
+The owner selected the blue four-tile mark from their screenshot. It replaces
+the purple initial/sparkle branding in the header, welcome screen and favicon.
+`public/favicon.svg` is the shared crisp vector source; its colours match the
+reference. The existing three-panel purple/lilac theme is otherwise unchanged.
+The social preview `public/og.png` now includes the same mark beside the title.
+This branding update does not remove the pending database migration gate below.
+
 ## User intent
 
 Continue the existing three-panel Tradie AI business team without redesigning it.
