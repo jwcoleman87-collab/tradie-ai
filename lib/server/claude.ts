@@ -3,6 +3,8 @@ import type { ModelProvider, ModelUsage } from './ai';
 import { env, required } from './config';
 import { modelSchema } from './model-schema';
 import { AppError, requireValue } from './errors';
+import { modelFetch } from './model-fetch';
+import type { ModelDiagnostic } from '../ai-diagnostics';
 import {
   modelHttpError,
   modelTimeout,
@@ -103,6 +105,7 @@ export class ClaudeProvider implements ModelProvider {
   readonly name = 'anthropic' as const;
   model = env('ANTHROPIC_MODEL') || 'claude-haiku-4-5-20251001';
   usage: ModelUsage[] = [];
+  diagnostics: ModelDiagnostic[] = [];
   async structured<T>(
     schema: z.ZodType<T>,
     instructions: string,
@@ -126,17 +129,20 @@ export class ClaudeProvider implements ModelProvider {
     };
     let response: Response;
     try {
-      response = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: {
-          'x-api-key': key,
-          'anthropic-version': '2023-06-01',
-          'Content-Type': 'application/json',
+      response = await modelFetch(
+        'https://api.anthropic.com/v1/messages',
+        {
+          method: 'POST',
+          headers: {
+            'x-api-key': key,
+            'anthropic-version': '2023-06-01',
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(payload),
+          signal: AbortSignal.timeout(modelTimeout()),
         },
-        body: JSON.stringify(payload),
-        signal: AbortSignal.timeout(modelTimeout()),
-        redirect: 'error',
-      });
+        this.diagnostics,
+      );
     } catch (error) {
       if (error instanceof AppError) throw error;
       throw new AppError(

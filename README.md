@@ -9,14 +9,18 @@ Supabase Auth/Postgres/Storage and all four migrations are live. The private
 hosted app includes the selected blue four-tile logo, OpenAI + Claude backup,
 Facebook Page connections and read-only Google Ads reporting.
 
-Both AI keys are configured privately and both real providers passed routing
-and generation tests with synthetic text. A live schema incompatibility was
-fixed and regression-tested; 106 automated tests pass. Each workspace must
-explicitly allow its chosen providers in Connections before AI processing.
+Both AI keys are configured privately. A reported hosted chat failure was traced
+to `redirect: 'error'`, which the Worker engine rejects before contacting either
+provider. Manual redirect handling fixes that without forwarding credentials.
+OpenAI passed real routing/generation inside the Worker engine; the latest Claude
+test reports `AI_QUOTA_EXCEEDED` (HTTP 400), so its API credits/usage limit needs
+attention despite earlier success. All 129 automated tests pass. Each workspace
+must explicitly allow its chosen providers before AI processing.
 
 Google Calendar API and the testing-only OAuth client are configured, with
 credentials saved privately and activated in the hosted app. The owner is the
-sole Google test user; final in-app Google account consent is still required.
+sole Google test user. A metadata-only check confirms a connected Calendar record;
+event creation/refresh still needs a separately approved live test.
 Meta app and Google Ads credentials remain missing. No post, event or ad spend was made.
 Rotate the secrets shared in chat before onboarding customer data.
 Start with [the continuation checkpoint](docs/CONTINUATION.md),
@@ -47,7 +51,12 @@ can be integrated without rebuilding the backend.
   connection binding so an approval cannot silently target a changed account.
 - Ask James Case ID → Problem → Solution → Outcome. Private by default; optional
   sharing sends categorical information only, never free text or files.
-- Metadata-only audit logs, durable rate limits, file checks and generic errors.
+- Metadata-only audit logs, durable rate limits, file checks and actionable errors.
+  Recent chat runs show outcomes, provider/model, HTTP status, timing and safe
+  request references. No raw provider error body or customer text is logged.
+- Saved messages clear the composer even when AI generation fails. Uncertain
+  network outcomes retain the draft and reuse its request reference. Paused
+  processing is explained beside the composer, with a settings shortcut.
 - Independent Calendar, Facebook Page and Google Ads connections per workspace.
   Encrypted, expiring resource selection; no provider token reaches the browser.
 - Facebook immediate text/link publishing after owner approval; a durable sending
@@ -171,6 +180,11 @@ For read-only staging checks set `TEST_APP_ORIGIN`, `TEST_USER_A_TOKEN` and
 Without those values live tests skip explicitly. CI runs type checks, the test
 suite, production build and dependency audit.
 
+The transport regression runs the real helper inside `workerd` via Miniflare,
+not just Node's fetch implementation. API receipt tests verify failure audit,
+idempotent replies and safe database/case errors. See
+[chat troubleshooting](docs/CHAT-TROUBLESHOOTING.md) for diagnostic boundaries.
+
 ## Operational boundaries
 
 - Ask James cases are saved and optionally queued centrally. No email/SMS
@@ -180,7 +194,8 @@ suite, production build and dependency audit.
   exposes only approved categorical packages, not private workspaces. There is
   no self-service admin elevation or customer access to managed skill sources.
 - UI limits: latest 200 messages; 100 conversations/actions/files/records/cases;
-  30 audit entries. Older records stay in Postgres. AI context is bounded to 30
+  30 audit entries and ten recent runs for the selected conversation. Older
+  records stay in Postgres. AI context is bounded to 30
   recent messages/65k text, 30 business records, and four current attachments
   totalling 20 MB. This is not unlimited memory or semantic document search.
 - Uploads: JPEG, PNG, WebP, PDF, UTF-8 TXT/CSV; 10 MB each. Signature and size

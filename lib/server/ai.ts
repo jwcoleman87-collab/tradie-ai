@@ -8,6 +8,8 @@ import type { AIProviderName } from '../ai-settings';
 import type { ProviderAttempt } from './ai-provider';
 import { modelHttpError, modelTimeout, boundedModelJson } from './model-http';
 import { modelSchema } from './model-schema';
+import { modelFetch } from './model-fetch';
+import type { ModelDiagnostic } from '../ai-diagnostics';
 export type ModelUsage = {
   inputTokens: number;
   outputTokens: number;
@@ -26,11 +28,13 @@ export interface ModelProvider {
   usage?: ModelUsage[];
   name?: AIProviderName;
   attempts?: ProviderAttempt[];
+  diagnostics?: ModelDiagnostic[];
 }
 export class OpenAIProvider implements ModelProvider {
   readonly name = 'openai' as const;
   model = env('OPENAI_MODEL') || 'gpt-5-mini';
   usage: ModelUsage[] = [];
+  diagnostics: ModelDiagnostic[] = [];
   async structured<T>(
     schema: z.ZodType<T>,
     instructions: string,
@@ -42,30 +46,33 @@ export class OpenAIProvider implements ModelProvider {
       throw new AppError('AI_LIMIT_CONFIG_INVALID', 503);
     let response: Response;
     try {
-      response = await fetch('https://api.openai.com/v1/responses', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${required('OPENAI_API_KEY')}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: this.model,
-          store: false,
-          instructions,
-          input,
-          max_output_tokens: maxOutput,
-          text: {
-            format: {
-              type: 'json_schema',
-              name: 'tradie_result',
-              strict: true,
-              schema: jsonSchema,
-            },
+      response = await modelFetch(
+        'https://api.openai.com/v1/responses',
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${required('OPENAI_API_KEY')}`,
+            'Content-Type': 'application/json',
           },
-        }),
-        signal: AbortSignal.timeout(modelTimeout()),
-        redirect: 'error',
-      });
+          body: JSON.stringify({
+            model: this.model,
+            store: false,
+            instructions,
+            input,
+            max_output_tokens: maxOutput,
+            text: {
+              format: {
+                type: 'json_schema',
+                name: 'tradie_result',
+                strict: true,
+                schema: jsonSchema,
+              },
+            },
+          }),
+          signal: AbortSignal.timeout(modelTimeout()),
+        },
+        this.diagnostics,
+      );
     } catch (e) {
       if (e instanceof AppError) throw e;
       throw new AppError(

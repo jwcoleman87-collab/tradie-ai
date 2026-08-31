@@ -32,7 +32,7 @@ export async function graphRead(
   });
   const response = await timedFetch(
     'https://graph.facebook.com/' + graphVersion() + '/' + path + '?' + query,
-    { headers: { Authorization: 'Bearer ' + token }, redirect: 'error' },
+    { headers: { Authorization: 'Bearer ' + token }, redirect: 'manual' },
   );
   requireValue(
     response.ok,
@@ -72,7 +72,7 @@ export async function adsRead(
       method: query ? 'POST' : 'GET',
       headers,
       ...(query ? { body: JSON.stringify({ query }) } : {}),
-      redirect: 'error',
+      redirect: 'manual',
     },
   );
   requireValue(

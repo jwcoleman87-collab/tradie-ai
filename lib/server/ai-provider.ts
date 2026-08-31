@@ -8,19 +8,25 @@ import { OpenAIProvider, type ModelProvider } from './ai';
 import { ClaudeProvider } from './claude';
 import { env } from './config';
 import { AppError, requireValue } from './errors';
-export type ProviderAttempt = {
+import type { ModelDiagnostic } from '../ai-diagnostics';
+export type ProviderAttempt = Partial<ModelDiagnostic> & {
   provider: AIProviderName;
   model: string;
   status: 'completed' | 'failed';
   errorCode?: string;
+  elapsedMs?: number;
+  step?: 'routing' | 'response';
 };
 const fallbackErrors = new Set([
   'AI_QUOTA_EXCEEDED',
   'AI_RATE_LIMITED',
   'AI_UNAVAILABLE',
+  'AI_TIMEOUT',
+  'AI_NETWORK_ERROR',
 ]);
 export class FallbackProvider implements ModelProvider {
   private index = 0;
+  private completedCalls = 0;
   attempts: ProviderAttempt[] = [];
   constructor(
     private readonly choices: (ModelProvider & { name: AIProviderName })[],
@@ -45,13 +51,20 @@ export class FallbackProvider implements ModelProvider {
   ): Promise<T> {
     while (true) {
       const selected = this.choices[this.index];
+      const started = Date.now();
+      const step = this.completedCalls === 0 ? 'routing' : 'response';
+      const diagnosticCount = selected.diagnostics?.length || 0;
       try {
         const output = await selected.structured(schema, instructions, input);
         this.attempts.push({
           provider: selected.name,
           model: selected.model,
           status: 'completed',
+          step,
+          elapsedMs: Date.now() - started,
+          ...selected.diagnostics?.[diagnosticCount],
         });
+        this.completedCalls++;
         return output;
       } catch (error) {
         const code = error instanceof AppError ? error.code : 'AI_FAILED';
@@ -60,6 +73,9 @@ export class FallbackProvider implements ModelProvider {
           model: selected.model,
           status: 'failed',
           errorCode: code,
+          step,
+          elapsedMs: Date.now() - started,
+          ...selected.diagnostics?.[diagnosticCount],
         });
         if (!fallbackErrors.has(code) || this.index + 1 >= this.choices.length)
           throw error;

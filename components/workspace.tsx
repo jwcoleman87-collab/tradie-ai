@@ -8,6 +8,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { ConnectionsPanel } from './connections-panel';
 import { eligibleAIProviders, aiProviderLabel } from '@/lib/ai-settings';
+import { aiProblem } from '@/lib/ai-diagnostics';
+import { chatBlockedReason, submitChat } from '@/lib/chat-client';
 import {
   Wallet,
   Megaphone,
@@ -100,17 +102,18 @@ export default function Workspace() {
     historyRef = useRef<HTMLDivElement>(null),
     loadSequence = useRef(0),
     scope = useRef({ workspaceId: '', conversationId: '' }),
-    sendRequest = useRef<{ key: string; id: string } | null>(null);
+    sendRequest = useRef<{ key: string; id: string } | null>(null),
+    sending = useRef(false);
   const token = session?.access_token || '',
     workspaceId = snapshot?.workspace.id || '',
     owner = snapshot?.role === 'owner';
-  const canChat = !!(
-    snapshot?.workspace.ai_consent_at &&
-    config &&
-    eligibleAIProviders(snapshot.workspace, config.aiProviders).length &&
-    session &&
-    !busy
+  const blockedReason = chatBlockedReason(
+    !!session,
+    snapshot?.workspace,
+    config?.aiProviders,
+    busy,
   );
+  const canChat = !blockedReason && !!snapshot?.conversationId;
 
   useEffect(() => {
     let alive = true;
@@ -239,7 +242,14 @@ export default function Workspace() {
   }
   async function send(event?: { preventDefault(): void }) {
     event?.preventDefault();
-    if (!canChat || !text.trim() || !snapshot?.conversationId) return;
+    if (
+      sending.current ||
+      !canChat ||
+      !text.trim() ||
+      !snapshot?.conversationId
+    )
+      return;
+    sending.current = true;
     const key = JSON.stringify([
       workspaceId,
       snapshot.conversationId,
@@ -248,41 +258,50 @@ export default function Workspace() {
     ]);
     if (sendRequest.current?.key !== key)
       sendRequest.current = { key, id: crypto.randomUUID() };
-    await perform(async () => {
-      try {
-        const result = await requestApi<{ status: string; agents?: string[] }>(
-          token,
-          'chat',
-          'POST',
-          {
-            workspaceId,
-            conversationId: snapshot.conversationId,
-            requestId: sendRequest.current!.id,
-            text: text.trim(),
-            attachmentIds: selectedFiles,
-          },
-        );
-        if (result.status === 'failed') {
-          sendRequest.current = null;
-          throw Error(
-            'That attempt failed. Your message is saved. Press Send to try again.',
+    try {
+      await perform(async () => {
+        try {
+          const result = await submitChat(
+            token,
+            {
+              workspaceId,
+              conversationId: snapshot.conversationId,
+              requestId: sendRequest.current!.id,
+              text: text.trim(),
+              attachmentIds: selectedFiles,
+            },
+            () => {
+              setText('');
+              setSelectedFiles([]);
+              sendRequest.current = null;
+            },
           );
+          if (result.status === 'failed') {
+            throw Error(
+              `Your message is saved, but no reply was completed. ${aiProblem(result.error?.code)}${result.error?.code ? ` [${result.error.code}]` : ''}`,
+            );
+          }
+          if (result.status === 'working') {
+            setNotice(
+              'The previous request is still running. Refresh in a moment.',
+            );
+            return;
+          }
+          setActiveAgents(result.agents || []);
+          setNotice(result.notice || '');
+        } finally {
+          try {
+            await refresh();
+          } catch {
+            setNotice(
+              'The conversation could not refresh. Your message receipt is unchanged; reload to see the latest history.',
+            );
+          }
         }
-        if (result.status === 'working') {
-          setNotice(
-            'The previous request is still running. Refresh in a moment.',
-          );
-          return;
-        }
-        setText('');
-        setSelectedFiles([]);
-        sendRequest.current = null;
-        setActiveAgents(result.agents || []);
-        setNotice('');
-      } finally {
-        await refresh();
-      }
-    });
+      });
+    } finally {
+      sending.current = false;
+    }
   }
   async function upload(files: FileList | null) {
     if (!files || !snapshot?.conversationId) return;
@@ -769,7 +788,8 @@ export default function Workspace() {
           <form className="composer" onSubmit={send}>
             <Textarea
               aria-label="Message your team"
-              placeholder="Tell your team what you need…"
+              placeholder={blockedReason || 'Tell your team what you need…'}
+              aria-describedby="composer-help"
               value={text}
               maxLength={12000}
               disabled={!canChat}
@@ -832,6 +852,24 @@ export default function Workspace() {
               </Button>
             </div>
           </form>
+          <output id="composer-help" className="composer-caption block">
+            {blockedReason}
+            {snapshot &&
+              !busy &&
+              blockedReason &&
+              (owner ? (
+                <Button
+                  type="button"
+                  variant="link"
+                  size="sm"
+                  onClick={() => chooseView('connections')}
+                >
+                  Review AI settings
+                </Button>
+              ) : (
+                <span> Ask your workspace owner to review AI settings.</span>
+              ))}
+          </output>
           <p className="composer-caption">
             AI prepares. You decide. Nothing external changes without your
             approval.
@@ -889,18 +927,46 @@ export default function Workspace() {
             </p>
           )}
           {view === 'audit' &&
-            snapshot &&
-            !!snapshot.runs?.[0]?.provider_trace?.length && (
-              <article className="action-card">
-                <h3>Latest AI request</h3>
-                {snapshot.runs[0].provider_trace.map((r, i) => (
-                  <p key={i}>
-                    {aiProviderLabel(r.provider)} · {r.model} · {r.status}
-                    {r.errorCode ? ` (${r.errorCode})` : ''}
-                  </p>
+            snapshot?.runs.map((run, runIndex) => (
+              <article className="action-card" key={run.id}>
+                <h3>
+                  {runIndex === 0 ? 'Latest AI request' : 'AI request'} ·{' '}
+                  {run.status}
+                </h3>
+                <p className="auth-hint">
+                  {new Date(run.created_at).toLocaleString()}
+                </p>
+                {run.status === 'failed' && <p>{aiProblem(run.error_code)}</p>}
+                {run.status === 'working' && (
+                  <p>Reply pending. No proposed actions have been executed.</p>
+                )}
+                {run.provider_trace.map((r, i) => (
+                  <div key={i} className="mt-2">
+                    <p>
+                      {aiProviderLabel(r.provider)} · {r.model} ·{' '}
+                      {r.step || 'request'} · {r.status}
+                      {r.errorCode ? ` (${r.errorCode})` : ''}
+                    </p>
+                    {(r.httpStatus || r.elapsedMs !== undefined) && (
+                      <p className="auth-hint">
+                        {r.httpStatus
+                          ? `Provider HTTP ${r.httpStatus}`
+                          : 'No provider HTTP response'}
+                        {r.elapsedMs !== undefined
+                          ? ` · ${(r.elapsedMs / 1000).toFixed(1)}s`
+                          : ''}
+                      </p>
+                    )}
+                    {r.providerRequestId && (
+                      <p className="auth-hint break-all">
+                        Provider reference: {r.providerRequestId}
+                      </p>
+                    )}
+                  </div>
                 ))}
+                <p className="auth-hint break-all mt-2">Request: {run.id}</p>
               </article>
-            )}
+            ))}
           {view === 'actions' && (
             <>
               {!proposed.length && (
@@ -1001,6 +1067,11 @@ export default function Workspace() {
               {snapshot?.audit.map((a) => (
                 <div className="audit-item" key={a.id}>
                   {a.event.replaceAll('.', ' · ')}
+                  {a.errorCode && (
+                    <p>
+                      {aiProblem(a.errorCode)} ({a.errorCode})
+                    </p>
+                  )}
                   <br />
                   <span className="muted">
                     {new Date(a.created_at).toLocaleString()}

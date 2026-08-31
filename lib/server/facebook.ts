@@ -22,7 +22,7 @@ export async function sendFacebookPost(
       {
         method: 'POST',
         headers: { Authorization: 'Bearer ' + token },
-        redirect: 'error',
+        redirect: 'manual',
         body: new URLSearchParams({
           message: p.message,
           ...(p.link ? { link: p.link } : {}),

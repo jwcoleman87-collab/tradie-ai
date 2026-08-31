@@ -122,7 +122,7 @@ export async function googleAdsAccess(refreshToken: string) {
       client_id: client.id,
       client_secret: client.secret,
     }),
-    redirect: 'error',
+    redirect: 'manual',
   });
   requireValue(
     response.ok,

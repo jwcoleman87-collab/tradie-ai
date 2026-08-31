@@ -101,7 +101,7 @@ async function facebookCandidate(code: string): Promise<CandidateSecrets> {
         redirect_uri: callback('facebook'),
         code,
       }),
-    { redirect: 'error' },
+    { redirect: 'manual' },
   );
   requireValue(first.ok, 'OAUTH_EXCHANGE_FAILED', 409);
   const short = z
@@ -116,7 +116,7 @@ async function facebookCandidate(code: string): Promise<CandidateSecrets> {
         client_secret: required('META_APP_SECRET'),
         fb_exchange_token: short.access_token,
       }),
-    { redirect: 'error' },
+    { redirect: 'manual' },
   );
   requireValue(exchange.ok, 'OAUTH_EXCHANGE_FAILED', 409);
   const { access_token: token } = z
@@ -238,7 +238,7 @@ export async function finishProvider(
         redirect_uri: callback(provider),
         code_verifier: stored.verifier,
       }),
-      redirect: 'error',
+      redirect: 'manual',
     });
     requireValue(response.ok, 'OAUTH_EXCHANGE_FAILED', 409);
     const tokens = z
@@ -372,13 +372,11 @@ export async function selectProviderResource(
   requireValue(chosen, 'RESOURCE_FORBIDDEN', 403);
   let resource: ResourceChoice;
   if (row.provider === 'facebook') {
-    const verified = z
-      .object({ id: ExternalId, name: z.string() })
-      .parse(
-        await graphRead(ExternalId.parse(chosen.id), chosen.token, {
-          fields: 'id,name',
-        }),
-      );
+    const verified = z.object({ id: ExternalId, name: z.string() }).parse(
+      await graphRead(ExternalId.parse(chosen.id), chosen.token, {
+        fields: 'id,name',
+      }),
+    );
     requireValue(verified.id === chosen.id, 'RESOURCE_FORBIDDEN', 403);
     resource = verified;
   } else {

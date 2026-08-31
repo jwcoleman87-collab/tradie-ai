@@ -90,7 +90,9 @@ export async function modelHttpError(
             ? 'AI_ACCESS_DENIED'
             : response.status === 404
               ? 'AI_MODEL_UNAVAILABLE'
-              : 'AI_REQUEST_INVALID';
+              : response.status >= 300 && response.status < 400
+                ? 'AI_REDIRECT_BLOCKED'
+                : 'AI_REQUEST_INVALID';
   return new AppError(
     code,
     503,

@@ -14,6 +14,7 @@ import { readFileBody, safeFilename, validateFile } from './uploads';
 import { integrationApi } from './integration-api';
 import { finishProvider } from './provider-oauth';
 import { AdditionalProviderSchema, connectionList } from './connections';
+import { aiProblem } from '../ai-diagnostics';
 
 export const api = endpoint(async (request) => {
   const url = new URL(request.url),
@@ -134,17 +135,19 @@ export const api = endpoint(async (request) => {
         .limit(100),
       db
         .from('audit_logs')
-        .select('id,event,created_at')
+        .select('id,event,entity_id,metadata,created_at')
         .eq('workspace_id', workspaceId)
         .order('created_at', { ascending: false })
         .limit(30),
       conversationId
         ? db
             .from('agent_runs')
-            .select('agents,status,model,provider_trace')
+            .select(
+              'id,agents,status,model,error_code,provider_trace,created_at,finished_at',
+            )
             .eq('conversation_id', conversationId)
             .order('created_at', { ascending: false })
-            .limit(1)
+            .limit(10)
         : Promise.resolve({ data: [], error: null }),
       admin
         .from('integration_credentials')
@@ -165,7 +168,14 @@ export const api = endpoint(async (request) => {
       uploads: checked(uploads),
       cases: checked(cases),
       records: checked(records),
-      audit: checked(audit),
+      audit: (checked(audit) || []).map(({ metadata, ...entry }) => ({
+        ...entry,
+        errorCode:
+          typeof metadata?.error_code === 'string' &&
+          /^[A-Z_]{1,80}$/.test(metadata.error_code)
+            ? metadata.error_code
+            : undefined,
+      })),
       runs: checked(runs),
       calendarConnected: !!checked(connection),
     });
@@ -247,11 +257,32 @@ export const api = endpoint(async (request) => {
         p_files: input.attachmentIds,
       },
     );
-    if (run.existing)
+    if (run.existing) {
+      const previous = checked(
+        await db
+          .from('agent_runs')
+          .select('error_code')
+          .eq('id', run.id)
+          .eq('workspace_id', input.workspaceId)
+          .single(),
+      );
       return json(
-        { runId: run.id, status: run.status },
+        {
+          runId: run.id,
+          status: run.status,
+          messageSaved: true,
+          ...(run.status === 'failed'
+            ? {
+                error: {
+                  code: previous?.error_code || 'AI_FAILED',
+                  message: aiProblem(previous?.error_code),
+                },
+              }
+            : {}),
+        },
         run.status === 'working' ? 202 : 200,
       );
+    }
     try {
       const history = (
         checked(
@@ -391,40 +422,90 @@ export const api = endpoint(async (request) => {
                 : null,
         })),
       });
+      let notice: string | undefined;
       if (result.escalation !== 'none') {
         // No AI-authored free text or transcript is included in escalation.
-        checked(
-          await admin.from('escalation_cases').insert({
-            workspace_id: input.workspaceId,
-            conversation_id: input.conversationId,
-            agent: result.agents[0],
-            category: result.escalation,
-            problem:
-              'The AI team needs clarification or a specialist review. Please review this conversation in your private workspace.',
-            created_by: user.id,
-          }),
-        );
+        // The reply is already committed. A case failure must not relabel it failed.
+        try {
+          checked(
+            await admin.from('escalation_cases').insert({
+              workspace_id: input.workspaceId,
+              conversation_id: input.conversationId,
+              agent: result.agents[0],
+              category: result.escalation,
+              problem:
+                'The AI team needs clarification or a specialist review. Please review this conversation in your private workspace.',
+              created_by: user.id,
+            }),
+          );
+        } catch {
+          notice =
+            'Your reply is saved, but the Ask James case could not be created. Open Ask James to request help.';
+          console.error(
+            JSON.stringify({ event: 'chat_escalation_failed', runId: run.id }),
+          );
+        }
       }
       return json({
         runId: run.id,
         status: 'completed',
+        messageSaved: true,
         agents: result.agents,
         providerTrace: result.providerTrace,
+        ...(notice ? { notice } : {}),
       });
     } catch (error) {
       const code = error instanceof AppError ? error.code : 'AI_FAILED';
-      await admin
-        .from('agent_runs')
-        .update({
+      try {
+        const updated = await admin
+          .from('agent_runs')
+          .update({
+            status: 'failed',
+            error_code: code,
+            usage: provider.usage,
+            provider_trace: provider.attempts,
+            finished_at: new Date().toISOString(),
+          })
+          .eq('id', run.id)
+          .eq('status', 'working')
+          .select('id');
+        checked(updated);
+        if (updated.data?.length) {
+          const auditResult = await admin.from('audit_logs').insert({
+            workspace_id: input.workspaceId,
+            actor_id: user.id,
+            event: 'chat.failed',
+            entity_id: run.id,
+            metadata: { error_code: code, provider_trace: provider.attempts },
+          });
+          checked(auditResult);
+        }
+      } catch {
+        // Keep the saved-message receipt even if failure/audit persistence is down.
+        console.error(
+          JSON.stringify({
+            event: 'chat_failure_persist_failed',
+            runId: run.id,
+          }),
+        );
+      }
+      console.error(
+        JSON.stringify({
+          event: 'chat.failed',
+          runId: run.id,
+          code,
+          providerTrace: provider.attempts,
+        }),
+      );
+      return json(
+        {
+          runId: run.id,
           status: 'failed',
-          error_code: code,
-          usage: provider.usage,
-          provider_trace: provider.attempts,
-          finished_at: new Date().toISOString(),
-        })
-        .eq('id', run.id)
-        .eq('status', 'working');
-      throw error;
+          messageSaved: true,
+          error: { code, message: aiProblem(code) },
+        },
+        error instanceof AppError ? error.status : 500,
+      );
     }
   }
   const decisionMatch = path.match(/^actions\/([^/]+)\/decision$/);

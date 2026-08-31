@@ -1,6 +1,34 @@
 # Verification — 31 August 2026
 
-## Activation and live provider verification
+## Current chat-audit repair (supersedes earlier runtime conclusions)
+
+Metadata-only reads confirmed four failed production runs with `AI_UNAVAILABLE`,
+including a run that failed both providers. No customer message content was read.
+The actual workerd engine rejects `redirect: 'error'` before provider HTTP. A new
+test runs the real helper in that engine; manual handling avoids the unsupported
+option and still rejects redirects. Related Facebook/Ads helpers were corrected.
+
+OpenAI `gpt-5-mini` completed real routing and generation inside workerd with
+synthetic fictional-business input (HTTP 200 at both stages, validated private
+draft proposal). The latest Anthropic call instead reported `AI_QUOTA_EXCEEDED`,
+HTTP 400. Its credits/usage limit is now an account blocker. These tests made no
+database writes, transmitted no customer content and executed no action.
+
+**129 tests in 12 suites pass**, along with typecheck, lint and the production
+build. New API/composer tests cover success/failure/working saved receipts,
+idempotent replay, unsaved draft preservation, failure audit, safe diagnostics,
+database failure, and case-write failure after reply commit. The composer now
+explains paused processing; Audit shows ten runs with safe HTTP/timing/request
+metadata. See [chat troubleshooting](CHAT-TROUBLESHOOTING.md) for limitations.
+
+A metadata-only read found one `google_calendar` connection with status
+`connected`, created `2026-08-31T12:10:27.329955+00:00`. No token was read or event
+requested. This supersedes pending account consent below, but does not verify
+token refresh or approved live event execution. Existing customer records and
+the audit author's test messages are untouched. Exact release details follow in
+CONTINUATION.md; no schema or environment changes are required for this repair.
+
+## Earlier activation and live provider verification (historical)
 
 All four migrations are live. Chrome dashboard SQL verified 21/21 application
 tables have RLS, browser roles lack new private-table grants and privileged RPC

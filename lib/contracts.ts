@@ -216,16 +216,31 @@ export type Snapshot = {
   uploads: Upload[];
   cases: Escalation[];
   records: BusinessRecord[];
-  audit: { id: number; event: string; created_at: string }[];
+  audit: {
+    id: number;
+    event: string;
+    created_at: string;
+    entity_id?: string;
+    errorCode?: string;
+  }[];
   runs: {
+    id: string;
     agents: AgentName[];
     status: string;
     model: string | null;
+    error_code: string | null;
+    created_at: string;
+    finished_at: string | null;
     provider_trace: {
       provider: AIProviderName;
       model: string;
       status: string;
       errorCode?: string;
+      elapsedMs?: number;
+      httpStatus?: number;
+      providerRequestId?: string;
+      clientRequestId?: string;
+      step?: 'routing' | 'response';
     }[];
   }[];
   calendarConnected: boolean;

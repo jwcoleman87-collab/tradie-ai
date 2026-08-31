@@ -1,7 +1,36 @@
 # Tradie AI — continuation checkpoint for Claude or another engineer
 
 Updated 31 August 2026 (Australia/Sydney). Read this before making changes.
-The latest runtime changes are deployed privately. Do not restart setup.
+Do not restart setup. See the current repair note and release checkpoint below.
+
+## Current repair: Claude Chrome audit feedback
+
+The hosted AI failure was reproduced in workerd: `redirect: 'error'` is rejected
+before either provider is contacted. Both adapters and related Facebook/Ads
+helpers now use manual redirects and reject non-2xx responses. Node-only API
+success did not cover this constraint. OpenAI passed real routing/generation
+inside workerd after the fix; the latest Claude call reports `AI_QUOTA_EXCEEDED`
+(HTTP 400). Its API credits/usage limit needs owner attention. Do not infer
+current availability from earlier successful tests.
+
+Saved messages now clear the composer even when generation fails; uncertain
+drafts retain their request UUID, and double sends are locked. Paused processing
+has an inline explanation/settings shortcut. Failures append `chat.failed`;
+success already used atomic `chat.completed`. Audit shows ten runs, fixed
+explanations, provider/model, HTTP status, elapsed time and safe request IDs.
+Raw provider errors/customer content are not logged. CHAT-TROUBLESHOOTING.md
+records the separate failure-row/audit-write limitation and testing boundaries.
+129 tests in 12 suites, typecheck, lint and production build pass.
+
+Calendar is already connected: a metadata-only read confirmed the connected
+record created `2026-08-31T12:10:27.329955+00:00`. Do not repeat setup based on
+older sections. No token was read and no approved live event test was performed.
+
+The user supplied headline findings, not all sixteen audit items. The report's
+suggestion to delete its test messages is not owner permission; they remain.
+No consent, schema, keys, Google settings, publishing flags, ads or events were
+changed in this repair. The deployment identifiers below describe the preceding
+release until the post-deployment checkpoint is recorded.
 
 ## Logo update
 
@@ -35,7 +64,7 @@ publish posts or spend money without the appropriate exact approval.
   allowed-provider list, optional backup, no refusal circumvention, at most one
   switch per message. Existing OpenAI consent does not authorise Anthropic.
 - Usage and safe provider traces on successful/failed runs. Audit panel shows
-  the latest trace. No balances or exact cost calculation is claimed.
+  ten recent traces. No balances or exact cost calculation is claimed.
 - Google Calendar OAuth/primary-calendar event creation with deterministic IDs.
 - Separate Calendar/Facebook/Ads connections, encrypted expiring resource picker,
   owner-only connect/disconnect and exact connection identity binding.
