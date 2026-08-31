@@ -1,7 +1,7 @@
 # Tradie AI — continuation checkpoint for Claude or another engineer
 
 Updated 31 August 2026 (Australia/Sydney). Read this before making changes.
-This file describes the current checkout; the hosted app is an earlier release.
+The latest runtime changes are deployed privately. Do not restart setup.
 
 ## Logo update
 
@@ -10,7 +10,7 @@ the purple initial/sparkle branding in the header, welcome screen and favicon.
 `public/favicon.svg` is the shared crisp vector source; its colours match the
 reference. The existing three-panel purple/lilac theme is otherwise unchanged.
 The social preview `public/og.png` now includes the same mark beside the title.
-This branding update does not remove the pending database migration gate below.
+The selected branding is included in the live release.
 
 ## User intent
 
@@ -45,23 +45,33 @@ publish posts or spend money without the appropriate exact approval.
 - Connections panel includes AI consent/settings, provider setup states,
   account/Page selection and Ads reporting; original colours/layout preserved.
 
-## Exact release blocker — do not overlook
+## Activation completed
 
-Live Supabase has **only 001 and 002**. These new files are tested but NOT applied:
+The owner's signed-in Chrome dashboard became available. Migrations 003 and
+004 were applied together in a transaction and recorded with their SQL in the
+Supabase migration ledger. All four migrations are live. Preflight and postflight
+both showed one existing user and workspace; these were preserved. All 21 public
+application tables have RLS, new private tables have no browser grants, and the
+privileged RPCs are not executable by anon/authenticated. Existing workspace
+consent remained OpenAI-only. All four remote setup probes now report ready.
 
-1. `supabase/migrations/202608310003_multi_provider_connections.sql`
-2. `supabase/migrations/202608310004_ai_provider_preferences.sql`
+The owner supplied both API keys. They were configured as hosted secrets and
+in ignored local `.env`, never committed or bundled. Both keys authenticated and
+performed real routing; generation exposed Zod 4's unsupported `oneOf` and URL
+format. `lib/server/model-schema.ts` converts transport unions to `anyOf` and
+unsupported formats to descriptions. Original Zod validation remains mandatory.
+Both providers then completed routing plus private draft generation with only
+synthetic input: OpenAI `gpt-5-mini`, Claude `claude-haiku-4-5-20251001`.
+No database records or external actions were created by these model tests.
 
-The application’s configured Supabase server key can read/write application
-data but cannot authenticate the Supabase CLI, run arbitrary SQL, or serve as a
-database password. CLI management access is absent. The previously signed-in
-dashboard session signed out and Chrome is unavailable. A fresh in-app visit
-to the selected project shows sign-in. The owner has been asked to sign in.
+Post-deployment HTTP tests passed password sign-in, authenticated state,
+two-workspace isolation, direct browser-write denial, private Storage and both
+provider-readiness flags. The two synthetic users/workspaces/file were removed
+successfully; the owner's existing records were not changed. No audit/RLS
+protections were disabled for cleanup.
 
-Do NOT deploy current source before the migration gate passes: `/api/state`,
-chat and integration routes now expect new columns/tables. Existing live version
-3 was deliberately left intact. Local signed-out UI works; authenticated local
-requests against the unmigrated live database are not release-ready.
+Saved versions 4/5 predate this live-discovered fix. Do not redeploy them as a
+working AI release. The current deployed runtime is version 6, listed below.
 
 ## Known identities (not secrets)
 
@@ -69,26 +79,37 @@ requests against the unmigrated live database are not release-ready.
 - Supabase: `gjrhukwqagaawdklnvxd`, Tradie Ai, Singapore.
 - Site: https://tradie-ai-business-team.j-w-coleman87.chatgpt.site
 - Sites project: `appgprj_6a952d52f72c81919fa229c3f5f93e8c`.
-- Last LIVE source: `7adb23dae3979da1509da76903edc796995c156f`.
-- Last LIVE saved version: 3; hosting environment revision: 2.
-- Last LIVE deployment: `appgdep_6a9544d91ed4819196c4196ea0162bea`, succeeded.
+- LIVE runtime source: `2b6d321887cf822e1a9825c81d67257e1246939a`.
+- LIVE saved version: 6; hosting environment revision: 3.
+- LIVE version ID: `appgprj_6a952d52f72c81919fa229c3f5f93e8c~appgver_186b391788688191ad44af085889a57b`.
+- LIVE deployment: `appgdep_6a95630c67488191b4f3aecedd2c06a5`, succeeded.
+- Later documentation-only commits may follow the runtime commit.
 - Access last verified owner-only, custom, one user, zero groups/visitors.
 - `.openai/hosting.json` is authoritative. Do not create a duplicate site.
 
 ## Missing credentials
 
-- `OPENAI_API_KEY` with API billing/model permission.
-- `ANTHROPIC_API_KEY` with Anthropic API credits/model permission.
+Google Cloud is signed in as the owner. Project picker shows only Default Gemini
+Project (`gen-lang-client-0084405105`) and My First Project (`just-turbine-393809`),
+not a Tradie AI project. A dedicated-project creation form was prepared, but the
+creation action was blocked for lack of explicit resource-creation approval.
+**No Google project was created and neither existing project was changed.**
+The owner has been asked to authorise creating a separate "Tradie AI" project
+(one quota slot, persistent resource, no billing). Do not retry until approved;
+do not repurpose the unrelated projects to bypass that approval. Google terms,
+OAuth client creation/scopes and final Calendar consent will need their own
+appropriate owner approvals. No Google credentials were created or obtained.
+
 - `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, Calendar API/consent/test users.
 - `META_APP_ID`, `META_APP_SECRET`, `META_LOGIN_CONFIG_ID`, supported
   `META_GRAPH_VERSION`, Page permissions/app review/business verification.
 - `GOOGLE_ADS_DEVELOPER_TOKEN`; Ads API/consent and advertiser access. Optional
   separate `GOOGLE_ADS_CLIENT_ID`/`GOOGLE_ADS_CLIENT_SECRET`.
 
-Supabase URL/publishable/server keys and encryption secret already exist in
+OpenAI and Anthropic keys, Supabase URL/publishable/server keys and encryption secret already exist in
 ignored local `.env` and hosted settings. Do not print, overwrite, commit or
-request them again. The Supabase server key supplied earlier in chat is exposed:
-coordinate rotation before customer data, update both environments, redeploy
+request them again. The Supabase server key and both AI keys supplied in chat
+are exposed: coordinate rotation before customer data, update both environments, redeploy
 and verify. Preserve the encryption key unless deliberately migrating tokens.
 ChatGPT/Codex/Claude subscriptions do not supply backend API credits.
 
@@ -96,18 +117,19 @@ ChatGPT/Codex/Claude subscriptions do not supply backend API credits.
 
 1. Inspect working-tree changes, this file, README, CONNECTIONS and VERIFICATION.
    Preserve any newer user changes. No unrelated repositories/databases are in scope.
-2. Restore intended Supabase management authentication. Inspect migration history,
-   back up if populated, apply only 003/004 in order and record them atomically.
-   Never reset production or disable append-only/RLS protections for convenience.
+2. Inspect migration history if changing the schema; 001–004 are already applied.
+   Never reapply/reset production or disable append-only/RLS protections.
 3. Run `npm run setup:check -- --remote`; require all four schema probes `ready`.
-4. Run `npm ci`, typecheck, lint, tests, production build and dependency audit.
+4. For code changes, run typecheck, lint, tests, production build and dependency audit.
    Use the existing lockfile/runtime; no dependency replacement is necessary.
-5. Set provider secrets privately. `.env.example` and CONNECTIONS.md have exact
-   callbacks/settings. OpenAI Developers provisioning was unavailable here.
+5. Obtain Google OAuth, Meta and Ads setup through the owner's intended accounts.
+   `.env.example` and CONNECTIONS.md have exact callbacks/settings. Both AI keys
+   are already connected; do not request or print them again.
 6. Verify UI settings persist with a staging owner and cannot be changed by a
    member or another workspace. Existing consent must remain OpenAI-only.
-7. Live-test each AI provider with harmless input and an image/PDF; verify trace.
-   Simulate failover in tests rather than burning paid quota deliberately.
+7. Text routing/generation for each AI provider is verified. Image/PDF live tests
+   and a full authenticated chat/approval acceptance pass remain. Simulate failover
+   in tests rather than deliberately exhausting paid quota.
 8. Connect Calendar and approve one exact harmless test event. Verify Deny and
    retries/duplicates. No real Calendar event has yet been created.
 9. Verify Meta permissions/version with the actual dashboard. Connect a test Page,
@@ -116,8 +138,8 @@ ChatGPT/Codex/Claude subscriptions do not supply backend API credits.
 10. Connect an eligible Google Ads test/advertiser account; verify read-only report
     currency/time zone/period and manager context. Do not add spending mutations
     without new approved action schemas and budget-specific acceptance tests.
-11. Deploy the exact tested source through existing Sites hosting workflow after
-    the database gate. Recheck owner-only access, push source, package `dist/`,
+11. For further runtime changes, deploy the exact tested source through the
+    existing Sites workflow. Recheck owner-only access, push source, package `dist/`,
     save a version, deploy and poll success. Keep `.env`, local databases and
     runtime state out of the archive. Reuse the existing preview tab.
 12. Check live HTTP auth, two-user isolation, Storage, and authenticated browser
@@ -125,11 +147,12 @@ ChatGPT/Codex/Claude subscriptions do not supply backend API credits.
 
 ## Tests and limits
 
-Current local verification: 100 automated tests; type check, lint, build and audit
+Current local verification: 106 automated tests; type check, lint, build and audit
 pass. Tests use PGlite for real SQL/RLS execution plus mocked provider HTTP.
-No live OpenAI/Claude/Meta/Ads calls have been made. Local signed-out browser
+Live OpenAI/Claude routing and generation passed with synthetic text. Meta/Ads
+remain unconfigured. Local signed-out browser
 Connections/navigation checks passed on desktop and at a 390px phone viewport
-(no horizontal overflow); protected settings await live migrations.
+(no horizontal overflow); a full authenticated settings UI pass remains.
 Prior hosted Supabase password sign-in, two-user isolation and private Storage
 HTTP checks passed with synthetic fixtures that were subsequently removed.
 

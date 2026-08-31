@@ -5,14 +5,13 @@ browser code, chat, Git, screenshots or a customer-facing key entry field.
 See `.env.example` for the complete variable list. The server is this Vinext
 application, not a second service that needs a separate deployment.
 
-## 0. Apply the two pending database updates first
+## 0. Database setup is complete for this project
 
 The selected project is [Tradie Ai](https://supabase.com/dashboard/project/gjrhukwqagaawdklnvxd).
-Migrations `202608310001_core` and `202608310002_operational_audit` are live.
+Migrations `202608310001_core`, `202608310002_operational_audit`,
 `202608310003_multi_provider_connections` and `202608310004_ai_provider_preferences`
-are tested locally but **not live**. Back up and inspect the intended project,
-authenticate the Supabase CLI or dashboard, and apply only these pending files
-in order. Do not reset the database or re-run migrations 001/002.
+are all live and verified. Do not reset the database or re-run these migrations.
+The instructions below explain setup for a new environment or future migration.
 
 Use the CLI migration history where available. If the SQL editor is used, apply
 each complete migration in a transaction and record its version/name/statements
@@ -31,6 +30,9 @@ data, but is **not** a CLI login, database password or management API token.
 
 ## 1. OpenAI
 
+Current project: key configured privately and real text routing/generation
+verified. Do not request the key again. These steps are for rotation/new setup.
+
 1. Open [OpenAI API keys](https://platform.openai.com/api-keys) in the intended
    project. Configure API billing and project budget alerts separately.
 2. Create/reuse a project-scoped key privately. Set secret `OPENAI_API_KEY` in
@@ -44,6 +46,9 @@ data, but is **not** a CLI login, database password or management API token.
    inspect the AI audit trace before calling it live.
 
 ## 2. Claude / Anthropic backup
+
+Current project: key configured privately and real text routing/generation
+verified. Workspace provider consent remains an explicit owner choice.
 
 1. Open [Claude Console](https://platform.claude.com/) and use the intended
    organisation/workspace API keys and billing pages. Add API credits/limits.
@@ -78,6 +83,11 @@ data, but is **not** a CLI login, database password or management API token.
 - ChatGPT/Codex usage and a Claude chat subscription do not fund these API keys.
 
 ## 3. Google Calendar
+
+Current blocker: Google Cloud is signed in, but no Tradie AI project exists.
+The owner must approve creating a dedicated project or explicitly choose an
+existing one. No project was created and no existing project was modified.
+Creation consumes one project-quota slot; billing is not being enabled.
 
 1. In [Google Cloud Console](https://console.cloud.google.com/), select the
    intended project, enable Google Calendar API and configure Google Auth Platform.

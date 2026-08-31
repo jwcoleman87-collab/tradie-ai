@@ -2,6 +2,16 @@
 
 ## Current state (supersedes initial discovery below)
 
+Activation update: all four migrations are applied and verified; the signed-in
+Chrome dashboard provided SQL access. Both AI keys are configured privately in
+local/hosted settings and verified with real text routing/generation. The schema
+compatibility fix and blue logo are live in private Sites version 6, environment
+revision 3. Google OAuth/Meta/Ads credentials are still missing. Rotate the AI
+and Supabase secrets shared in chat before customer data. See CONTINUATION.md
+for exact identities and VERIFICATION.md for current evidence.
+
+## Earlier environment checkpoint (historical; superseded above)
+
 - Repository: `outputs/tradie-ai`; private GitHub repository
   [jwcoleman87-collab/tradie-ai](https://github.com/jwcoleman87-collab/tradie-ai).
 - Hosted site is connected to Supabase project `gjrhukwqagaawdklnvxd` (Tradie Ai).

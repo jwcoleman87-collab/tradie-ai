@@ -1,6 +1,46 @@
 # Verification — 31 August 2026
 
-## Current integration update
+## Activation and live provider verification
+
+All four migrations are live. Chrome dashboard SQL verified 21/21 application
+tables have RLS, browser roles lack new private-table grants and privileged RPC
+execution, and the original one user/workspace and OpenAI-only consent survived.
+The readiness check confirms all four new schema probes are ready.
+
+Both privately configured keys passed real routing and generation using synthetic
+fictional-business text. Each produced a validated private draft proposal; nothing
+was saved or published by that test. This revealed unsupported `oneOf` schemas
+in both APIs and an unsupported OpenAI URL format. The shared transport converter
+fixes these without relaxing original server-side Zod validation. Six regression
+tests cover the actual action union, schema-keyword property names and invalid
+calendar semantics. **106 tests in eight suites**, typecheck, lint, build and zero-
+finding dependency audit pass. Clean Linux CI also passed for deployed source:
+https://github.com/jwcoleman87-collab/tradie-ai/actions/runs/33385962688.
+
+Private Sites version 6 is deployed from `2b6d321887cf822e1a9825c81d67257e1246939a`
+with environment revision 3. Secrets were scanned against 226 source/build files:
+no matches; `.env` is ignored and excluded from the release archive.
+
+After deployment, hosted HTTP checks passed page/config/health, both provider
+readiness flags, logo availability and no server secrets in public config. Two
+temporary users signed in successfully and each saw only its own workspace;
+cross-workspace requests returned 403, missing/invalid sessions returned 401,
+and direct browser writes were denied. Private Storage round-tripped a synthetic
+file and denied anonymous/other-workspace downloads. Both temporary users,
+workspaces and the file were removed successfully without weakening audit/RLS.
+
+Fallback is validated with simulated quota/rate/service errors in both directions;
+real provider quota was not intentionally exhausted. Live image/PDF handling,
+full authenticated chat/approval UI acceptance, Google OAuth, Meta and Ads are
+still outstanding. No real Facebook post, advertising mutation or Calendar event
+was made. Keys supplied in chat must be rotated before customer onboarding.
+
+Transport fix follows the supported structured-output subsets in the official
+[OpenAI](https://developers.openai.com/api/docs/guides/structured-outputs) and
+[Anthropic](https://platform.claude.com/docs/en/build-with-claude/structured-outputs)
+documentation. The setup checker itself does not make paid model calls.
+
+## Earlier integration checkpoint (historical; superseded above)
 
 The current checkout passes type check, lint, **100 tests across seven suites**,
 production build and dependency audit (zero known vulnerabilities). The tests

@@ -5,14 +5,18 @@ agents, private customer workspaces, and explicit approval before execution.
 
 ## Delivery status
 
-Supabase Auth/Postgres/Storage are connected to the private hosted version.
-This checkout adds OpenAI + Claude backup, Facebook Page connections and
-read-only Google Ads reporting. These updates are **not deployed yet**: migrations
-003 and 004 need authenticated Supabase management access. The dashboard session
-has signed out. Do not deploy this checkout over the earlier schema.
+Supabase Auth/Postgres/Storage and all four migrations are live. The private
+hosted app includes the selected blue four-tile logo, OpenAI + Claude backup,
+Facebook Page connections and read-only Google Ads reporting.
 
-No OpenAI, Anthropic, Google OAuth, Meta or Google Ads credentials are configured.
-The app reports missing setup rather than producing fake live results.
+Both AI keys are configured privately and both real providers passed routing
+and generation tests with synthetic text. A live schema incompatibility was
+fixed and regression-tested; 106 automated tests pass. Each workspace must
+explicitly allow its chosen providers in Connections before AI processing.
+
+Google OAuth, Meta app and Google Ads credentials are still missing. Those
+connections are implemented but not live; no post, event or ad spend was made.
+Rotate the secrets shared in chat before onboarding customer data.
 Start with [the continuation checkpoint](docs/CONTINUATION.md),
 [connection setup](docs/CONNECTIONS.md) and [verification](docs/VERIFICATION.md).
 
