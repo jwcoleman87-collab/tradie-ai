@@ -43,6 +43,8 @@
     "@cloudflare/vite-plugin": "1.54.2",
     "@cloudflare/workers-types": "5.20260831.1",
     "@electric-sql/pglite": "^0.5.8",
+    "@emnapi/core": "1.11.3",
+    "@emnapi/runtime": "1.11.3",
     "@openai/sites-vite-plugin": "0.2.0",
     "@tailwindcss/postcss": "4.2.1",
     "@types/node": "22.19.19",
