@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { ModelProvider, ModelUsage } from './ai';
 import { env, required } from './config';
+import { modelSchema } from './model-schema';
 import { AppError, requireValue } from './errors';
 import {
   modelHttpError,
@@ -96,49 +97,7 @@ export function claudeMessages(input: unknown[]): Message[] {
   return messages;
 }
 export function claudeSchema(schema: z.ZodType): Record<string, unknown> {
-  // Conservative transport subset. The ORIGINAL Zod schema still validates every
-  // response; semantic/length/range constraints are never removed server-side.
-  const unsupported = new Set([
-    '$schema',
-    'format',
-    'minLength',
-    'maxLength',
-    'pattern',
-    'minimum',
-    'maximum',
-    'exclusiveMinimum',
-    'exclusiveMaximum',
-    'multipleOf',
-    'minItems',
-    'maxItems',
-  ]);
-  const walk = (value: unknown): unknown => {
-    if (Array.isArray(value)) return value.map(walk);
-    if (!value || typeof value !== 'object') return value;
-    const source = value as Record<string, unknown>,
-      result: Record<string, unknown> = {};
-    const constraints: string[] = [];
-    for (const [key, v] of Object.entries(source)) {
-      if (unsupported.has(key)) {
-        if (key !== '$schema') constraints.push(key + '=' + JSON.stringify(v));
-      } else if (key === 'properties' || key === '$defs')
-        result[key] = Object.fromEntries(
-          Object.entries(v as Record<string, unknown>).map(
-            ([name, definition]) => [name, walk(definition)],
-          ),
-        );
-      else result[key] = walk(v);
-    }
-    if (constraints.length)
-      result.description = [
-        source.description,
-        'Required validation: ' + constraints.join(', '),
-      ]
-        .filter(Boolean)
-        .join('. ');
-    return result;
-  };
-  return walk(z.toJSONSchema(schema)) as Record<string, unknown>;
+  return modelSchema(schema, 'anthropic');
 }
 export class ClaudeProvider implements ModelProvider {
   readonly name = 'anthropic' as const;

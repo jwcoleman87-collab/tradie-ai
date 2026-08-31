@@ -7,6 +7,7 @@ import type { ConnectionInfo } from '../integrations';
 import type { AIProviderName } from '../ai-settings';
 import type { ProviderAttempt } from './ai-provider';
 import { modelHttpError, modelTimeout, boundedModelJson } from './model-http';
+import { modelSchema } from './model-schema';
 export type ModelUsage = {
   inputTokens: number;
   outputTokens: number;
@@ -35,8 +36,7 @@ export class OpenAIProvider implements ModelProvider {
     instructions: string,
     input: unknown[],
   ): Promise<T> {
-    const jsonSchema = z.toJSONSchema(schema);
-    delete jsonSchema.$schema;
+    const jsonSchema = modelSchema(schema, this.name);
     const maxOutput = Number(env('OPENAI_MAX_OUTPUT_TOKENS') || 5000);
     if (!Number.isInteger(maxOutput) || maxOutput < 256 || maxOutput > 8000)
       throw new AppError('AI_LIMIT_CONFIG_INVALID', 503);
