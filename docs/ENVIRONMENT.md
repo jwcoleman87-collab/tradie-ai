@@ -6,14 +6,19 @@ Activation update: all four migrations are applied and verified; the signed-in
 Chrome dashboard provided SQL access. Both AI keys are configured privately in
 local/hosted settings and verified with real text routing/generation. The schema
 compatibility fix and blue logo are live in private Sites version 6, environment
-revision 3. Google OAuth/Meta/Ads credentials are still missing. Rotate the AI
+revision 4. Google client credentials are now configured; Meta/Ads credentials
+are still missing. Rotate the AI
 and Supabase secrets shared in chat before customer data. See CONTINUATION.md
 for exact identities and VERIFICATION.md for current evidence.
 
 Google follow-up: the authorised dedicated project `tradie-ai-507211` (Tradie AI)
 is created. No billing was enabled and unrelated projects were not changed.
-Calendar API and OAuth branding are awaiting the owner's Google agreements;
-no Google credentials, scopes or account connection have been granted.
+The owner approved Google's three agreements. Calendar API is enabled; External /
+Testing OAuth, the web client and exact hosted/local callbacks are saved. Only the
+owner is a test user and only Calendar events is declared. Google credentials are
+saved privately in local/hosted settings and deployed. Live configuration reports
+Calendar ready; final account consent, production branding and a separately approved
+event test remain. No account refresh token or event has been obtained/created.
 
 ## Earlier environment checkpoint (historical; superseded above)
 

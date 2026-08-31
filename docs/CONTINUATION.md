@@ -80,14 +80,14 @@ working AI release. The current deployed runtime is version 6, listed below.
 - Site: https://tradie-ai-business-team.j-w-coleman87.chatgpt.site
 - Sites project: `appgprj_6a952d52f72c81919fa229c3f5f93e8c`.
 - LIVE runtime source: `2b6d321887cf822e1a9825c81d67257e1246939a`.
-- LIVE saved version: 6; hosting environment revision: 3.
+- LIVE saved version: 6; hosting environment revision: 4.
 - LIVE version ID: `appgprj_6a952d52f72c81919fa229c3f5f93e8c~appgver_186b391788688191ad44af085889a57b`.
-- LIVE deployment: `appgdep_6a95630c67488191b4f3aecedd2c06a5`, succeeded.
+- LIVE deployment: `appgdep_6a956d473d848191980a631a1858d839`, succeeded.
 - Later documentation-only commits may follow the runtime commit.
 - Access last verified owner-only, custom, one user, zero groups/visitors.
 - `.openai/hosting.json` is authoritative. Do not create a duplicate site.
 
-## Missing credentials
+## Google Calendar setup and remaining connections
 
 After being asked explicitly, the owner said "please continue" and authorised
 the separate Google project. **Tradie AI (`tradie-ai-507211`) is now created**
@@ -95,39 +95,48 @@ under the owner's Google account, with No organization. No billing was enabled
 and the existing Gemini/My First Project resources were not changed. Do not
 create another project; reuse this exact ID.
 
-Calendar API activation is pending the owner's approval of Google's API/Calendar
-terms. The API product page currently shows Enable; no Calendar permission has
-been granted. Google Auth Platform is not configured yet. OAuth setup, its User
-Data Policy acceptance, client credentials and final Calendar consent remain.
-No Google client ID/secret or refresh token was created or obtained.
+The owner then answered **yes** to accepting Google's API terms, Calendar terms
+and User Data Policy and completing testing-only setup. These agreements were
+accepted, Calendar API was enabled, and OAuth configuration was saved as Tradie
+AI, External / Testing, with the owner's support/contact email. The sole saved
+test user is `j.w.coleman87@gmail.com` (verified after a page reload).
 
-The Google Auth Platform wizard was prepared but NOT submitted: app name Tradie
-AI, support/contact `j.w.coleman87@gmail.com`, External audience in Testing mode
-(Internal is unavailable for this personal account). It is at Finish with the
-Google API Services User Data Policy checkbox UNCHECKED. These are unsaved form
-values and may need re-entering if the browser tab is cleaned up. The owner must
-approve the agreements before checking the box/Continue/Create or enabling the
-Calendar API. This is not permission to grant Calendar access or create an event.
+**Tradie AI Calendar — Web** is the existing Web Application OAuth client.
+Both exact callbacks in CONNECTIONS.md were registered; JavaScript origins are
+empty. Only `https://www.googleapis.com/auth/calendar.events` is declared.
+Google automatically registered `j-w-coleman87.chatgpt.site` as the authorized
+domain; the deployed app's home-page link is saved. Client ID and secret were
+captured from Google's one-time creation dialog without printing them and saved
+in ignored `.env` plus Sites server settings. Do not recreate or request them.
+The stable token-encryption secret and all other runtime settings were preserved.
 
-- Calendar activation: https://console.cloud.google.com/apis/library/calendar-json.googleapis.com?project=tradie-ai-507211
-- Auth setup: https://console.cloud.google.com/auth/overview/create?project=tradie-ai-507211
-- API terms: https://console.cloud.google.com/tos?id=universal
-- Calendar terms: https://console.cloud.google.com/tos?id=calendar
-- User Data Policy: https://developers.google.com/terms/api-services-user-data-policy
+Saved version 6 was redeployed with environment revision 4. Post-deployment checks
+passed `googleReady: true`, both AI flags, no Google/backend secret in public
+configuration, password sign-in, two-workspace isolation, direct-write denial
+and private Storage. All temporary users/workspaces/file were removed successfully.
+No runtime source was changed, so the earlier 106-test/build/CI results still
+describe this exact deployed runtime.
 
-After approval, enable only Calendar API, finish testing-only branding, create
-the Web Application OAuth client with the exact callbacks in CONNECTIONS.md,
-store credentials privately and redeploy saved version 6 with the new environment
-revision. Add only the intended owner as a test user. Final Calendar account
-consent and any exact test event require separate appropriate owner approval.
+**Final Google account consent is outstanding.** Sign in to Tradie AI →
+Connections → Google Calendar → Connect, then have the owner review/allow the
+Google account permission. No refresh token or Calendar event has been obtained
+or created. Do not claim end-to-end Google OAuth or live event execution passed.
+Any exact test event requires separate appropriate owner approval.
 
-- `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, Calendar API/consent/test users.
+Google's Audience page still shows incomplete branding and disables Publish app.
+Public privacy/terms links and production branding/domain verification are not
+complete; do not invent policies or publish/broaden access to bypass this. The
+scope/client/test-user configuration is saved; the actual consent flow is the next
+verification boundary. See Google's production requirements linked in CONNECTIONS.
+
+- Google setup: https://console.cloud.google.com/auth/overview?project=tradie-ai-507211
+- Google client credentials are configured, not missing; account consent remains.
 - `META_APP_ID`, `META_APP_SECRET`, `META_LOGIN_CONFIG_ID`, supported
   `META_GRAPH_VERSION`, Page permissions/app review/business verification.
 - `GOOGLE_ADS_DEVELOPER_TOKEN`; Ads API/consent and advertiser access. Optional
   separate `GOOGLE_ADS_CLIENT_ID`/`GOOGLE_ADS_CLIENT_SECRET`.
 
-OpenAI and Anthropic keys, Supabase URL/publishable/server keys and encryption secret already exist in
+OpenAI, Anthropic and Google client keys, Supabase URL/publishable/server keys and encryption secret already exist in
 ignored local `.env` and hosted settings. Do not print, overwrite, commit or
 request them again. The Supabase server key and both AI keys supplied in chat
 are exposed: coordinate rotation before customer data, update both environments, redeploy
@@ -143,9 +152,10 @@ ChatGPT/Codex/Claude subscriptions do not supply backend API credits.
 3. Run `npm run setup:check -- --remote`; require all four schema probes `ready`.
 4. For code changes, run typecheck, lint, tests, production build and dependency audit.
    Use the existing lockfile/runtime; no dependency replacement is necessary.
-5. Obtain Google OAuth, Meta and Ads setup through the owner's intended accounts.
-   `.env.example` and CONNECTIONS.md have exact callbacks/settings. Both AI keys
-   are already connected; do not request or print them again.
+5. Complete the existing Google client's owner consent, then obtain Meta and Ads
+   setup through the owner's intended accounts. `.env.example` and CONNECTIONS.md
+   have exact callbacks/settings. AI and Calendar app keys already exist; do not
+   request or print them again. Do not publish the testing-only Google app.
 6. Verify UI settings persist with a staging owner and cannot be changed by a
    member or another workspace. Existing consent must remain OpenAI-only.
 7. Text routing/generation for each AI provider is verified. Image/PDF live tests

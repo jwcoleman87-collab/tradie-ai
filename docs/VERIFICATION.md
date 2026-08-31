@@ -18,7 +18,7 @@ finding dependency audit pass. Clean Linux CI also passed for deployed source:
 https://github.com/jwcoleman87-collab/tradie-ai/actions/runs/33385962688.
 
 Private Sites version 6 is deployed from `2b6d321887cf822e1a9825c81d67257e1246939a`
-with environment revision 3. Secrets were scanned against 226 source/build files:
+with environment revision 4 after the Calendar configuration update. Secrets were scanned against 226 source/build files:
 no matches; `.env` is ignored and excluded from the release archive.
 
 After deployment, hosted HTTP checks passed page/config/health, both provider
@@ -31,7 +31,7 @@ workspaces and the file were removed successfully without weakening audit/RLS.
 
 Fallback is validated with simulated quota/rate/service errors in both directions;
 real provider quota was not intentionally exhausted. Live image/PDF handling,
-full authenticated chat/approval UI acceptance, Google OAuth, Meta and Ads are
+full authenticated chat/approval UI acceptance, final Google account OAuth, Meta and Ads are
 still outstanding. No real Facebook post, advertising mutation or Calendar event
 was made. Keys supplied in chat must be rotated before customer onboarding.
 
@@ -39,6 +39,28 @@ Transport fix follows the supported structured-output subsets in the official
 [OpenAI](https://developers.openai.com/api/docs/guides/structured-outputs) and
 [Anthropic](https://platform.claude.com/docs/en/build-with-claude/structured-outputs)
 documentation. The setup checker itself does not make paid model calls.
+
+## Calendar configuration verification
+
+Google project `tradie-ai-507211`: Calendar API Enabled, OAuth External / Testing,
+one saved test user (`j.w.coleman87@gmail.com`), Web Application client **Tradie AI
+Calendar — Web**, two exact callbacks from CONNECTIONS.md, no JavaScript origins,
+and only `calendar.events` declared. Owner-approved API/Calendar terms and User
+Data Policy were accepted. No billing was enabled. The client's one-time secret
+was transferred privately to ignored `.env` and hosted secret configuration.
+
+Redeployed the unchanged saved runtime as deployment
+`appgdep_6a956d473d848191980a631a1858d839`, environment revision 4; succeeded.
+Remote setup checks pass all four schema probes and local Calendar configuration.
+Repeated live hosted checks pass Google readiness, both AI flags, absence of the
+Google client secret and other server secrets from `/api/config`, password Auth,
+two-workspace isolation, direct-write denial and private Storage. The synthetic
+users/workspaces/file were cleaned successfully. No real customer rows changed.
+
+Readiness does not verify Google's token exchange or account access. Final owner
+consent and a separately approved event test remain. Google also flags incomplete
+publication branding; public privacy/terms links and production verification have
+not been completed, and the app has not been published out of Testing.
 
 ## Earlier integration checkpoint (historical; superseded above)
 

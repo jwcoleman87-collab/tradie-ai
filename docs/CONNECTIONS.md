@@ -84,19 +84,29 @@ verified. Workspace provider consent remains an explicit owner choice.
 
 ## 3. Google Calendar
 
-The owner authorised a separate project; [Tradie AI (`tradie-ai-507211`)](https://console.cloud.google.com/home/dashboard?project=tradie-ai-507211)
-is created. Billing was not enabled and existing projects were not modified.
-Reuse this project. Calendar API activation and Google Auth Platform setup
-remain pending the owner's Google terms/consent approvals. No Google client
-credentials or Calendar account connection exist yet.
+Current project: [Tradie AI (`tradie-ai-507211`)](https://console.cloud.google.com/home/dashboard?project=tradie-ai-507211).
+The owner explicitly approved Google's API terms, Calendar terms and User Data
+Policy. Calendar API is Enabled; Google Auth Platform is configured as External /
+Testing. The sole test user and support/contact address is
+`j.w.coleman87@gmail.com`. No billing was enabled and unrelated projects were not
+modified. Reuse this project and the existing **Tradie AI Calendar — Web** client.
 
-The branding form has been prepared with app name Tradie AI, the owner's Google
-email as support/contact and External/Testing audience, but is not submitted.
-The final User Data Policy checkbox remains unchecked. The owner must approve
-the [API terms](https://console.cloud.google.com/tos?id=universal),
-[Calendar terms](https://console.cloud.google.com/tos?id=calendar) and
-[User Data Policy](https://developers.google.com/terms/api-services-user-data-policy)
-before completing this setup. Prepared form values may not survive tab cleanup.
+The web client has both exact callbacks below, no JavaScript origins, and only
+`calendar.events` is declared under Data Access. Google automatically registered
+`j-w-coleman87.chatgpt.site` as an authorized domain. The app home page is saved.
+Client ID/secret are in ignored local `.env` and hosted runtime configuration;
+the hosted secret is protected. Version 6 was redeployed with environment revision
+4 and `/api/config` now reports `googleReady: true`. Do not ask for the keys again.
+
+**Next: step 5 below.** Configuration readiness is not an account connection.
+No account refresh token has been obtained and no Calendar event has been created.
+The owner must complete Google consent inside Tradie AI before a live event test.
+Google's console still flags incomplete branding for publication: privacy-policy
+and terms links, verified/public branding and any required verification remain
+production-release work. Do not publish the Google OAuth app or broaden test users
+to work around this. [Google's OAuth policies](https://developers.google.com/identity/protocols/oauth2/policies)
+require a public home page with the relevant policy links for production apps.
+The following steps describe repeat setup; steps 1–4 are complete here.
 
 1. In [Google Cloud Console](https://console.cloud.google.com/), select the
    intended project, enable Google Calendar API and configure Google Auth Platform.

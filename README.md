@@ -14,8 +14,10 @@ and generation tests with synthetic text. A live schema incompatibility was
 fixed and regression-tested; 106 automated tests pass. Each workspace must
 explicitly allow its chosen providers in Connections before AI processing.
 
-Google OAuth, Meta app and Google Ads credentials are still missing. Those
-connections are implemented but not live; no post, event or ad spend was made.
+Google Calendar API and the testing-only OAuth client are configured, with
+credentials saved privately and activated in the hosted app. The owner is the
+sole Google test user; final in-app Google account consent is still required.
+Meta app and Google Ads credentials remain missing. No post, event or ad spend was made.
 Rotate the secrets shared in chat before onboarding customer data.
 Start with [the continuation checkpoint](docs/CONTINUATION.md),
 [connection setup](docs/CONNECTIONS.md) and [verification](docs/VERIFICATION.md).
