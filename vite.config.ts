@@ -14,6 +14,8 @@ const isCodexSeatbeltSandbox = process.env.CODEX_SANDBOX === 'seatbelt';
 
 const localBindingConfig = {
   main: 'vinext/server/fetch-handler',
+  // Pin the date to the runtime shipped by our locked Wrangler version.
+  compatibility_date: '2026-08-08',
   compatibility_flags: ['nodejs_compat'],
   d1_databases: d1
     ? [

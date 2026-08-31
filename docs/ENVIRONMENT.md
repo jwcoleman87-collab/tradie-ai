@@ -7,6 +7,10 @@
 - GitHub connector and local CLI identify `jwcoleman87-collab`. Local CLI is
   authenticated for repository operations. Repository metadata reports admin and
   push access to the listed repositories.
+- Build source is saved in the new private repository
+  https://github.com/jwcoleman87-collab/tradie-ai with automated verification.
+- A project-specific encryption key was generated into the ignored local
+  environment file. It is not committed or included in the deployment archive.
 - Existing repositories: BoardRoomAi, BoardRoomAiv2, BoardRoomAiv3, Quote-builder,
   GreenVacWebSite, Gatsby, creature, paddockme, electrocore-site. None is Tradie AI.
 - Saved local projects include paddockme, photos, electrocore-site, greenvac,

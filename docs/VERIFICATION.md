@@ -11,6 +11,11 @@
   React, Vinext, Vite and Cloudflare tooling to patched releases.
 - HTTP checks: application returns 200; public configuration reports the true
   unconfigured state; unauthenticated private-state request returns 401.
+- The same HTTP checks pass against the packaged production Worker locally,
+  not only the development server. The compatibility date is pinned to the
+  runtime in the lockfile.
+- Clean Linux GitHub CI passed install, type checking, all 53 tests, production
+  build and dependency audit.
 
 The test suite executes both migration files in isolated PostgreSQL/PGlite.
 Coverage includes RLS on every application table, customer A/B isolation,
