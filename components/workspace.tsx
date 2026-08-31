@@ -5,6 +5,8 @@ import type { Session, SupabaseClient } from '@supabase/supabase-js';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
+import { ConnectionsPanel } from './connections-panel';
+import { eligibleAIProviders, aiProviderLabel } from '@/lib/ai-settings';
 import {
   Sparkles,
   Wallet,
@@ -104,7 +106,8 @@ export default function Workspace() {
     owner = snapshot?.role === 'owner';
   const canChat = !!(
     snapshot?.workspace.ai_consent_at &&
-    config?.aiReady &&
+    config &&
+    eligibleAIProviders(snapshot.workspace, config.aiProviders).length &&
     session &&
     !busy
   );
@@ -143,6 +146,16 @@ export default function Workspace() {
         }
       });
     const state = new URLSearchParams(window.location.search).get('calendar');
+    const connectionState = new URLSearchParams(window.location.search).get(
+      'connection',
+    );
+    if (connectionState) {
+      setView('connections');
+      setMobile('actions');
+      setNotice(
+        'Review your connection status and choose the account or Page to finish connecting.',
+      );
+    }
     if (state)
       setNotice(
         state === 'connected'
@@ -455,6 +468,9 @@ export default function Workspace() {
                     await requestApi(token, 'consent', 'POST', {
                       workspaceId,
                       allowAI: false,
+                      primaryProvider: snapshot.workspace.ai_primary_provider,
+                      allowedProviders: snapshot.workspace.ai_allowed_providers,
+                      allowFallback: snapshot.workspace.ai_fallback_enabled,
                     });
                     await refresh();
                   })
@@ -661,38 +677,43 @@ export default function Workspace() {
                   <div className="setup-notice">
                     <h3>Your choice before AI processing.</h3>
                     <p>
-                      When you send a message, relevant conversation history,
-                      saved business records, selected attachments and connected
-                      calendar busy times are sent to OpenAI to prepare a
-                      response. Provider retention policies apply. We request no
-                      Responses API storage. Ask James does not receive this
-                      context.
+                      Choose OpenAI, Claude or both in Connections, and decide
+                      whether a backup provider may process this workspace. No
+                      AI request is sent until you allow it.
                     </p>
                     {owner && (
                       <Button
                         className="mt-3"
                         disabled={busy}
-                        onClick={() =>
-                          perform(async () => {
-                            await requestApi(token, 'consent', 'POST', {
-                              workspaceId,
-                              allowAI: true,
-                            });
-                            await refresh();
-                          })
-                        }
+                        onClick={() => chooseView('connections')}
                       >
-                        Allow my AI team to process this workspace
+                        Choose my AI providers
                       </Button>
                     )}
                   </div>
                 )}
                 {snapshot && !config?.aiReady && (
                   <div className="setup-notice">
-                    Your records are connected. An OpenAI API key is still
-                    needed to activate the team.
+                    Your records are connected. An OpenAI or Anthropic API key
+                    is still needed to activate the team. Add both for backup.
                   </div>
                 )}
+                {snapshot &&
+                  config?.aiReady &&
+                  snapshot.workspace.ai_consent_at &&
+                  !eligibleAIProviders(snapshot.workspace, config.aiProviders)
+                    .length && (
+                    <div className="setup-notice">
+                      No configured API provider matches this workspace’s
+                      permissions.{' '}
+                      <Button
+                        variant="link"
+                        onClick={() => chooseView('connections')}
+                      >
+                        Review AI connections
+                      </Button>
+                    </div>
+                  )}
                 {!snapshot?.messages.length && (
                   <div className="starter-grid">
                     {starters.map((s) => (
@@ -807,13 +828,15 @@ export default function Workspace() {
         <aside className="actions-panel">
           <div className="section-label">YOUR WORKSPACE</div>
           <h2>
-            {view === 'cases'
-              ? 'A helping hand.'
-              : view === 'records'
-                ? 'Your business memory.'
-                : view === 'audit'
-                  ? 'Every change, a receipt.'
-                  : 'Ready for your say-so.'}
+            {view === 'connections'
+              ? 'Connected, on your terms.'
+              : view === 'cases'
+                ? 'A helping hand.'
+                : view === 'records'
+                  ? 'Your business memory.'
+                  : view === 'audit'
+                    ? 'Every change, a receipt.'
+                    : 'Ready for your say-so.'}
           </h2>
           <p className="muted small">
             {view === 'actions'
@@ -821,7 +844,14 @@ export default function Workspace() {
               : 'Private to your workspace.'}
           </p>
           <div className="panel-controls mt-4">
-            {['actions', 'files', 'records', 'cases', 'audit'].map((v) => (
+            {[
+              'actions',
+              'files',
+              'records',
+              'cases',
+              'audit',
+              'connections',
+            ].map((v) => (
               <Button
                 key={v}
                 size="xs"
@@ -832,6 +862,33 @@ export default function Workspace() {
               </Button>
             ))}
           </div>
+          {view === 'connections' && snapshot && config && (
+            <ConnectionsPanel
+              key={workspaceId}
+              snapshot={snapshot}
+              config={config}
+              token={token}
+              onSaved={refresh}
+            />
+          )}
+          {view === 'connections' && !snapshot && (
+            <p className="auth-hint">
+              Sign in and create your private workspace to manage connections.
+            </p>
+          )}
+          {view === 'audit' &&
+            snapshot &&
+            !!snapshot.runs?.[0]?.provider_trace?.length && (
+              <article className="action-card">
+                <h3>Latest AI request</h3>
+                {snapshot.runs[0].provider_trace.map((r, i) => (
+                  <p key={i}>
+                    {aiProviderLabel(r.provider)} · {r.model} · {r.status}
+                    {r.errorCode ? ` (${r.errorCode})` : ''}
+                  </p>
+                ))}
+              </article>
+            )}
           {view === 'actions' && (
             <>
               {!proposed.length && (
@@ -1118,6 +1175,7 @@ function ActionCard({
   onRetry: () => void;
 }) {
   const calendar = a.action_type === 'calendar.create',
+    facebook = a.action_type === 'facebook.publish',
     expired = Date.parse(a.expires_at) <= Date.now();
   return (
     <article className="action-card">
@@ -1145,6 +1203,27 @@ function ActionCard({
                 : 'No description'}
             </dd>
           </dl>
+        ) : facebook ? (
+          <>
+            <dl>
+              <dt>Facebook Page ID</dt>
+              <dd>{String(a.payload.pageId)}</dd>
+              <dt>Exact post</dt>
+              <dd className="whitespace-pre-wrap">
+                {String(a.payload.message)}
+              </dd>
+              {typeof a.payload.link === 'string' && (
+                <>
+                  <dt>Link</dt>
+                  <dd className="break-all">{a.payload.link}</dd>
+                </>
+              )}
+            </dl>
+            <p className="auth-hint">
+              Accept publishes this exact text/link immediately to the selected
+              Page. It is not a private draft.
+            </p>
+          </>
         ) : (
           <>
             <strong>{String(a.payload.title)}</strong>
@@ -1176,31 +1255,37 @@ function ActionCard({
               disabled={disabled || expired}
               onClick={() => onDecision('accept')}
             >
-              <Check size={14} /> Accept
+              <Check size={14} /> {facebook ? 'Publish to Facebook' : 'Accept'}
             </Button>
           </div>
         </>
       )}
       {a.status === 'completed' && (
         <p className="ready-badge">
-          {calendar ? 'Booking confirmed.' : 'Saved privately.'}
+          {calendar
+            ? 'Booking confirmed.'
+            : facebook
+              ? 'Published to Facebook.'
+              : 'Saved privately.'}
         </p>
       )}
       {a.error_code && (
         <output className="block">
-          Action not completed ({a.error_code}). Check the connection before
-          retrying.
+          {a.error_code === 'PUBLICATION_UNCERTAIN'
+            ? 'Facebook may already have published this post. Automatic retry is blocked. Check the Page and Ask James before creating a replacement.'
+            : `Action not completed (${a.error_code}). Check the connection before retrying.`}
         </output>
       )}
-      {['approved', 'failed', 'executing'].includes(a.status) && (
-        <Button variant="outline" disabled={disabled} onClick={onRetry}>
-          {a.status === 'executing'
-            ? 'Check / resume safely'
-            : 'Retry approved action'}
-        </Button>
-      )}
+      {a.error_code !== 'PUBLICATION_UNCERTAIN' &&
+        ['approved', 'failed', 'executing'].includes(a.status) && (
+          <Button variant="outline" disabled={disabled} onClick={onRetry}>
+            {a.status === 'executing'
+              ? 'Check / resume safely'
+              : 'Retry approved action'}
+          </Button>
+        )}
       {typeof a.execution_result?.url === 'string' &&
-        /^https:\/\/(www\.google\.com\/calendar\/|calendar\.google\.com\/)/.test(
+        /^https:\/\/(www\.google\.com\/calendar\/|calendar\.google\.com\/|www\.facebook\.com\/\d+_\d+$)/.test(
           a.execution_result.url,
         ) && (
           <a
@@ -1209,7 +1294,7 @@ function ActionCard({
             rel="noreferrer"
             className="block text-xs mt-3 underline"
           >
-            Open calendar booking
+            {facebook ? 'Open published post' : 'Open calendar booking'}
           </a>
         )}
     </article>

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { AIPreferences, AIProviderName } from './ai-settings';
 
 export const agents = [
   'finance',
@@ -52,7 +53,32 @@ export const CalendarPayload = z
 export const RecordPayload = z
   .object({ kind: RecordKind, title: Title, body: Body })
   .strict();
+export const FacebookPayload = z
+  .object({
+    pageId: z.string().regex(/^\d{1,30}$/),
+    message: z.string().trim().min(1).max(5000),
+    link: z
+      .url({ protocol: /^https$/ })
+      .max(2000)
+      .nullable(),
+  })
+  .strict()
+  .superRefine((p, ctx) => {
+    if (p.link && (new URL(p.link).username || new URL(p.link).password))
+      ctx.addIssue({
+        code: 'custom',
+        message: 'Links cannot contain credentials.',
+      });
+  });
 export const Proposal = z.discriminatedUnion('type', [
+  z
+    .object({
+      type: z.literal('facebook.publish'),
+      summary: Title,
+      agent: z.literal('social'),
+      payload: FacebookPayload,
+    })
+    .strict(),
   z
     .object({
       type: z.literal('calendar.create'),
@@ -148,7 +174,7 @@ export type ChatMessage = {
   created_at: string;
   attachment_ids: string[];
 };
-export type WorkspaceData = {
+export type WorkspaceData = AIPreferences & {
   id: string;
   name: string;
   time_zone: string;
@@ -191,6 +217,16 @@ export type Snapshot = {
   cases: Escalation[];
   records: BusinessRecord[];
   audit: { id: number; event: string; created_at: string }[];
-  runs: { agents: AgentName[]; status: string }[];
+  runs: {
+    agents: AgentName[];
+    status: string;
+    model: string | null;
+    provider_trace: {
+      provider: AIProviderName;
+      model: string;
+      status: string;
+      errorCode?: string;
+    }[];
+  }[];
   calendarConnected: boolean;
 };

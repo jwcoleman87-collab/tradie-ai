@@ -2,6 +2,7 @@ import { Proposal, type Action } from '../contracts';
 import { adminDb, rpc } from './db';
 import { AppError } from './errors';
 import { createCalendarEvent } from './calendar';
+import { publishFacebook } from './facebook';
 
 export async function executeAction(
   actionId: string,
@@ -31,6 +32,14 @@ export async function executeAction(
         action.id,
         p.payload,
         action.connection_id!,
+      );
+    else if (p.type === 'facebook.publish')
+      result = await publishFacebook(
+        action.workspace_id,
+        action.id,
+        p.payload,
+        action.connection_id!,
+        claim.token,
       );
     else result = { recordId: action.id, operation: p.type, published: false };
   } catch (error) {

@@ -1,9 +1,11 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import type { AIAvailability } from './ai-settings';
 export type ClientConfig = {
   configured: boolean;
   supabaseUrl: string;
   supabaseAnonKey: string;
   aiReady: boolean;
+  aiProviders: AIAvailability;
   googleReady: boolean;
 };
 let client: SupabaseClient | undefined;

@@ -88,15 +88,20 @@ export async function rpc<T = unknown>(
       BUSY: 409,
       INVALID_INPUT: 400,
       CONSENT_REQUIRED: 403,
+      CONNECTION_CHANGED: 409,
+      PUBLICATION_UNCERTAIN: 409,
+      RETRY_LIMIT: 409,
     };
     throw new AppError(
       code || 'DATABASE_ERROR',
       code ? statuses[code] || 400 : 503,
-      code === 'RATE_LIMITED'
-        ? 'Please wait a minute before trying again.'
-        : code === 'BUSY'
-          ? 'Your team is still working on the previous request.'
-          : 'The change was not applied. Refresh the workspace and try again.',
+      code === 'PUBLICATION_UNCERTAIN'
+        ? 'Facebook may already have published this post. Check the Page; automatic reposting is blocked.'
+        : code === 'RATE_LIMITED'
+          ? 'Please wait a minute before trying again.'
+          : code === 'BUSY'
+            ? 'Your team is still working on the previous request.'
+            : 'The change was not applied. Refresh the workspace and try again.',
     );
   }
   return data as T;

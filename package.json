@@ -14,7 +14,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run --config vitest.config.ts",
     "check": "npm run typecheck && npm test && npm run build",
-    "test:live": "vitest run --config vitest.live.config.ts"
+    "test:live": "vitest run --config vitest.live.config.ts",
+    "setup:check": "node scripts/check-setup.mjs"
   },
   "dependencies": {
     "@base-ui/react": "1.7.0",

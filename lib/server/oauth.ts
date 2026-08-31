@@ -64,10 +64,16 @@ export async function finishGoogle(request: Request) {
     workspace_id: string;
     user_id: string;
     verifier: string;
+    provider: string;
   }>(db, 'consume_oauth_state', {
     p_state: await sha256(state),
     p_cookie: await sha256(nonce),
   });
+  requireValue(
+    stored.provider === 'google_calendar',
+    'OAUTH_STATE_INVALID',
+    403,
+  );
   if (url.searchParams.has('error'))
     return new Response(null, {
       status: 303,
@@ -116,8 +122,13 @@ export async function finishGoogle(request: Request) {
           stored.workspace_id,
         ),
         connected_by: stored.user_id,
+        external_id: 'primary',
+        display_name: 'Primary Google Calendar',
+        credential_kind: 'calendar_refresh_v1',
+        status: 'connected',
+        scopes: [scope],
       },
-      { onConflict: 'workspace_id' },
+      { onConflict: 'workspace_id,provider' },
     ),
   );
   return new Response(null, {

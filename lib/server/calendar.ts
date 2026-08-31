@@ -9,7 +9,9 @@ async function accessToken(workspaceId: string, connectionId?: string) {
   let query = db
     .from('integration_credentials')
     .select('encrypted_refresh_token')
-    .eq('workspace_id', workspaceId);
+    .eq('workspace_id', workspaceId)
+    .eq('provider', 'google_calendar')
+    .eq('status', 'connected');
   if (connectionId) query = query.eq('connection_id', connectionId);
   const connection = checked(await query.maybeSingle());
   if (!connection)

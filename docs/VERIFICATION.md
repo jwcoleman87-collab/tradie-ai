@@ -1,6 +1,49 @@
 # Verification — 31 August 2026
 
-## Passed locally
+## Current integration update
+
+The current checkout passes type check, lint, **100 tests across seven suites**,
+production build and dependency audit (zero known vulnerabilities). The tests
+execute all four migrations in isolated PostgreSQL/PGlite. Added coverage:
+
+- Explicit per-provider consent, OpenAI-only migration defaults and key readiness.
+- OpenAI→Claude and Claude→OpenAI quota/rate/service fallback; sticky backup;
+  no fallback on refusal, invalid input/output, key, permissions or token truncation.
+- Claude text/image/PDF conversion, structured requests and original validation.
+- Metadata-only provider traces, usage counts and no private key in public config.
+- Multiple independent provider connections; private encrypted selection storage;
+  expired, other-owner and duplicate selection rejection.
+- Facebook exact Page/tenant binding, approval gates, durable sending markers,
+  uncertainty/crash duplicate prevention and confirmed receipt replay.
+- Read helpers reject arbitrary paths/mutations; large Ads metrics remain exact
+  strings and missing conversions remain distinct from zero.
+
+Local signed-out browser checks confirm the three-panel interface renders and
+Connections can be opened; processing, uploads and private settings remain
+unavailable until sign-in. Phone-sized (390px) Workspace → Connections navigation
+passes with no horizontal overflow; the temporary viewport was restored.
+Protected new settings have not been tested against
+the live schema because the two new migrations are pending. A Markdown hot-reload
+issue was found during local checking and the Vite asset handling was corrected.
+
+The live Supabase project retains migrations 001/002 and the hosted site retains
+source `7adb23dae3979da1509da76903edc796995c156f` / version 3. The setup checker
+confirmed the new schema columns/tables are absent. The dashboard is signed out
+and the prior Chrome connection is unavailable; the application service key
+does not provide database migration-management access. **Do not deploy this
+checkout until migrations 003/004 have been applied.**
+
+No live OpenAI, Claude, Google OAuth, Meta or Ads calls were made; their required
+keys/client credentials are missing. Mocked provider tests do not prove live
+account/model access. No post, advertising mutation or Calendar booking was made.
+
+Earlier live Supabase checks passed password sign-in, two-workspace isolation,
+API authentication, browser write denial and private Storage HTTP round trips.
+Synthetic users/workspaces/files were cleaned without disabling audit guards.
+Email delivery, full authenticated UI acceptance and provider test resources
+remain outstanding. See `CONNECTIONS.md` and `CONTINUATION.md`.
+
+## Earlier baseline verification (before this integration update)
 
 - TypeScript type check.
 - Lint covers product code; generated shadcn components are excluded and
@@ -33,7 +76,7 @@ unselected agents, non-stored structured model requests, date/time validation,
 unknown actions, upload signatures/limits, encryption tenant binding/tampering,
 cross-origin mutations, bounded JSON and safe public configuration/errors.
 
-## Not verified live
+## Earlier baseline exclusions (see current update above for Supabase progress)
 
 - Hosted Supabase project migrations, Auth email delivery and Storage HTTP.
 - Live OpenAI generation, billing/model access and real document/image reasoning.

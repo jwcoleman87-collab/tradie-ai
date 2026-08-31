@@ -1,5 +1,33 @@
 # Development environment inventory — 31 August 2026
 
+## Current state (supersedes initial discovery below)
+
+- Repository: `outputs/tradie-ai`; private GitHub repository
+  [jwcoleman87-collab/tradie-ai](https://github.com/jwcoleman87-collab/tradie-ai).
+- Hosted site is connected to Supabase project `gjrhukwqagaawdklnvxd` (Tradie Ai).
+  Migrations 001/002 and private Storage are live. Supabase URL, publishable key,
+  server key and a stable encryption secret exist in ignored local `.env` and
+  hosted settings. No unrelated project's secrets were used.
+- The owner explicitly authorised using the supplied Supabase keys. The server
+  key appeared in chat and must be rotated before customer data; rotation is
+  not done and requires coordinated local/hosted updates.
+- Sites access was rechecked: owner role, custom access, one allowed user, no
+  groups and zero external visitors. Sharing has not been broadened.
+- OpenAI + Claude fallback, multi-provider connections, Facebook approved text
+  publishing and Ads read-only reports are implemented locally, not yet deployed.
+- Missing: `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, Google OAuth client credentials,
+  Meta app/business-login configuration and Google Ads developer token.
+- Supabase CLI was unauthenticated. Its prior signed-in browser session has
+  expired; the in-app dashboard now shows sign-in and Chrome is unavailable.
+  Service API access remains available but cannot apply SQL migrations.
+- Pending migrations 003/004 are locally tested. The owner needs to restore
+  authenticated management access before the release can be deployed safely.
+- `npm run setup:check -- --remote` reports presence/readiness without exposing
+  secrets or reading customer rows. Check current state rather than assuming
+  a previous key-presence report proves a live provider request.
+
+## Initial discovery record (historical)
+
 ## Available and verified
 
 - Windows local workspace; Node 24.12.0, npm 11.6.2, Git, GitHub CLI, Python,

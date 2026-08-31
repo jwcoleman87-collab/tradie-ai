@@ -5,11 +5,16 @@ agents, private customer workspaces, and explicit approval before execution.
 
 ## Delivery status
 
-Product code and migrations are implemented. Live Supabase, OpenAI and Google
-calls require the project credentials below. Without them, the application shows
-a labelled setup state; it does not pretend mock responses or sample records are
-live. See `docs/ENVIRONMENT.md` and `docs/VERIFICATION.md` for the access inventory
-and exactly what was tested.
+Supabase Auth/Postgres/Storage are connected to the private hosted version.
+This checkout adds OpenAI + Claude backup, Facebook Page connections and
+read-only Google Ads reporting. These updates are **not deployed yet**: migrations
+003 and 004 need authenticated Supabase management access. The dashboard session
+has signed out. Do not deploy this checkout over the earlier schema.
+
+No OpenAI, Anthropic, Google OAuth, Meta or Google Ads credentials are configured.
+The app reports missing setup rather than producing fake live results.
+Start with [the continuation checkpoint](docs/CONTINUATION.md),
+[connection setup](docs/CONNECTIONS.md) and [verification](docs/VERIFICATION.md).
 
 The original ChatGPT canvas source was not available in the referenced task,
 local files, Sites projects or GitHub repositories. This implementation follows
@@ -26,7 +31,9 @@ can be integrated without rebuilding the backend.
 - Finance, Marketing, Social, Maintenance and Website Markdown skills. Exact
   version and SHA-256 are recorded on every successful agent run.
 - Two-stage structured AI routing and generation through a replaceable provider
-  interface. No keyword router and no AI execution tools.
+  interface: OpenAI Responses and Anthropic Messages, workspace consent per
+  provider, preferred provider and bounded availability/quota fallback. No keyword
+  router and no AI execution tools.
 - Conversations, uploads, business records, proposals and execution receipts.
 - Owner-only Accept/Deny, immutable payloads, atomic decisions, execution leases,
   manual retries, deterministic Google event IDs and duplicate reconciliation.
@@ -35,6 +42,12 @@ can be integrated without rebuilding the backend.
 - Ask James Case ID → Problem → Solution → Outcome. Private by default; optional
   sharing sends categorical information only, never free text or files.
 - Metadata-only audit logs, durable rate limits, file checks and generic errors.
+- Independent Calendar, Facebook Page and Google Ads connections per workspace.
+  Encrypted, expiring resource selection; no provider token reaches the browser.
+- Facebook immediate text/link publishing after owner approval; a durable sending
+  marker blocks automatic reposts when the external outcome is uncertain.
+- Google Ads account selection and last-30-days campaign reporting, read-only.
+  No advertising mutations, image publishing, scheduling or Instagram support yet.
 
 ## Quick start
 
@@ -77,6 +90,8 @@ exact app origin. Configure these **server runtime** values:
 | SUPABASE_SERVICE_ROLE_KEY | Backend secret/service-role key     | Server only   |
 | OPENAI_API_KEY            | Project-scoped API key with billing | Server only   |
 | OPENAI_MODEL              | `gpt-5-mini` default; configurable  | Server config |
+| ANTHROPIC_API_KEY         | Anthropic API key with credits      | Server only   |
+| ANTHROPIC_MODEL           | `claude-haiku-4-5-20251001` default  | Server config |
 | GOOGLE_CLIENT_ID          | Google OAuth web client             | Server config |
 | GOOGLE_CLIENT_SECRET      | Same OAuth client                   | Server only   |
 | TOKEN_ENCRYPTION_KEY      | 32 random bytes, base64 encoded     | Server only   |
@@ -87,6 +102,12 @@ provisioning was unavailable in the build environment. Enable that plugin for
 assisted provisioning, or add a project key through secure environment settings.
 Never paste secrets into chat. Keep the encryption key stable and backed up;
 changing it invalidates existing stored connections.
+
+API quotas are separate from chat subscriptions. Add both keys privately for
+backup, then explicitly allow both providers under **Connections → AI connections**.
+Fallback works only on the providers this workspace allows. Provider requests
+may still cost money on a timeout; switching is not free or unlimited usage.
+See [all provider variables and callbacks](docs/CONNECTIONS.md).
 
 ### Google Calendar
 
@@ -109,23 +130,30 @@ A personal ChatGPT Calendar connector cannot replace customer-facing app OAuth.
 ## First real workflow
 
 1. Create and confirm an account, then create a private business workspace.
-2. Read and accept AI processing consent; connect Google Calendar.
+2. Open Connections, choose and allow AI providers, enable processing, and save.
+   Connect Google Calendar separately.
 3. Give the exact booking date, time and time zone, and the machine facts.
 4. Review the exact start/end, UTC offset, IANA zone and event contents.
 5. Accept. This records approval then calls the separate execution endpoint.
 6. Verify the event and audit receipts. Deny leaves Calendar unchanged.
 
-For invoices, social posts, campaigns and website changes, Accept saves a
-private draft or owner-supplied record. It does **not** send invoices, publish
-posts, spend on ads or publish website changes. Those connectors are not built.
+Accept on a private draft saves it privately. A distinct `facebook.publish`
+proposal shows the exact Page ID, text and link and says **Publish to Facebook**;
+that approval publishes only when the feature is explicitly enabled and the
+selected Page remains connected. Other drafts do not send invoices, spend on ads
+or publish website changes.
 
 ## Verification
 
 ```sh
 npm run typecheck
+npm run lint
 npm test
 npm run build
 npm audit --audit-level=high
+npm run setup:check
+# Optional read-only live schema check; prints readiness, never secrets:
+npm run setup:check -- --remote
 ```
 
 PostgreSQL tests use PGlite and minimal Supabase Auth/Storage table stubs. They
@@ -154,6 +182,10 @@ suite, production build and dependency audit.
 - Consent is explicit and revocable for future turns. `store:false` does not
   guarantee provider zero retention. Publish a privacy/retention policy and
   review provider terms before onboarding customers.
+- Existing consent remains OpenAI-only after migration. Claude needs an explicit
+  owner opt-in. Backup never routes around a safety refusal or invalid output.
+- Expired OAuth candidates cannot be selected. Their encrypted rows require a
+  documented operator retention/cleanup policy; no background cleanup job exists.
 - Server-role credentials remain powerful. Staff with those credentials retain
   technical access. RLS and the limited support view do not eliminate that
   administrative capability. Use controlled access, rotation and backups.
@@ -168,4 +200,7 @@ See `docs/ARCHITECTURE.md`, `docs/ENVIRONMENT.md` and `docs/VERIFICATION.md`.
 - [Supabase server-verified user](https://supabase.com/docs/reference/javascript/auth-getuser)
 - [Supabase Storage access control](https://supabase.com/docs/guides/storage/security/access-control)
 - [OpenAI structured outputs](https://developers.openai.com/api/docs/guides/structured-outputs)
+- [OpenAI API errors](https://developers.openai.com/api/docs/guides/error-codes)
+- [Claude structured outputs](https://platform.claude.com/docs/en/build-with-claude/structured-outputs)
+- [Claude API errors](https://platform.claude.com/docs/en/api/errors)
 - [Google Calendar event creation](https://developers.google.com/workspace/calendar/api/v3/reference/events/insert)

@@ -48,7 +48,7 @@ export async function decrypt(value: string, workspaceId: string) {
     throw new AppError(
       'RECONNECT_REQUIRED',
       409,
-      'Please reconnect Google Calendar.',
+      'Please reconnect this service.',
     );
   }
 }

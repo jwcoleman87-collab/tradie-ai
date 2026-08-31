@@ -35,7 +35,11 @@ export function publicConfig() {
     supabaseUrl: url,
     supabaseAnonKey: anonKey,
     configured: !!(url && anonKey && env('SUPABASE_SERVICE_ROLE_KEY')),
-    aiReady: !!env('OPENAI_API_KEY'),
+    aiReady: !!(env('OPENAI_API_KEY') || env('ANTHROPIC_API_KEY')),
+    aiProviders: {
+      openai: !!env('OPENAI_API_KEY'),
+      anthropic: !!env('ANTHROPIC_API_KEY'),
+    },
     googleReady: !!(
       env('GOOGLE_CLIENT_ID') &&
       env('GOOGLE_CLIENT_SECRET') &&

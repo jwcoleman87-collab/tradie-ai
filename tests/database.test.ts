@@ -97,6 +97,264 @@ afterAll(async () => {
   await db.close();
 });
 
+describe('provider consent and multi-connection safety', () => {
+  let facebookConnection: string;
+  async function facebookAction() {
+    const actionId = id();
+    await db.query(
+      "insert into proposed_actions(id,workspace_id,conversation_id,agent,action_type,summary,payload,connection_id) values($1,$2,$3,'social','facebook.publish','Publish exact post',$4,$5)",
+      [
+        actionId,
+        wA,
+        cA,
+        JSON.stringify({
+          pageId: '12345',
+          message: 'Approved test fixture',
+          link: null,
+        }),
+        facebookConnection,
+      ],
+    );
+    return actionId;
+  }
+  it('preserves OpenAI-only consent defaults and prevents browser preference writes', async () => {
+    expect(
+      (
+        await db.query<{ ai_allowed_providers: string[] }>(
+          'select ai_allowed_providers from workspaces where id=$1',
+          [wA],
+        )
+      ).rows[0].ai_allowed_providers,
+    ).toEqual(['openai']);
+    await expect(
+      asUser(
+        ownerA,
+        "update workspaces set ai_allowed_providers=array['anthropic'] where id=$1",
+        [wA],
+      ),
+    ).rejects.toThrow(/permission denied/i);
+    await expect(
+      db.query(
+        "update workspaces set ai_consent_at=now(),ai_primary_provider='anthropic',ai_allowed_providers=array['openai'] where id=$1",
+        [wA],
+      ),
+    ).rejects.toThrow(/ai_primary_consent/i);
+  });
+  it('stores independent provider identities without replacing Calendar', async () => {
+    const calendarId = id();
+    facebookConnection = id();
+    await db.query(
+      "insert into integration_credentials(workspace_id,provider,connection_id,encrypted_refresh_token,connected_by) values($1,'google_calendar',$2,'calendar-cipher',$3)",
+      [wA, calendarId, ownerA],
+    );
+    await db.query(
+      "insert into integration_credentials(workspace_id,provider,connection_id,encrypted_refresh_token,connected_by,external_id,credential_kind) values($1,'facebook',$2,'facebook-cipher',$3,'12345','provider_json_v1')",
+      [wA, facebookConnection, ownerA],
+    );
+    expect(
+      (
+        await db.query(
+          'select provider from integration_credentials where workspace_id=$1',
+          [wA],
+        )
+      ).rows,
+    ).toHaveLength(2);
+    expect(
+      (
+        await db.query<{ encrypted_refresh_token: string }>(
+          "select encrypted_refresh_token from integration_credentials where workspace_id=$1 and provider='google_calendar'",
+          [wA],
+        )
+      ).rows[0].encrypted_refresh_token,
+    ).toBe('calendar-cipher');
+    // Remove this fixture before the legacy Calendar tests create their own connection.
+    await db.query(
+      "delete from integration_credentials where workspace_id=$1 and provider='google_calendar'",
+      [wA],
+    );
+  });
+  it('keeps candidate credentials and publication attempts inaccessible to every browser role', async () => {
+    for (const table of ['integration_candidates', 'external_publish_attempts'])
+      for (const user of [ownerA, ownerB, support])
+        await expect(asUser(user, `select * from ${table}`)).rejects.toThrow(
+          /permission denied/i,
+        );
+    for (const name of [
+      'complete_provider_connection',
+      'begin_external_publish',
+      'record_external_publish',
+    ]) {
+      const rows = await asUser<{ allowed: boolean }>(
+        ownerA,
+        "select has_function_privilege(current_user,oid,'EXECUTE') allowed from pg_proc where pronamespace='public'::regnamespace and proname=$1",
+        [name],
+      );
+      expect(rows.every((r) => !r.allowed)).toBe(true);
+    }
+  });
+  it('consumes resource selection once, rejects other owners and expired candidates', async () => {
+    const candidate = id();
+    await db.query(
+      "insert into integration_candidates(id,workspace_id,user_id,provider,ciphertext) values($1,$2,$3,'google_ads','private-cipher')",
+      [candidate, wA, ownerA],
+    );
+    const args = [
+      candidate,
+      ownerA,
+      id(),
+      'encrypted',
+      '1234567890',
+      'Ads account',
+      ['adwords'],
+      {},
+    ];
+    await expect(
+      call('complete_provider_connection', [
+        candidate,
+        ownerB,
+        ...args.slice(2),
+      ]),
+    ).rejects.toThrow('FORBIDDEN');
+    await call('complete_provider_connection', args);
+    await expect(call('complete_provider_connection', args)).rejects.toThrow(
+      'FORBIDDEN',
+    );
+    const expired = id();
+    await db.query(
+      "insert into integration_candidates(id,workspace_id,user_id,provider,ciphertext,expires_at) values($1,$2,$3,'google_ads','private-cipher',now()-interval '1 minute')",
+      [expired, wA, ownerA],
+    );
+    await expect(
+      call('complete_provider_connection', [expired, ...args.slice(1)]),
+    ).rejects.toThrow('FORBIDDEN');
+  });
+  it('binds Facebook proposals to the selected tenant, Page and provider', async () => {
+    await expect(
+      db.query(
+        "insert into proposed_actions(workspace_id,conversation_id,agent,action_type,summary,payload,connection_id) values($1,$2,'social','facebook.publish','wrong page',$3,$4)",
+        [
+          wA,
+          cA,
+          JSON.stringify({ pageId: '999', message: 'wrong' }),
+          facebookConnection,
+        ],
+      ),
+    ).rejects.toThrow('INVALID_INPUT');
+    await expect(
+      db.query(
+        "insert into proposed_actions(workspace_id,conversation_id,agent,action_type,summary,payload,connection_id) values($1,$2,'social','facebook.publish','wrong workspace',$3,$4)",
+        [
+          wB,
+          cB,
+          JSON.stringify({ pageId: '12345', message: 'wrong' }),
+          facebookConnection,
+        ],
+      ),
+    ).rejects.toThrow('CONNECTION_CHANGED');
+  });
+  it('does not allow a sending marker before approval or after denial', async () => {
+    const action = await facebookAction();
+    await expect(
+      call('begin_external_publish', [action, id()]),
+    ).rejects.toThrow('FORBIDDEN');
+    await call('decide_action', [action, ownerA, 'deny']);
+    await expect(
+      call('begin_external_publish', [action, id()]),
+    ).rejects.toThrow('FORBIDDEN');
+  });
+  it('blocks duplicates after a crash or an uncertain send', async () => {
+    const action = await facebookAction();
+    await call('decide_action', [action, ownerA, 'accept']);
+    const claim = await call<{ token: string }>('claim_action', [
+      action,
+      ownerA,
+    ]);
+    await expect(
+      call('begin_external_publish', [action, null]),
+    ).rejects.toThrow('FORBIDDEN');
+    expect(
+      (await call('begin_external_publish', [action, claim.token])).send,
+    ).toBe(true);
+    await expect(
+      call('begin_external_publish', [action, claim.token]),
+    ).rejects.toThrow('PUBLICATION_UNCERTAIN');
+    await call('record_external_publish', [
+      action,
+      claim.token,
+      'uncertain',
+      null,
+    ]);
+    await expect(
+      call('begin_external_publish', [action, claim.token]),
+    ).rejects.toThrow('PUBLICATION_UNCERTAIN');
+    await call('finish_action', [
+      action,
+      claim.token,
+      null,
+      'PUBLICATION_UNCERTAIN',
+    ]);
+    const help = (
+      await db.query<{ problem: string }>(
+        'select problem from escalation_cases where action_id=$1',
+        [action],
+      )
+    ).rows[0].problem;
+    expect(help).toContain('Automatic reposting is blocked');
+    expect(help).not.toContain('Reconnect the service and retry');
+  });
+  it('returns a durable confirmed receipt without sending again', async () => {
+    const action = await facebookAction();
+    await call('decide_action', [action, ownerA, 'accept']);
+    const claim = await call<{ token: string }>('claim_action', [
+      action,
+      ownerA,
+    ]);
+    await call('begin_external_publish', [action, claim.token]);
+    const receipt = {
+      postId: '12345_987',
+      url: 'https://www.facebook.com/12345_987',
+      published: true,
+    };
+    await call('record_external_publish', [
+      action,
+      claim.token,
+      'confirmed',
+      receipt,
+    ]);
+    expect(await call('begin_external_publish', [action, claim.token])).toEqual(
+      { send: false, receipt },
+    );
+  });
+  it('permits a rejected attempt to retry, never an uncertain one', async () => {
+    const action = await facebookAction();
+    await call('decide_action', [action, ownerA, 'accept']);
+    const claim = await call<{ token: string }>('claim_action', [
+      action,
+      ownerA,
+    ]);
+    await call('begin_external_publish', [action, claim.token]);
+    await call('record_external_publish', [
+      action,
+      claim.token,
+      'rejected',
+      null,
+    ]);
+    expect(
+      (await call('begin_external_publish', [action, claim.token])).send,
+    ).toBe(true);
+  });
+  it('rejects approval when the selected Page connection changes', async () => {
+    const action = await facebookAction();
+    await db.query(
+      "update integration_credentials set connection_id=$1 where workspace_id=$2 and provider='facebook'",
+      [id(), wA],
+    );
+    await expect(
+      call('decide_action', [action, ownerA, 'accept']),
+    ).rejects.toThrow('CONNECTION_CHANGED');
+  });
+});
+
 describe('migrations and tenant security on real PostgreSQL', () => {
   it('enables RLS on every application table', async () => {
     const tables = await db.query<{ relname: string; relrowsecurity: boolean }>(
@@ -161,7 +419,8 @@ describe('migrations and tenant security on real PostgreSQL', () => {
       'decide_action(uuid,uuid,text)',
       'claim_action(uuid,uuid)',
       'finish_action(uuid,uuid,jsonb,text)',
-      'complete_chat(uuid,text,jsonb,jsonb,text,jsonb)',
+      'complete_chat(uuid,text,jsonb,jsonb,text,jsonb,jsonb,jsonb)',
+      'complete_chat_v1(uuid,text,jsonb,jsonb,text,jsonb)',
     ])
       expect(
         (
@@ -432,5 +691,108 @@ describe('chat transaction and escalation privacy', () => {
     await expect(
       call('consume_oauth_state', ['state', 'cookie']),
     ).rejects.toThrow('FORBIDDEN');
+  });
+  it('persists both provider usage and switch traces with a completed chat atomically', async () => {
+    await db.query(
+      "update workspaces set ai_consent_at=now(),ai_allowed_providers=array['openai','anthropic'] where id=$1",
+      [wB],
+    );
+    const run = await call<{ id: string }>('begin_chat', [
+      wB,
+      cB,
+      ownerB,
+      id(),
+      'A harmless draft',
+      [],
+    ]);
+    const usage = [
+      {
+        provider: 'openai',
+        model: 'test-router',
+        inputTokens: 10,
+        outputTokens: 5,
+        totalTokens: 15,
+      },
+      {
+        provider: 'anthropic',
+        model: 'test-writer',
+        inputTokens: 20,
+        outputTokens: 10,
+        totalTokens: 30,
+      },
+    ];
+    const trace = [
+      { provider: 'openai', model: 'test-router', status: 'completed' },
+      {
+        provider: 'openai',
+        model: 'test-router',
+        status: 'failed',
+        errorCode: 'AI_QUOTA_EXCEEDED',
+      },
+      { provider: 'anthropic', model: 'test-writer', status: 'completed' },
+    ];
+    await call('complete_chat', [
+      run.id,
+      'A saved reply',
+      ['social'],
+      [],
+      'test-writer',
+      [],
+      usage,
+      trace,
+    ]);
+    const row = (
+      await db.query<{
+        status: string;
+        usage: unknown;
+        provider_trace: unknown;
+      }>('select status,usage,provider_trace from agent_runs where id=$1', [
+        run.id,
+      ])
+    ).rows[0];
+    expect(row).toEqual({ status: 'completed', usage, provider_trace: trace });
+    expect(
+      await asUser(ownerA, 'select * from agent_runs where id=$1', [run.id]),
+    ).toEqual([]);
+  });
+  it('rejects oversized provider traces without committing a partial reply', async () => {
+    const run = await call<{ id: string }>('begin_chat', [
+      wB,
+      cB,
+      ownerB,
+      id(),
+      'Another harmless draft',
+      [],
+    ]);
+    await expect(
+      call('complete_chat', [
+        run.id,
+        'Must not save',
+        ['social'],
+        [],
+        'test',
+        [],
+        [],
+        Array(4).fill({ provider: 'openai' }),
+      ]),
+    ).rejects.toThrow('INVALID_INPUT');
+    expect(
+      (
+        await db.query(
+          "select id from messages where run_id=$1 and role='assistant'",
+          [run.id],
+        )
+      ).rows,
+    ).toHaveLength(0);
+    await call('complete_chat', [
+      run.id,
+      'Valid reply',
+      ['social'],
+      [],
+      'test',
+      [],
+      [],
+      [],
+    ]);
   });
 });

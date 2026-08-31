@@ -2,13 +2,18 @@ import { z } from 'zod';
 import { Uuid, ChatInput, CaseInput, type Action } from '../contracts';
 import { adminDb, authenticate, checked, membership, rpc } from './db';
 import { body, endpoint, json } from './http';
-import { publicConfig, required } from './config';
+import { publicConfig } from './config';
 import { AppError, requireValue } from './errors';
-import { runTeam, OpenAIProvider } from './ai';
+import { runTeam } from './ai';
+import { createAIProvider } from './ai-provider';
+import { AIConsentInput, type AIPreferences } from '../ai-settings';
 import { executeAction } from './actions';
 import { calendarContext } from './calendar';
 import { finishGoogle, startGoogle } from './oauth';
 import { readFileBody, safeFilename, validateFile } from './uploads';
+import { integrationApi } from './integration-api';
+import { finishProvider } from './provider-oauth';
+import { AdditionalProviderSchema, connectionList } from './connections';
 
 export const api = endpoint(async (request) => {
   const url = new URL(request.url),
@@ -21,8 +26,18 @@ export const api = endpoint(async (request) => {
     });
   if (path === 'google/callback' && method === 'GET')
     return finishGoogle(request);
+  const providerCallback = path.match(
+    /^integrations\/(facebook|google_ads)\/callback$/,
+  );
+  if (providerCallback && method === 'GET')
+    return finishProvider(
+      AdditionalProviderSchema.parse(providerCallback[1]),
+      request,
+    );
   const { db, user } = await authenticate(request);
   const admin = adminDb();
+  const integrationResponse = await integrationApi(request, path, db, user.id);
+  if (integrationResponse) return integrationResponse;
   if (path === 'bootstrap' && method === 'POST') {
     const { name } = z
       .object({ name: z.string().trim().min(1).max(120) })
@@ -37,7 +52,9 @@ export const api = endpoint(async (request) => {
       checked(
         await db
           .from('workspaces')
-          .select('id,name,time_zone,ai_consent_at')
+          .select(
+            'id,name,time_zone,ai_consent_at,ai_primary_provider,ai_fallback_enabled,ai_allowed_providers',
+          )
           .order('created_at'),
       ) || [];
     if (!workspaces.length) return json({ workspaces: [] });
@@ -124,7 +141,7 @@ export const api = endpoint(async (request) => {
       conversationId
         ? db
             .from('agent_runs')
-            .select('agents,status')
+            .select('agents,status,model,provider_trace')
             .eq('conversation_id', conversationId)
             .order('created_at', { ascending: false })
             .limit(1)
@@ -133,6 +150,8 @@ export const api = endpoint(async (request) => {
         .from('integration_credentials')
         .select('connection_id')
         .eq('workspace_id', workspaceId)
+        .eq('provider', 'google_calendar')
+        .eq('status', 'connected')
         .maybeSingle(),
     ]);
     return json({
@@ -152,16 +171,16 @@ export const api = endpoint(async (request) => {
     });
   }
   if (path === 'consent' && method === 'POST') {
-    const input = z
-      .object({ workspaceId: Uuid, allowAI: z.boolean() })
-      .strict()
-      .parse(await body(request));
+    const input = AIConsentInput.parse(await body(request));
     await membership(db, user.id, input.workspaceId, true);
     checked(
       await admin
         .from('workspaces')
         .update({
           ai_consent_at: input.allowAI ? new Date().toISOString() : null,
+          ai_primary_provider: input.primaryProvider,
+          ai_fallback_enabled: input.allowFallback,
+          ai_allowed_providers: input.allowedProviders,
         })
         .eq('id', input.workspaceId),
     );
@@ -198,9 +217,24 @@ export const api = endpoint(async (request) => {
     );
   }
   if (path === 'chat' && method === 'POST') {
-    required('OPENAI_API_KEY');
     const input = ChatInput.parse(await body(request));
     await membership(db, user.id, input.workspaceId);
+    const preferences = checked(
+      await db
+        .from('workspaces')
+        .select(
+          'ai_consent_at,ai_primary_provider,ai_fallback_enabled,ai_allowed_providers',
+        )
+        .eq('id', input.workspaceId)
+        .single(),
+    )!;
+    requireValue(
+      preferences.ai_consent_at,
+      'AI_CONSENT_REQUIRED',
+      403,
+      'Choose your AI providers in Connections before sending a message.',
+    );
+    const provider = createAIProvider(preferences as AIPreferences);
     const run = await rpc<{ id: string; status: string; existing: boolean }>(
       admin,
       'begin_chat',
@@ -250,6 +284,8 @@ export const api = endpoint(async (request) => {
           .from('integration_credentials')
           .select('connection_id')
           .eq('workspace_id', input.workspaceId)
+          .eq('provider', 'google_calendar')
+          .eq('status', 'connected')
           .maybeSingle(),
       );
       const attachments: unknown[] = [];
@@ -304,7 +340,8 @@ export const api = endpoint(async (request) => {
           return remaining >= 0;
         })
         .reverse();
-      const result = await runTeam(new OpenAIProvider(), {
+      const integrations = await connectionList(input.workspaceId);
+      const result = await runTeam(provider, {
         history: bounded,
         records: records.map((r) => ({ ...r, body: r.body.slice(0, 3000) })),
         timeZone: workspace.time_zone,
@@ -312,6 +349,7 @@ export const api = endpoint(async (request) => {
           ? await calendarContext(input.workspaceId)
           : { available: false },
         attachments,
+        integrations,
       });
       requireValue(
         connection ||
@@ -320,16 +358,37 @@ export const api = endpoint(async (request) => {
         409,
         'Connect Google Calendar first, then ask your team to prepare the booking.',
       );
+      const facebook = integrations.find(
+        (c) =>
+          c.provider === 'facebook' &&
+          c.capabilities.includes('facebook.publish'),
+      );
+      requireValue(
+        !result.proposals.some(
+          (p) =>
+            p.type === 'facebook.publish' &&
+            (!facebook || p.payload.pageId !== facebook.externalId),
+        ),
+        'FACEBOOK_NOT_CONNECTED',
+        409,
+        'Connect and select a Facebook Page with publishing enabled first.',
+      );
       await rpc(admin, 'complete_chat', {
         p_run: run.id,
         p_reply: result.reply,
         p_agents: result.agents,
         p_versions: result.versions,
         p_model: result.model,
+        p_usage: result.usage,
+        p_trace: result.providerTrace,
         p_proposals: result.proposals.map((p) => ({
           ...p,
           connectionId:
-            p.type === 'calendar.create' ? connection?.connection_id : null,
+            p.type === 'calendar.create'
+              ? connection?.connection_id
+              : p.type === 'facebook.publish'
+                ? facebook?.connectionId
+                : null,
         })),
       });
       if (result.escalation !== 'none') {
@@ -350,6 +409,7 @@ export const api = endpoint(async (request) => {
         runId: run.id,
         status: 'completed',
         agents: result.agents,
+        providerTrace: result.providerTrace,
       });
     } catch (error) {
       const code = error instanceof AppError ? error.code : 'AI_FAILED';
@@ -358,6 +418,8 @@ export const api = endpoint(async (request) => {
         .update({
           status: 'failed',
           error_code: code,
+          usage: provider.usage,
+          provider_trace: provider.attempts,
           finished_at: new Date().toISOString(),
         })
         .eq('id', run.id)
@@ -573,7 +635,8 @@ export const api = endpoint(async (request) => {
       await admin
         .from('integration_credentials')
         .delete()
-        .eq('workspace_id', input.workspaceId),
+        .eq('workspace_id', input.workspaceId)
+        .eq('provider', 'google_calendar'),
     );
     return json({ ok: true });
   }
