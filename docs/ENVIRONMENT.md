@@ -2,12 +2,12 @@
 
 ## Current state (supersedes initial discovery below)
 
-Activation update: all four migrations are applied and verified; the signed-in
-Chrome dashboard provided SQL access. Both AI keys are configured privately in
-local/hosted settings and verified with real text routing/generation. The schema
-compatibility fix and blue logo are live in private Sites version 6, environment
-revision 4. Google client credentials are now configured; Meta/Ads credentials
-are still missing. Rotate the AI
+All four migrations are applied and verified. Both AI keys are configured
+privately in local/hosted settings. The hosted transport/composer/audit repair
+and blue logo are live in private Sites version 7, environment revision 4.
+OpenAI passed real routing/generation inside workerd; the latest Claude call
+reports an API quota/credit error. Google credentials and a connected account
+are present; Meta/Ads credentials are still missing. Rotate the AI
 and Supabase secrets shared in chat before customer data. See CONTINUATION.md
 for exact identities and VERIFICATION.md for current evidence.
 
@@ -17,8 +17,10 @@ The owner approved Google's three agreements. Calendar API is enabled; External 
 Testing OAuth, the web client and exact hosted/local callbacks are saved. Only the
 owner is a test user and only Calendar events is declared. Google credentials are
 saved privately in local/hosted settings and deployed. Live configuration reports
-Calendar ready; final account consent, production branding and a separately approved
-event test remain. No account refresh token or event has been obtained/created.
+Calendar ready; a metadata-only read confirms a connected Calendar record created
+at `2026-08-31T12:10:27.329955+00:00`. No token was inspected. Production branding,
+token-refresh verification and a separately approved event test remain. No event
+was created during setup or this repair.
 
 ## Earlier environment checkpoint (historical; superseded above)
 

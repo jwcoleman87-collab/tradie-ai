@@ -28,6 +28,24 @@ token refresh or approved live event execution. Existing customer records and
 the audit author's test messages are untouched. Exact release details follow in
 CONTINUATION.md; no schema or environment changes are required for this repair.
 
+Version 7 deployed successfully from `b0c19dee017a74a852594e070d151a75a9fd1260`,
+deployment `appgdep_6a9577a7fc8c81918706510a103b1bec`, environment revision 4.
+Access was rechecked owner-only, one user, no groups/visitors. Zero configured
+secret matches across 232 source/build files; release packaging excludes `.env`
+and local state. Dependency audit reports zero vulnerabilities. Clean Linux CI
+passed the exact runtime source:
+https://github.com/jwcoleman87-collab/tradie-ai/actions/runs/33393347168.
+
+Post-deployment hosted HTTP checks passed page/config/health, provider/Calendar
+readiness, logo and no server secrets in public configuration. Two synthetic
+users signed in and each saw only its own workspace; cross-tenant requests were
+403, missing/invalid sessions 401, direct browser writes denied, and private
+Storage round-tripped a synthetic file while blocking anonymous/other-tenant
+access. The test's two users/workspaces/file were removed successfully. No
+customer rows, test-audit messages or append-only protections were changed.
+This is not a claim of interactive hosted chat/approval acceptance; the real
+OpenAI test above used workerd locally with synthetic data, not a customer chat.
+
 ## Earlier activation and live provider verification (historical)
 
 All four migrations are live. Chrome dashboard SQL verified 21/21 application

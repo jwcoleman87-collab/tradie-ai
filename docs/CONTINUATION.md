@@ -29,8 +29,14 @@ older sections. No token was read and no approved live event test was performed.
 The user supplied headline findings, not all sixteen audit items. The report's
 suggestion to delete its test messages is not owner permission; they remain.
 No consent, schema, keys, Google settings, publishing flags, ads or events were
-changed in this repair. The deployment identifiers below describe the preceding
-release until the post-deployment checkpoint is recorded.
+changed in this repair. The exact validated repair is deployed as version 7.
+Clean Linux CI also passed installation, typecheck, lint, all 129 tests, build
+and dependency audit: https://github.com/jwcoleman87-collab/tradie-ai/actions/runs/33393347168.
+Post-deployment HTTP checks passed Auth, two-workspace isolation, direct-write
+denial, private Storage, public configuration safety and readiness. All synthetic
+fixtures were removed; customer messages were untouched. Full interactive hosted
+chat/approval acceptance remains distinct from these checks and the real OpenAI
+test inside local workerd. No claim of live Calendar execution is made.
 
 ## Logo update
 
@@ -108,10 +114,10 @@ working AI release. The current deployed runtime is version 6, listed below.
 - Supabase: `gjrhukwqagaawdklnvxd`, Tradie Ai, Singapore.
 - Site: https://tradie-ai-business-team.j-w-coleman87.chatgpt.site
 - Sites project: `appgprj_6a952d52f72c81919fa229c3f5f93e8c`.
-- LIVE runtime source: `2b6d321887cf822e1a9825c81d67257e1246939a`.
-- LIVE saved version: 6; hosting environment revision: 4.
-- LIVE version ID: `appgprj_6a952d52f72c81919fa229c3f5f93e8c~appgver_186b391788688191ad44af085889a57b`.
-- LIVE deployment: `appgdep_6a956d473d848191980a631a1858d839`, succeeded.
+- LIVE runtime source: `b0c19dee017a74a852594e070d151a75a9fd1260`.
+- LIVE saved version: 7; hosting environment revision: 4.
+- LIVE version ID: `appgprj_6a952d52f72c81919fa229c3f5f93e8c~appgver_3949588450cc8191b176e66b84ba0d12`.
+- LIVE deployment: `appgdep_6a9577a7fc8c81918706510a103b1bec`, succeeded.
 - Later documentation-only commits may follow the runtime commit.
 - Access last verified owner-only, custom, one user, zero groups/visitors.
 - `.openai/hosting.json` is authoritative. Do not create a duplicate site.
@@ -143,23 +149,23 @@ Saved version 6 was redeployed with environment revision 4. Post-deployment chec
 passed `googleReady: true`, both AI flags, no Google/backend secret in public
 configuration, password sign-in, two-workspace isolation, direct-write denial
 and private Storage. All temporary users/workspaces/file were removed successfully.
-No runtime source was changed, so the earlier 106-test/build/CI results still
-describe this exact deployed runtime.
+That configuration-only release changed no runtime source. The subsequent chat
+repair above is now deployed with the same environment revision and 129 tests.
 
-**Final Google account consent is outstanding.** Sign in to Tradie AI →
-Connections → Google Calendar → Connect, then have the owner review/allow the
-Google account permission. No refresh token or Calendar event has been obtained
-or created. Do not claim end-to-end Google OAuth or live event execution passed.
-Any exact test event requires separate appropriate owner approval.
+**The account is now connected.** A metadata-only read confirmed the connected
+Calendar record at the timestamp above; no token was inspected. Do not reconnect
+unnecessarily. Token refresh and real event creation remain unverified. An exact
+test event requires separate appropriate owner approval.
 
 Google's Audience page still shows incomplete branding and disables Publish app.
 Public privacy/terms links and production branding/domain verification are not
 complete; do not invent policies or publish/broaden access to bypass this. The
-scope/client/test-user configuration is saved; the actual consent flow is the next
-verification boundary. See Google's production requirements linked in CONNECTIONS.
+scope/client/test-user configuration and account connection are saved; live event
+execution is the next verification boundary. See Google's production requirements
+linked in CONNECTIONS.
 
 - Google setup: https://console.cloud.google.com/auth/overview?project=tradie-ai-507211
-- Google client credentials are configured, not missing; account consent remains.
+- Google client credentials and an account connection are present, not missing.
 - `META_APP_ID`, `META_APP_SECRET`, `META_LOGIN_CONFIG_ID`, supported
   `META_GRAPH_VERSION`, Page permissions/app review/business verification.
 - `GOOGLE_ADS_DEVELOPER_TOKEN`; Ads API/consent and advertiser access. Optional
@@ -181,16 +187,17 @@ ChatGPT/Codex/Claude subscriptions do not supply backend API credits.
 3. Run `npm run setup:check -- --remote`; require all four schema probes `ready`.
 4. For code changes, run typecheck, lint, tests, production build and dependency audit.
    Use the existing lockfile/runtime; no dependency replacement is necessary.
-5. Complete the existing Google client's owner consent, then obtain Meta and Ads
+5. Preserve the existing Google account connection, then obtain Meta and Ads
    setup through the owner's intended accounts. `.env.example` and CONNECTIONS.md
    have exact callbacks/settings. AI and Calendar app keys already exist; do not
    request or print them again. Do not publish the testing-only Google app.
 6. Verify UI settings persist with a staging owner and cannot be changed by a
-   member or another workspace. Existing consent must remain OpenAI-only.
-7. Text routing/generation for each AI provider is verified. Image/PDF live tests
-   and a full authenticated chat/approval acceptance pass remain. Simulate failover
-   in tests rather than deliberately exhausting paid quota.
-8. Connect Calendar and approve one exact harmless test event. Verify Deny and
+   member or another workspace. Preserve the owner's current provider consent.
+7. OpenAI routing/generation passed in workerd. Claude needs its API credit/usage
+   limit resolved before retesting. Image/PDF live tests and a full authenticated
+   chat/approval acceptance pass remain. Simulate failover rather than deliberately
+   exhausting paid quota. Inspect safe Audit outcomes for new failures.
+8. Obtain approval for one exact harmless Calendar test event. Verify Deny and
    retries/duplicates. No real Calendar event has yet been created.
 9. Verify Meta permissions/version with the actual dashboard. Connect a test Page,
    get exact test-post approval, then enable publishing in that environment.
@@ -207,9 +214,10 @@ ChatGPT/Codex/Claude subscriptions do not supply backend API credits.
 
 ## Tests and limits
 
-Current local verification: 106 automated tests; type check, lint, build and audit
-pass. Tests use PGlite for real SQL/RLS execution plus mocked provider HTTP.
-Live OpenAI/Claude routing and generation passed with synthetic text. Meta/Ads
+Current verification: 129 automated tests; type check, lint, build and zero-finding
+audit pass locally and in clean Linux CI. Tests use PGlite for real SQL/RLS,
+mocked provider/API services, and actual workerd request semantics. Real OpenAI
+routing/generation passed in workerd; latest Claude call reports a quota error. Meta/Ads
 remain unconfigured. Local signed-out browser
 Connections/navigation checks passed on desktop and at a 390px phone viewport
 (no horizontal overflow); a full authenticated settings UI pass remains.
