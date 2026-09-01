@@ -1,16 +1,21 @@
-import finance from '../../skills/finance/SKILL.md?raw';
-import marketing from '../../skills/marketing/SKILL.md?raw';
-import social from '../../skills/social/SKILL.md?raw';
-import maintenance from '../../skills/maintenance/SKILL.md?raw';
-import website from '../../skills/website/SKILL.md?raw';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import type { AgentName } from '../contracts';
 import { sha256 } from './crypto';
+
+function readSkill(agent: AgentName) {
+  return readFileSync(
+    join(process.cwd(), 'skills', agent, 'SKILL.md'),
+    'utf8',
+  );
+}
+
 const sources: Record<AgentName, string> = {
-  finance,
-  marketing,
-  social,
-  maintenance,
-  website,
+  finance: readSkill('finance'),
+  marketing: readSkill('marketing'),
+  social: readSkill('social'),
+  maintenance: readSkill('maintenance'),
+  website: readSkill('website'),
 };
 export async function loadSkills(selected: AgentName[]) {
   return Promise.all(

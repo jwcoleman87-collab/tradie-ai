@@ -9,6 +9,12 @@ Supabase Auth/Postgres/Storage and all four migrations are live. The private
 hosted app includes the selected blue four-tile logo, OpenAI + Claude backup,
 Facebook Page connections and read-only Google Ads reporting.
 
+The native Next.js production deployment is live on Vercel at
+[tradie-ai-nine.vercel.app](https://tradie-ai-nine.vercel.app). The existing
+ChatGPT Sites deployment remains untouched. The Vercel URL is public, while all
+customer workspace data and actions remain behind Supabase authentication and
+the existing row-level security policies.
+
 Both AI keys are configured privately. A reported hosted chat failure was traced
 to `redirect: 'error'`, which the Worker engine rejects before contacting either
 provider. Manual redirect handling fixes that without forwarding credentials.
@@ -77,6 +83,27 @@ npm run dev
 Open the address printed by the server. Do not expose the development server to
 the internet. No credentials are committed.
 
+### Vercel
+
+The repository is linked to the `tradie-ai` Vercel project. Vercel runs the
+standard Next.js build and stores production configuration as encrypted project
+environment variables. Deployments must keep `APP_ORIGIN` set to the exact
+production origin:
+
+`https://tradie-ai-nine.vercel.app`
+
+For a fresh Vercel project, add every populated variable from `.env.example` in
+the Vercel project settings, then deploy from the repository root. Never upload
+the local `.env` file or expose server secrets with a `NEXT_PUBLIC_` prefix.
+
+Before creating or reconnecting accounts on the Vercel domain, also allow the
+Vercel origin in Supabase Auth and register these exact production callbacks in
+their provider dashboards:
+
+- `https://tradie-ai-nine.vercel.app/api/google/callback`
+- `https://tradie-ai-nine.vercel.app/api/integrations/facebook/callback`
+- `https://tradie-ai-nine.vercel.app/api/integrations/google_ads/callback`
+
 ### Supabase
 
 Use a dedicated **staging** Supabase project for Tradie AI. Do not point these
@@ -111,12 +138,10 @@ exact app origin. Configure these **server runtime** values:
 | GOOGLE_CLIENT_SECRET      | Same OAuth client                   | Server only   |
 | TOKEN_ENCRYPTION_KEY      | 32 random bytes, base64 encoded     | Server only   |
 
-Local `.env` is loaded by the development tooling. For hosted Sites use hosted
-runtime variables/secrets; local `.env` is never uploaded. OpenAI Developers key
-provisioning was unavailable in the build environment. Enable that plugin for
-assisted provisioning, or add a project key through secure environment settings.
-Never paste secrets into chat. Keep the encryption key stable and backed up;
-changing it invalidates existing stored connections.
+Local `.env` is loaded by the development tooling. Vercel uses encrypted project
+variables; local `.env` is not part of the deployment. Add provider keys through
+secure environment settings and never commit them. Keep the encryption key
+stable and backed up; changing it invalidates existing stored connections.
 
 API quotas are separate from chat subscriptions. Add both keys privately for
 backup, then explicitly allow both providers under **Connections → AI connections**.
