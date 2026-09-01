@@ -39,6 +39,7 @@ import {
   RotateCcw,
   Building2,
   Mic,
+  ChevronDown,
 } from 'lucide-react';
 import { authClient, requestApi, type ClientConfig } from '@/lib/client';
 import { supportPayload } from '@/lib/server/privacy';
@@ -2116,6 +2117,17 @@ function ActionCard({
   onDecision: (d: 'accept' | 'deny') => void;
   onRetry: () => void;
 }) {
+  const storageKey = `workbench:action-card:${a.id}:open`;
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    try {
+      setOpen(window.localStorage.getItem(storageKey) === 'true');
+    } catch {
+      // The card still works for this session when browser storage is blocked.
+    }
+  }, [storageKey]);
+
   const calendar = a.action_type === 'calendar.create',
     facebook = a.action_type === 'facebook.publish',
     expired = Date.parse(a.expires_at) <= Date.now();
@@ -2127,146 +2139,169 @@ function ActionCard({
     ),
   ].join(' ');
   return (
-    <article className="action-card">
-      <span className="section-label">
-        {a.agent} · {a.status.replaceAll('_', ' ')}
-      </span>
-      <BrandMentions text={brandText} />
-      <h3 className="mt-2">{a.summary}</h3>
-      <div className="action-details">
-        {calendar ? (
-          <dl>
-            <dt>Calendar</dt>
-            <dd>Primary calendar of the connected account</dd>
-            <dt>Event</dt>
-            <dd>{String(a.payload.summary)}</dd>
-            <dt>Starts</dt>
-            <dd>{String(a.payload.start)}</dd>
-            <dt>Ends</dt>
-            <dd>{String(a.payload.end)}</dd>
-            <dt>Time zone</dt>
-            <dd>{String(a.payload.timeZone)}</dd>
-            <dt>Description</dt>
-            <dd>
-              {typeof a.payload.description === 'string'
-                ? a.payload.description
-                : 'No description'}
-            </dd>
-          </dl>
-        ) : facebook ? (
-          <>
+    <details
+      className="action-card collapsible-action-card"
+      open={open}
+      onToggle={(event) => {
+        const nextOpen = event.currentTarget.open;
+        setOpen(nextOpen);
+        try {
+          window.localStorage.setItem(storageKey, String(nextOpen));
+        } catch {
+          // The in-memory state still keeps the card open until it is minimised.
+        }
+      }}
+    >
+      <summary className="action-card-summary">
+        <div className="action-card-summary-main">
+          <span className="section-label">
+            {a.agent} · {a.status.replaceAll('_', ' ')}
+          </span>
+          <BrandMentions text={brandText} />
+          <h3 className="mt-2">{a.summary}</h3>
+        </div>
+        <span className="action-card-toggle-hint" aria-hidden="true">
+          <span>{open ? 'Minimise' : 'Open'}</span>
+          <ChevronDown size={16} />
+        </span>
+      </summary>
+      <div className="action-card-content">
+        <div className="action-details">
+          {calendar ? (
             <dl>
-              <dt>Facebook Page ID</dt>
-              <dd>{String(a.payload.pageId)}</dd>
-              <dt>Exact post</dt>
-              <dd className="whitespace-pre-wrap">
-                {String(a.payload.message)}
+              <dt>Calendar</dt>
+              <dd>Primary calendar of the connected account</dd>
+              <dt>Event</dt>
+              <dd>{String(a.payload.summary)}</dd>
+              <dt>Starts</dt>
+              <dd>{String(a.payload.start)}</dd>
+              <dt>Ends</dt>
+              <dd>{String(a.payload.end)}</dd>
+              <dt>Time zone</dt>
+              <dd>{String(a.payload.timeZone)}</dd>
+              <dt>Description</dt>
+              <dd>
+                {typeof a.payload.description === 'string'
+                  ? a.payload.description
+                  : 'No description'}
               </dd>
-              {typeof a.payload.link === 'string' && (
-                <>
-                  <dt>Link</dt>
-                  <dd className="break-all">{a.payload.link}</dd>
-                </>
-              )}
-              {typeof a.payload.imageFileId === 'string' && (
-                <>
-                  <dt>Selected photo</dt>
-                  <dd>{imageFile?.filename || 'Private workspace image'}</dd>
-                </>
-              )}
             </dl>
-            {typeof a.payload.imageFileId === 'string' && imageFile && (
-              <FacebookImagePreview file={imageFile} token={token} />
-            )}
-            <p className="auth-hint">
-              Accept publishes this exact caption
-              {typeof a.payload.imageFileId === 'string'
-                ? ' and selected photo'
-                : '/link'}{' '}
-              immediately to the selected Page. It is not a private draft.
-            </p>
-          </>
-        ) : (
+          ) : facebook ? (
+            <>
+              <dl>
+                <dt>Facebook Page ID</dt>
+                <dd>{String(a.payload.pageId)}</dd>
+                <dt>Exact post</dt>
+                <dd className="whitespace-pre-wrap">
+                  {String(a.payload.message)}
+                </dd>
+                {typeof a.payload.link === 'string' && (
+                  <>
+                    <dt>Link</dt>
+                    <dd className="break-all">{a.payload.link}</dd>
+                  </>
+                )}
+                {typeof a.payload.imageFileId === 'string' && (
+                  <>
+                    <dt>Selected photo</dt>
+                    <dd>{imageFile?.filename || 'Private workspace image'}</dd>
+                  </>
+                )}
+              </dl>
+              {typeof a.payload.imageFileId === 'string' && imageFile && (
+                <FacebookImagePreview file={imageFile} token={token} />
+              )}
+              <p className="auth-hint">
+                Accept publishes this exact caption
+                {typeof a.payload.imageFileId === 'string'
+                  ? ' and selected photo'
+                  : '/link'}{' '}
+                immediately to the selected Page. It is not a private draft.
+              </p>
+            </>
+          ) : (
+            <>
+              <strong>{String(a.payload.title)}</strong>
+              <p>{String(a.payload.body)}</p>
+              {typeof a.payload.imageFileId === 'string' && imageFile && (
+                <PrivateImagePreview
+                  file={imageFile}
+                  token={token}
+                  variant="feature"
+                />
+              )}
+              <span className="auth-hint">
+                {a.action_type === 'draft.save'
+                  ? 'Accept saves this draft privately. It will not publish or send.'
+                  : 'Accept adds this owner-supplied record to your business memory.'}
+              </span>
+            </>
+          )}
+        </div>
+        {a.status === 'waiting_approval' && (
           <>
-            <strong>{String(a.payload.title)}</strong>
-            <p>{String(a.payload.body)}</p>
-            {typeof a.payload.imageFileId === 'string' && imageFile && (
-              <PrivateImagePreview
-                file={imageFile}
-                token={token}
-                variant="feature"
-              />
-            )}
-            <span className="auth-hint">
-              {a.action_type === 'draft.save'
-                ? 'Accept saves this draft privately. It will not publish or send.'
-                : 'Accept adds this owner-supplied record to your business memory.'}
-            </span>
+            <p className="auth-hint">
+              {expired
+                ? 'This proposal has expired.'
+                : `Approval expires ${new Date(a.expires_at).toLocaleString()}.`}
+            </p>
+            <div className="action-buttons">
+              <Button
+                variant="outline"
+                disabled={disabled || expired}
+                onClick={() => onDecision('deny')}
+              >
+                <X size={14} /> Deny
+              </Button>
+              <Button
+                disabled={disabled || expired}
+                onClick={() => onDecision('accept')}
+              >
+                <Check size={14} />{' '}
+                {facebook ? 'Publish to Facebook' : 'Accept'}
+              </Button>
+            </div>
           </>
         )}
-      </div>
-      {a.status === 'waiting_approval' && (
-        <>
-          <p className="auth-hint">
-            {expired
-              ? 'This proposal has expired.'
-              : `Approval expires ${new Date(a.expires_at).toLocaleString()}.`}
+        {a.status === 'completed' && (
+          <p className="ready-badge">
+            {calendar
+              ? 'Booking confirmed.'
+              : facebook
+                ? 'Published to Facebook.'
+                : 'Saved privately.'}
           </p>
-          <div className="action-buttons">
-            <Button
-              variant="outline"
-              disabled={disabled || expired}
-              onClick={() => onDecision('deny')}
-            >
-              <X size={14} /> Deny
-            </Button>
-            <Button
-              disabled={disabled || expired}
-              onClick={() => onDecision('accept')}
-            >
-              <Check size={14} /> {facebook ? 'Publish to Facebook' : 'Accept'}
-            </Button>
-          </div>
-        </>
-      )}
-      {a.status === 'completed' && (
-        <p className="ready-badge">
-          {calendar
-            ? 'Booking confirmed.'
-            : facebook
-              ? 'Published to Facebook.'
-              : 'Saved privately.'}
-        </p>
-      )}
-      {a.error_code && (
-        <output className="block">
-          {a.error_code === 'PUBLICATION_UNCERTAIN'
-            ? 'Facebook may already have published this post. Automatic retry is blocked. Check the Page and Ask James before creating a replacement.'
-            : `Action not completed (${a.error_code}). Check the connection before retrying.`}
-        </output>
-      )}
-      {a.error_code !== 'PUBLICATION_UNCERTAIN' &&
-        ['approved', 'failed', 'executing'].includes(a.status) && (
-          <Button variant="outline" disabled={disabled} onClick={onRetry}>
-            {a.status === 'executing'
-              ? 'Check / resume safely'
-              : 'Retry approved action'}
-          </Button>
         )}
-      {typeof a.execution_result?.url === 'string' &&
-        /^https:\/\/(www\.google\.com\/calendar\/|calendar\.google\.com\/|www\.facebook\.com\/\d+_\d+$)/.test(
-          a.execution_result.url,
-        ) && (
-          <a
-            href={a.execution_result.url}
-            target="_blank"
-            rel="noreferrer"
-            className="block text-xs mt-3 underline"
-          >
-            {facebook ? 'Open published post' : 'Open calendar booking'}
-          </a>
+        {a.error_code && (
+          <output className="block">
+            {a.error_code === 'PUBLICATION_UNCERTAIN'
+              ? 'Facebook may already have published this post. Automatic retry is blocked. Check the Page and Ask James before creating a replacement.'
+              : `Action not completed (${a.error_code}). Check the connection before retrying.`}
+          </output>
         )}
-    </article>
+        {a.error_code !== 'PUBLICATION_UNCERTAIN' &&
+          ['approved', 'failed', 'executing'].includes(a.status) && (
+            <Button variant="outline" disabled={disabled} onClick={onRetry}>
+              {a.status === 'executing'
+                ? 'Check / resume safely'
+                : 'Retry approved action'}
+            </Button>
+          )}
+        {typeof a.execution_result?.url === 'string' &&
+          /^https:\/\/(www\.google\.com\/calendar\/|calendar\.google\.com\/|www\.facebook\.com\/\d+_\d+$)/.test(
+            a.execution_result.url,
+          ) && (
+            <a
+              href={a.execution_result.url}
+              target="_blank"
+              rel="noreferrer"
+              className="block text-xs mt-3 underline"
+            >
+              {facebook ? 'Open published post' : 'Open calendar booking'}
+            </a>
+          )}
+      </div>
+    </details>
   );
 }
 

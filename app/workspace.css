@@ -366,6 +366,65 @@
   margin: 10px 0;
   color: #81718f;
 }
+.action-card-summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 12px;
+  list-style: none;
+  cursor: pointer;
+}
+.action-card-summary::-webkit-details-marker {
+  display: none;
+}
+.action-card-summary-main {
+  min-width: 0;
+}
+.action-card-summary-main h3 {
+  overflow-wrap: anywhere;
+}
+.action-card-toggle-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding-top: 1px;
+  color: #81718f;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.action-card-toggle-hint svg {
+  transition: transform 180ms ease;
+}
+.collapsible-action-card[open] .action-card-toggle-hint svg {
+  transform: rotate(180deg);
+}
+.action-card-content {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid #e5d7f0;
+}
+.collapsible-action-card[open] .action-card-content {
+  animation: action-card-reveal 180ms ease-out;
+}
+@keyframes action-card-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .action-card-toggle-hint svg {
+    transition: none;
+  }
+  .collapsible-action-card[open] .action-card-content {
+    animation: none;
+  }
+}
 .brand-heading,
 .brand-lockup-row,
 .provider-trace-line,

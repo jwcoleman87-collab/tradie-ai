@@ -542,6 +542,21 @@ output.composer-caption:empty {
   background: #f2f3f2;
 }
 
+.action-card-summary:focus-visible {
+  outline: 3px solid
+    color-mix(in srgb, var(--workbench-yellow) 45%, transparent);
+  outline-offset: 5px;
+  border-radius: 4px;
+}
+
+.action-card-toggle-hint {
+  color: #68717a;
+}
+
+.action-card-content {
+  border-color: var(--workbench-line);
+}
+
 .action-details dt {
   color: #68717a;
 }
