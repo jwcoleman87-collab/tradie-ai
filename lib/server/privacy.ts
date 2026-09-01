@@ -12,7 +12,7 @@ export function supportPayload(
     integration_error:
       'An external integration could not complete an approved operation.',
     safety_review: 'A request needs a safety or specialist review.',
-    general: 'The owner requested help with their AI team.',
+    general: 'The owner requested help with their Workbench crew.',
   };
   return {
     schemaVersion: 1,

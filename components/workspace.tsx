@@ -38,6 +38,7 @@ import {
   Archive,
   RotateCcw,
   Building2,
+  Mic,
 } from 'lucide-react';
 import { authClient, requestApi, type ClientConfig } from '@/lib/client';
 import { supportPayload } from '@/lib/server/privacy';
@@ -103,8 +104,8 @@ const workspaceHeadings: Record<
   { title: string; description: string }
 > = {
   actions: {
-    title: 'Work needing attention',
-    description: 'Review approvals, failures and work still in progress.',
+    title: 'Ready for your say-so',
+    description: 'Only work that still needs your attention.',
   },
   files: {
     title: 'Conversation files',
@@ -218,7 +219,7 @@ export default function Workspace() {
               setAuthView('password-recovery');
               setPassword('');
               setPasswordConfirmation('');
-              setNotice('Choose a new password for your Tradie AI account.');
+              setNotice('Choose a new password for your Workbench account.');
             }
             if (!s) {
               setSnapshot(null);
@@ -474,7 +475,7 @@ export default function Workspace() {
       }
       await refresh();
       setNotice(
-        'Files saved privately. Selected attachments will be sent to your AI team with your next message.',
+        'Files saved privately. Selected attachments will be sent to your Workbench crew with your next message.',
       );
     });
     if (fileInput.current) fileInput.current.value = '';
@@ -537,19 +538,18 @@ export default function Workspace() {
   return (
     <main className="app-shell">
       <header className="topbar">
-        <Link className="brand" href="/" aria-label="Tradie AI home">
-          <span className="brand-icon">
-            <Image
-              src="/favicon.svg"
-              alt=""
-              width={38}
-              height={38}
-              unoptimized
-            />
-          </span>
-          tradie<span>ai</span>
+        <Link className="brand" href="/" aria-label="Workbench home">
+          <Image
+            className="workbench-lockup"
+            src="/workbench/lockup.png"
+            alt="Workbench"
+            width={212}
+            height={40}
+            unoptimized
+            priority
+          />
         </Link>
-        <span className="top-tag">Your business. Your AI team.</span>
+        <span className="top-tag">Your business. Your crew. One place.</span>
         <span className="privacy-badge">
           <ShieldCheck size={15} /> Private workspace
           {session && (
@@ -577,22 +577,19 @@ export default function Workspace() {
               variant={mobile === t ? 'default' : 'ghost'}
               onClick={() => setMobile(t)}
             >
-              {t === 'team'
-                ? 'AI team'
-                : t === 'chat'
-                  ? 'Conversation'
-                  : 'Workspace'}
+              {t === 'team' ? 'Crew' : t === 'chat' ? 'Magic' : 'Workspace'}
             </Button>
           ))}
         </nav>
         <aside className="team-panel">
-          <div className="section-label">YOUR MANAGED AI TEAM</div>
+          <div className="section-label">YOUR AI CREW</div>
           <h2>
-            A little backup.
-            <br />A lot less admin.
+            The backend crew
+            <br />
+            every tradie needs.
           </h2>
           <p className="muted small">
-            Just talk. The right agents get to work.
+            Pick a specialist or just talk to Magic.
           </p>
           {snapshot && (
             <div
@@ -719,7 +716,7 @@ export default function Workspace() {
           </div>
           <div className="support-card">
             <LifeBuoy size={22} />
-            <h3>Stuck? Ask James.</h3>
+            <h3>Need a hand? Ask James.</h3>
             <p>A helping hand, without sharing your whole conversation.</p>
             <Button
               variant="outline"
@@ -734,12 +731,12 @@ export default function Workspace() {
         <section className="conversation-panel">
           <div className="panel-heading">
             <div>
-              <span className="section-label">ONE CONVERSATION</span>
-              <h1>Let’s get it sorted.</h1>
+              <span className="section-label">MAGIC CHAT</span>
+              <h1>G’day. What can I get done?</h1>
             </div>
             <span className="status-pill">
               {busy
-                ? 'Working…'
+                ? 'Crew working…'
                 : authView === 'password-recovery'
                   ? 'Password recovery'
                   : snapshot
@@ -868,7 +865,7 @@ export default function Workspace() {
               </output>
             )}
             {loading ? (
-              <p className="muted">Opening your private workspace…</p>
+              <p className="muted">Opening your Workbench…</p>
             ) : authView === 'password-recovery' ? (
               <form className="auth-form" onSubmit={updatePassword}>
                 <h2>Choose a new password</h2>
@@ -916,19 +913,19 @@ export default function Workspace() {
                   <>
                     <div className="welcome-mark">
                       <Image
-                        src="/favicon.svg"
+                        src="/workbench/mark.png"
                         alt=""
                         width={50}
                         height={50}
                         unoptimized
                       />
                     </div>
-                    <h2>What’s on your plate?</h2>
+                    <h2>Magic is ready.</h2>
                     <p className="muted">
-                      A service to book. A post to write. An invoice to
-                      understand.
+                      Tell Workbench what needs doing. Your crew will sort out
+                      who should handle it.
                       <br />
-                      Tell your team what you need.
+                      Simple, practical, under your control.
                     </p>
                   </>
                 )}
@@ -993,6 +990,12 @@ export default function Workspace() {
                   )}
                 {config?.configured && !session && authView === 'sign-in' && (
                   <form className="auth-form" onSubmit={(e) => signIn(e)}>
+                    <span className="section-label">MAGIC CHAT SETUP</span>
+                    <h2>G’day. Let’s open your Workbench.</h2>
+                    <p className="muted">
+                      Sign in, or create an account and tell Magic about your
+                      business.
+                    </p>
                     <label htmlFor="account-email">
                       Email
                       <Input
@@ -1061,6 +1064,12 @@ export default function Workspace() {
                       });
                     }}
                   >
+                    <span className="section-label">YOUR BUSINESS</span>
+                    <h2>Tell Magic what you call the business.</h2>
+                    <p className="muted">
+                      Start with the name. The rest can be gathered naturally in
+                      Magic Chat.
+                    </p>
                     <label htmlFor="business-name">
                       Your business name
                       <Input
@@ -1072,7 +1081,7 @@ export default function Workspace() {
                       />
                     </label>
                     <Button type="submit" disabled={busy}>
-                      Create my private workspace
+                      Create my Workbench
                     </Button>
                   </form>
                 )}
@@ -1143,7 +1152,7 @@ export default function Workspace() {
                   return (
                     <article className={`message ${m.role}`} key={m.id}>
                       <span className="meta">
-                        {m.role === 'user' ? 'You' : 'Your AI team'} ·{' '}
+                        {m.role === 'user' ? 'You' : 'Magic + your crew'} ·{' '}
                         {new Date(m.created_at).toLocaleTimeString([], {
                           hour: '2-digit',
                           minute: '2-digit',
@@ -1187,8 +1196,8 @@ export default function Workspace() {
           </div>
           <form className="composer" onSubmit={send}>
             <Textarea
-              aria-label="Message your team"
-              placeholder={blockedReason || 'Tell your team what you need…'}
+              aria-label="Message Magic"
+              placeholder={blockedReason || 'Message Magic…'}
               aria-describedby="composer-help"
               value={text}
               maxLength={12000}
@@ -1241,7 +1250,18 @@ export default function Workspace() {
               >
                 <Plus />
               </Button>
-              <span>Your approval. Always.</span>
+              <Button
+                type="button"
+                size="icon"
+                variant="ghost"
+                className="voice-button"
+                aria-label="Voice input is coming soon"
+                title="Voice input is coming soon"
+                disabled
+              >
+                <Mic />
+              </Button>
+              <span>You stay in control.</span>
               <Button
                 type="submit"
                 size="icon"
@@ -1271,8 +1291,8 @@ export default function Workspace() {
               ))}
           </output>
           <p className="composer-caption">
-            AI prepares. You decide. Nothing external changes without your
-            approval.
+            Workbench prepares. You decide. Nothing external changes without
+            your approval.
           </p>
         </section>
         <aside className="actions-panel">
@@ -1487,7 +1507,7 @@ export default function Workspace() {
                   <div className="empty-actions">
                     <h3>Start with what you know.</h3>
                     <p>
-                      Tell your team about a machine, customer, invoice or
+                      Tell your crew about a machine, customer, invoice or
                       service. Review and accept the proposed record to save it
                       here.
                     </p>
