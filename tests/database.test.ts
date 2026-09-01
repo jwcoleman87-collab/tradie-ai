@@ -424,6 +424,60 @@ describe('migrations and tenant security on real PostgreSQL', () => {
       await asUser(ownerA, 'select * from conversations where id=$1', [cB]),
     ).toEqual([]);
   });
+  it('isolates onboarding profiles, facts and sessions between tenants', async () => {
+    const sessionA = id(),
+      sessionB = id();
+    for (const [workspace, owner, session, name] of [
+      [wA, ownerA, sessionA, 'Business A'],
+      [wB, ownerB, sessionB, 'Business B'],
+    ]) {
+      await db.query(
+        'insert into business_profiles(workspace_id,display_name) values($1,$2)',
+        [workspace, name],
+      );
+      await db.query(
+        "insert into business_profile_facts(workspace_id,field_path,value,source_type,source_label,confidence,fact_state) values($1,'display_name',$2,'owner_message','Owner answer','high','owner_supplied')",
+        [workspace, JSON.stringify(name)],
+      );
+      await db.query(
+        "insert into onboarding_sessions(id,user_id,workspace_id,current_goal) values($1,$2,$3,'identity_anchor')",
+        [session, owner, workspace],
+      );
+    }
+    expect(
+      await asUser<{ display_name: string }>(
+        ownerA,
+        'select display_name from business_profiles order by display_name',
+      ),
+    ).toEqual([{ display_name: 'Business A' }]);
+    expect(
+      await asUser<{ value: string }>(
+        ownerA,
+        'select value from business_profile_facts where workspace_id=$1',
+        [wB],
+      ),
+    ).toEqual([]);
+    expect(
+      await asUser<{ id: string }>(
+        ownerA,
+        'select id from onboarding_sessions where id=$1',
+        [sessionB],
+      ),
+    ).toEqual([]);
+    await expect(
+      asUser(
+        ownerA,
+        "update business_profiles set display_name='Changed' where workspace_id=$1",
+        [wA],
+      ),
+    ).rejects.toThrow(/permission denied/i);
+    await expect(
+      db.query('update onboarding_sessions set user_id=$1 where id=$2', [
+        ownerB,
+        sessionA,
+      ]),
+    ).rejects.toThrow(/IMMUTABLE/i);
+  });
   it('cannot change membership or impersonate an owner', async () => {
     await expect(
       asUser(ownerA, "insert into workspace_members values($1,$2,'owner')", [
@@ -446,6 +500,9 @@ describe('migrations and tenant security on real PostgreSQL', () => {
       'action_approvals',
       'audit_logs',
       'business_records',
+      'business_profiles',
+      'business_profile_facts',
+      'onboarding_sessions',
       'integration_credentials',
       'oauth_states',
       'support_operators',

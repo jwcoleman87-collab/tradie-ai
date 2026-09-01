@@ -7,8 +7,40 @@
 > operational statements below conflict with later provider receipts or that
 > handover, treat the newer evidence as authoritative.
 
-Updated 1 September 2026 (Australia/Sydney). Read this before making changes.
+Updated 2 September 2026 (Australia/Sydney). Read this before making changes.
 Do not restart setup. See the current repair note and release checkpoint below.
+
+## Current release candidate: public landing and intelligent onboarding
+
+The existing Next.js/Vercel application now has separate `/`, `/sign-in`,
+`/onboarding` and `/workspace` routes. The public landing page implements the
+approved Workbench system and describes only shipped product behaviour. Existing
+workspace visuals remain intact behind `/workspace`; signed-out workspace visits
+go to the dedicated sign-in route.
+
+Onboarding is a bounded, adaptive owner conversation with at most five prompts,
+followed by a **What Magic found** review. Facts retain their source and
+confidence, corrections remain owner-supplied, and confirmation is required
+before entering the workspace. Website, public-profile and registry research is
+an explicit unavailable adapter: the UI and API state that no external research
+ran rather than presenting guesses as discoveries. Onboarding performs no
+external actions.
+
+Migration `202609020007_intelligent_onboarding.sql` is applied and recorded in
+the hosted Supabase migration ledger. It adds tenant-scoped business profiles,
+profile facts and onboarding sessions. All three tables have RLS; authenticated
+browsers can read only their workspace and cannot write directly. Server routes
+authenticate the JWT, verify membership and owner role, validate every payload,
+and write through the server-only client. The hosted authentication redirect
+allow-list contains the exact production and localhost onboarding/recovery URLs.
+`npm run setup:check -- --remote` reports intelligent onboarding ready.
+
+Release-candidate verification passes: typecheck, lint, all 143 tests in 14
+suites, production build, dependency audit with zero high-severity findings,
+and `git diff --check`. Local browser QA passed on desktop and at 390px with no
+horizontal overflow or browser errors. Signed-out `/onboarding` and `/workspace`
+redirect correctly. An authenticated production onboarding/workspace smoke test
+and Vercel runtime-log check remain part of the deployment step.
 
 ## Current release: Facebook photo publishing and password recovery
 
@@ -226,7 +258,7 @@ ChatGPT/Codex/Claude subscriptions do not supply backend API credits.
 
 1. Inspect working-tree changes, this file, README, CONNECTIONS and VERIFICATION.
    Preserve any newer user changes. No unrelated repositories/databases are in scope.
-2. Inspect migration history if changing the schema; 001–004 are already applied.
+2. Inspect migration history if changing the schema; 001–007 are already applied.
    Never reapply/reset production or disable append-only/RLS protections.
 3. Run `npm run setup:check -- --remote`; require all four schema probes `ready`.
 4. For code changes, run typecheck, lint, tests, production build and dependency audit.
@@ -254,16 +286,16 @@ ChatGPT/Codex/Claude subscriptions do not supply backend API credits.
     connect that advertiser to `Test 01 James`. Do not add spending mutations
     without new approved action schemas and budget-specific acceptance tests.
 11. For further runtime changes, deploy the exact tested source through the
-    existing Sites workflow. Recheck owner-only access, push source, package `dist/`,
-    save a version, deploy and poll success. Keep `.env`, local databases and
-    runtime state out of the archive. Reuse the existing preview tab.
+    linked Vercel project and verify the stable `tradie-ai-nine.vercel.app` alias.
+    Keep `.env`, local databases and runtime state out of source control. The old
+    Sites deployment is historical and is not the release target for this build.
 12. Check live HTTP auth, two-user isolation, Storage, and authenticated browser
     workflows. Update this checkpoint with exact verified status and blockers.
 
 ## Tests and limits
 
-Current verification: 129 automated tests; type check, lint, build and zero-finding
-audit pass locally and in clean Linux CI. Tests use PGlite for real SQL/RLS,
+Current verification: 143 automated tests in 14 suites; type check, lint, build
+and zero-finding audit pass locally. Tests use PGlite for real SQL/RLS,
 mocked provider/API services, and actual workerd request semantics. Real OpenAI
 routing/generation passed in workerd; latest Claude call reports a quota error.
 Meta and Ads runtime configuration is installed; Meta OAuth/Page selection and

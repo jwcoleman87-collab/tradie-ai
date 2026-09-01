@@ -15,7 +15,12 @@ port = 54323
 [auth]
 enabled = true
 site_url = "http://localhost:3000"
-additional_redirect_urls = ["http://localhost:3000"]
+additional_redirect_urls = [
+  "http://localhost:3000/onboarding",
+  "http://localhost:3000/sign-in?view=recovery",
+  "https://tradie-ai-nine.vercel.app/onboarding",
+  "https://tradie-ai-nine.vercel.app/sign-in?view=recovery"
+]
 jwt_expiry = 3600
 enable_signup = true
 minimum_password_length = 10

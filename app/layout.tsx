@@ -3,6 +3,7 @@ import { Inter, Work_Sans } from 'next/font/google';
 import './globals.css';
 import './workspace.css';
 import './workbench.css';
+import './public.css';
 
 const inter = Inter({
   variable: '--font-inter',

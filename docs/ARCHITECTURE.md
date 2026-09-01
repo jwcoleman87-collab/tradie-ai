@@ -29,6 +29,28 @@ cookie nonce, PKCE, a verified owner and a ten-minute expiry. It consumes state
 once before token exchange. Refresh tokens are AES-256-GCM encrypted using a
 workspace-bound additional authenticated value and never returned to a browser.
 
+## Landing, sign-in and onboarding boundary
+
+The signed-out root route is a static public landing surface and never queries
+workspace data. `/sign-in` owns account confirmation and password recovery,
+`/onboarding` owns first-run business discovery, and `/workspace` retains the
+existing three-panel product. All browser auth consumers use the same Supabase
+session hook; API requests still authenticate the bearer token server-side.
+
+Onboarding uses a separate, bounded turn contract rather than the normal
+five-crew routing loop. It stores only concise messages, information goals and
+schema-validated profile facts — never model chain-of-thought. Each fact carries
+a source reference, source label, confidence, state and observation time. New
+profile, fact and session tables have tenant-read RLS and no browser write
+grant. Server endpoints verify membership and owner role before service-role
+writes; confirmation is a separate operation and creates an audit receipt.
+
+`lib/server/discovery.ts` is the public-evidence adapter boundary. The initial
+adapter deliberately returns `unavailable` and no evidence. The UI therefore
+says that only owner-supplied answers were used; it cannot imply that a website,
+registry or business-profile search ran. A future provider must use an approved
+API, timeouts and a host allow-list before it can populate discovered facts.
+
 ## AI providers and consent
 
 Workspaces choose a primary provider, a backup setting and an allowlist of

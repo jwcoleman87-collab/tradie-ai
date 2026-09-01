@@ -55,6 +55,8 @@ if (process.argv.includes('--remote') && result.supabaseConfigured) {
     multiProviderCredentials:
       'integration_credentials?select=provider,credential_kind,external_id&limit=0',
     publicationReceipts: 'external_publish_attempts?select=action_id&limit=0',
+    intelligentOnboarding:
+      'business_profile_facts?select=workspace_id,field_path,confidence,fact_state&limit=0',
   };
   result.schema = {};
   for (const [name, path] of Object.entries(checks)) {

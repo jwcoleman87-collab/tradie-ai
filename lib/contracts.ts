@@ -150,6 +150,85 @@ export const CaseInput = z
     shareWithSupport: z.boolean(),
   })
   .strict();
+
+export const OnboardingFieldPath = z.enum([
+  'display_name',
+  'website_url',
+  'base_location',
+  'service_areas',
+  'services',
+  'preferred_job_types',
+  'enquiry_channels',
+  'primary_goal',
+  'admin_bottleneck',
+  'brand_summary',
+]);
+export type OnboardingField = z.infer<typeof OnboardingFieldPath>;
+export const OnboardingFactValue = z.union([
+  z.string().trim().min(1).max(1000),
+  z.array(z.string().trim().min(1).max(240)).min(1).max(20),
+]);
+export const OnboardingTurnInput = z
+  .object({
+    workspaceId: Uuid.nullable().default(null),
+    answer: z.string().trim().min(2).max(4000),
+  })
+  .strict();
+export const OnboardingCorrectionInput = z
+  .object({
+    workspaceId: Uuid,
+    facts: z
+      .array(
+        z
+          .object({
+            fieldPath: OnboardingFieldPath,
+            value: OnboardingFactValue,
+          })
+          .strict(),
+      )
+      .min(1)
+      .max(20),
+  })
+  .strict();
+export const OnboardingConfirmInput = z.object({ workspaceId: Uuid }).strict();
+
+export type OnboardingFact = {
+  id: string;
+  field_path: OnboardingField;
+  value: string | string[];
+  source_type: 'owner_message' | 'owner_correction' | 'public_source';
+  source_label: string;
+  source_url: string | null;
+  confidence: 'high' | 'medium' | 'low';
+  fact_state:
+    | 'discovered'
+    | 'owner_supplied'
+    | 'inferred'
+    | 'confirmed'
+    | 'needs_confirmation';
+  observed_at: string;
+  confirmed_at: string | null;
+};
+export type OnboardingMessage = {
+  id: string;
+  role: 'assistant' | 'user';
+  content: string;
+  createdAt: string;
+};
+export type OnboardingSnapshot = {
+  workspaceId: string | null;
+  requiresOnboarding: boolean;
+  onboardingStatus: 'not_started' | 'in_progress' | 'review' | 'confirmed';
+  promptCount: number;
+  currentPrompt: string | null;
+  messages: OnboardingMessage[];
+  facts: OnboardingFact[];
+  discovery: {
+    status: 'unavailable' | 'ready' | 'complete' | 'failed';
+    label: string;
+    detail: string;
+  };
+};
 export type ActionStatus =
   | 'waiting_approval'
   | 'approved'
@@ -263,4 +342,5 @@ export type Snapshot = {
     }[];
   }[];
   calendarConnected: boolean;
+  onboardingStatus: 'in_progress' | 'review' | 'confirmed' | null;
 };

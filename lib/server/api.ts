@@ -15,6 +15,7 @@ import { integrationApi } from './integration-api';
 import { finishProvider } from './provider-oauth';
 import { AdditionalProviderSchema, connectionList } from './connections';
 import { aiProblem } from '../ai-diagnostics';
+import { onboardingApi } from './onboarding-api';
 
 export const api = endpoint(async (request) => {
   const url = new URL(request.url),
@@ -37,6 +38,8 @@ export const api = endpoint(async (request) => {
     );
   const { db, user } = await authenticate(request);
   const admin = adminDb();
+  const onboardingResponse = await onboardingApi(request, path, db, user.id);
+  if (onboardingResponse) return onboardingResponse;
   const integrationResponse = await integrationApi(request, path, db, user.id);
   if (integrationResponse) return integrationResponse;
   if (path === 'bootstrap' && method === 'POST') {
@@ -100,6 +103,7 @@ export const api = endpoint(async (request) => {
       audit,
       runs,
       connection,
+      businessProfile,
     ] = await Promise.all([
       conversationId
         ? db
@@ -165,6 +169,11 @@ export const api = endpoint(async (request) => {
         .eq('provider', 'google_calendar')
         .eq('status', 'connected')
         .maybeSingle(),
+      db
+        .from('business_profiles')
+        .select('onboarding_status')
+        .eq('workspace_id', workspaceId)
+        .maybeSingle(),
     ]);
     return json({
       workspaces,
@@ -187,6 +196,7 @@ export const api = endpoint(async (request) => {
       })),
       runs: checked(runs),
       calendarConnected: !!checked(connection),
+      onboardingStatus: checked(businessProfile)?.onboarding_status || null,
     });
   }
   if (path === 'workspaces' && method === 'POST') {

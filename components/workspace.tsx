@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import type { Session, SupabaseClient } from '@supabase/supabase-js';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -41,7 +41,8 @@ import {
   Mic,
   ChevronDown,
 } from 'lucide-react';
-import { authClient, requestApi, type ClientConfig } from '@/lib/client';
+import { requestApi } from '@/lib/client';
+import { useWorkbenchAuth } from '@/lib/use-workbench-auth';
 import { supportPayload } from '@/lib/server/privacy';
 import type {
   Snapshot,
@@ -138,9 +139,15 @@ const messageOf = (e: unknown) =>
 type AuthView = 'sign-in' | 'reset-request' | 'password-recovery';
 
 export default function Workspace() {
-  const [config, setConfig] = useState<ClientConfig | null>(null),
-    [session, setSession] = useState<Session | null>(null),
-    [snapshot, setSnapshot] = useState<Snapshot | null>(null);
+  const {
+    config,
+    session,
+    client,
+    event: authEvent,
+    loading: authLoading,
+    error: authError,
+  } = useWorkbenchAuth();
+  const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [loading, setLoading] = useState(true),
     [busy, setBusy] = useState(false),
     [error, setError] = useState(''),
@@ -198,44 +205,31 @@ export default function Workspace() {
     !!snapshot?.conversationId;
 
   useEffect(() => {
-    let alive = true;
-    let unsubscribe: undefined | (() => void);
-    fetch('/api/config')
-      .then((r) => {
-        if (!r.ok) throw Error('Configuration could not load.');
-        return r.json() as Promise<ClientConfig>;
-      })
-      .then(async (c: ClientConfig) => {
-        if (!alive) return;
-        setConfig(c);
-        if (c.configured) {
-          const client = authClient(c);
-          clientRef.current = client;
-          const { data } = await client.auth.getSession();
-          if (alive) setSession(data.session);
-          const result = client.auth.onAuthStateChange((event, s) => {
-            loadSequence.current++;
-            setSession(s);
-            if (event === 'PASSWORD_RECOVERY') {
-              setAuthView('password-recovery');
-              setPassword('');
-              setPasswordConfirmation('');
-              setNotice('Choose a new password for your Workbench account.');
-            }
-            if (!s) {
-              setSnapshot(null);
-              scope.current = { workspaceId: '', conversationId: '' };
-            }
-          });
-          unsubscribe = () => result.data.subscription.unsubscribe();
-        } else setLoading(false);
-      })
-      .catch((e) => {
-        if (alive) {
-          setError(messageOf(e));
-          setLoading(false);
-        }
-      });
+    clientRef.current = client;
+  }, [client]);
+  useEffect(() => {
+    if (authLoading) return;
+    if (authError) {
+      setError(authError);
+      setLoading(false);
+      return;
+    }
+    const recovering =
+      authEvent === 'PASSWORD_RECOVERY' ||
+      new URLSearchParams(window.location.hash.replace(/^#/, '')).get(
+        'type',
+      ) === 'recovery';
+    if (recovering) {
+      window.location.replace(`/sign-in?view=recovery${window.location.hash}`);
+      return;
+    }
+    if (config?.configured && !session) {
+      window.location.replace('/sign-in?next=/workspace');
+      return;
+    }
+    if (!config?.configured) setLoading(false);
+  }, [authError, authEvent, authLoading, config, session]);
+  useEffect(() => {
     const state = new URLSearchParams(window.location.search).get('calendar');
     const connectionState = new URLSearchParams(window.location.search).get(
       'connection',
@@ -254,15 +248,7 @@ export default function Workspace() {
           ? 'Google Calendar connected. Prepare a new booking to use this connection.'
           : 'Google Calendar connection was cancelled.',
       );
-    const recoveryParams = new URLSearchParams(
-      window.location.hash.replace(/^#/, ''),
-    );
-    if (recoveryParams.get('type') === 'recovery')
-      setAuthView('password-recovery');
-    return () => {
-      alive = false;
-      unsubscribe?.();
-    };
+    return undefined;
   }, []);
 
   const refresh = useCallback(
@@ -274,6 +260,14 @@ export default function Workspace() {
       if (c) query.set('conversationId', c);
       const data = await requestApi<Snapshot>(token, `state?${query}`);
       if (seq !== loadSequence.current) return;
+      if (
+        !data.workspaces.length ||
+        data.onboardingStatus === 'in_progress' ||
+        data.onboardingStatus === 'review'
+      ) {
+        window.location.replace('/onboarding');
+        return;
+      }
       setSnapshot(data.workspaces.length ? data : null);
       setWorkspaceName(data.workspace?.name || '');
       scope.current = {
@@ -324,7 +318,12 @@ export default function Workspace() {
         ? await client.auth.signUp({
             email,
             password,
-            options: { emailRedirectTo: window.location.origin },
+            options: {
+              emailRedirectTo: new URL(
+                '/onboarding',
+                window.location.origin,
+              ).toString(),
+            },
           })
         : await client.auth.signInWithPassword({ email, password });
       if (error) throw error;
@@ -345,7 +344,10 @@ export default function Workspace() {
       const { error } = await client.auth.resetPasswordForEmail(
         normalizedEmail,
         {
-          redirectTo: window.location.origin,
+          redirectTo: new URL(
+            '/sign-in?view=recovery',
+            window.location.origin,
+          ).toString(),
         },
       );
       if (error) throw error;
