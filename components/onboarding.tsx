@@ -236,9 +236,7 @@ export default function Onboarding() {
             <div>
               <span className="section-label">MAGIC</span>
               <h2>
-                {reviewing
-                  ? 'What Magic found'
-                  : 'G’day. Let’s get your Workbench ready.'}
+                {reviewing ? 'What Magic found' : 'G’day. Let’s get started.'}
               </h2>
               <p className="magic-subtitle">
                 {reviewing

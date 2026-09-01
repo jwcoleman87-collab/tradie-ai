@@ -1585,7 +1585,7 @@
 }
 .onboarding-main {
   min-height: calc(100dvh - 70px);
-  padding: clamp(42px, 7vh, 72px) 24px 55px;
+  padding: clamp(32px, 5vh, 48px) 24px 42px;
   background: #f5f5f3;
 }
 .magic-heading,
@@ -1596,7 +1596,7 @@
   width: min(100%, 760px);
 }
 .magic-heading {
-  align-items: flex-start;
+  align-items: center;
   margin-bottom: 16px;
 }
 .magic-avatar {
@@ -1609,9 +1609,9 @@
   padding: 7px;
 }
 .magic-heading h2 {
-  max-width: 620px;
+  max-width: 660px;
   margin-top: 2px;
-  font-size: clamp(27px, 3vw, 38px);
+  font-size: clamp(27px, 2.6vw, 34px);
 }
 .magic-subtitle {
   margin-top: 7px;
@@ -1652,9 +1652,9 @@
   line-height: 1.45;
 }
 .onboarding-chat {
-  min-height: 280px;
+  min-height: 210px;
   max-height: 45dvh;
-  padding: 28px 0 22px;
+  padding: 24px 0 18px;
 }
 .onboarding-message {
   max-width: 82%;
@@ -1713,7 +1713,7 @@
     text-align: left;
   }
   .onboarding-chat {
-    min-height: 250px;
+    min-height: 210px;
     max-height: 42dvh;
   }
 }
@@ -1761,7 +1761,7 @@
     letter-spacing: -0.8px;
   }
   .onboarding-chat {
-    min-height: 220px;
+    min-height: 190px;
   }
   .onboarding-message {
     max-width: 92%;
