@@ -10,7 +10,7 @@
 Updated 2 September 2026 (Australia/Sydney). Read this before making changes.
 Do not restart setup. See the current repair note and release checkpoint below.
 
-## Current release candidate: public landing and intelligent onboarding
+## Current release: public landing and intelligent onboarding
 
 The existing Next.js/Vercel application now has separate `/`, `/sign-in`,
 `/onboarding` and `/workspace` routes. The public landing page implements the
@@ -35,12 +35,20 @@ and write through the server-only client. The hosted authentication redirect
 allow-list contains the exact production and localhost onboarding/recovery URLs.
 `npm run setup:check -- --remote` reports intelligent onboarding ready.
 
-Release-candidate verification passes: typecheck, lint, all 143 tests in 14
+Verification passes: typecheck, lint, all 143 tests in 14
 suites, production build, dependency audit with zero high-severity findings,
 and `git diff --check`. Local browser QA passed on desktop and at 390px with no
 horizontal overflow or browser errors. Signed-out `/onboarding` and `/workspace`
-redirect correctly. An authenticated production onboarding/workspace smoke test
-and Vercel runtime-log check remain part of the deployment step.
+redirect correctly.
+
+Source commit `7a32ea4` was pushed and deployed to Vercel production as
+`dpl_E4bkQHcrt6oDcCa8T5a6Sb6DBuis`; the deployment reached Ready and the stable
+`https://tradie-ai-nine.vercel.app` alias points to it. Production browser checks
+passed for the landing page, both signed-out redirects, the existing authenticated
+workspace and the read-only first onboarding screen. No onboarding response or
+external action was submitted. The current deployment logged HTTP 200 for
+`/api/state` and `/api/onboarding`; its post-deployment log window contained no
+application errors or HTTP 500 responses.
 
 ## Current release: Facebook photo publishing and password recovery
 
