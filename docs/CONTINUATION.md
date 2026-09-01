@@ -1,9 +1,32 @@
 # Tradie AI — continuation checkpoint for Claude or another engineer
 
-Updated 31 August 2026 (Australia/Sydney). Read this before making changes.
+Updated 1 September 2026 (Australia/Sydney). Read this before making changes.
 Do not restart setup. See the current repair note and release checkpoint below.
 
-## Current repair: Claude Chrome audit feedback
+## Current release: Facebook photo publishing and password recovery
+
+Production is live at `https://tradie-ai-nine.vercel.app`. The Social agent now
+prepares a distinct `facebook.publish` proposal for one ready private JPEG/PNG
+under 4 MB after the owner confirms image rights. The approval card shows the
+exact caption, selected filename and a short-lived private preview. Accepting a
+plain draft still saves privately; only the separate **Publish to Facebook**
+button executes. The server revalidates workspace/conversation ownership, MIME
+magic bytes, size and SHA-256 immediately before a multipart Meta `/photos`
+request. A database guard binds the immutable action to that same upload.
+
+The migration `202609010005_facebook_photo_publish.sql` was applied successfully.
+The existing Facebook connection is healthy. No real post was sent during this
+repair or verification. Provider requests are mocked in tests and live browser
+checks stop before the Publish button.
+
+Sign-in now includes **Forgot password?**. Reset requests use Supabase email
+recovery with a non-enumerating confirmation, recovery links show matching new-
+password fields, and success signs the recovery session out before returning to
+sign-in. Supabase Site URL and the redirect allow-list now include the Vercel
+origin; the old prototype origin remains allowed. Typecheck, lint, production
+build and all 131 tests in 12 suites pass.
+
+## Previous repair: Claude Chrome audit feedback
 
 The hosted AI failure was reproduced in workerd: `redirect: 'error'` is rejected
 before either provider is contacted. Both adapters and related Facebook/Ads
@@ -234,7 +257,7 @@ Connections/navigation checks passed on desktop and at a 390px phone viewport
 Prior hosted Supabase password sign-in, two-user isolation and private Storage
 HTTP checks passed with synthetic fixtures that were subsequently removed.
 
-No Instagram, Facebook photos, post scheduling, Facebook ads, Google Ads
+No Instagram, multiple Facebook photos, post scheduling, Facebook ads, Google Ads
 mutations, invoice sending, external website publishing, billing, token balance
 UI, persistent job queue, provider webhook processing, candidate cleanup cron,
 operator reconciliation UI, production SMTP or full retention/export/deletion

@@ -36,6 +36,7 @@ export async function executeAction(
     else if (p.type === 'facebook.publish')
       result = await publishFacebook(
         action.workspace_id,
+        action.conversation_id,
         action.id,
         p.payload,
         action.connection_id!,

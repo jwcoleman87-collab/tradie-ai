@@ -110,6 +110,7 @@ describe('provider consent and multi-connection safety', () => {
         JSON.stringify({
           pageId: '12345',
           message: 'Approved test fixture',
+          imageFileId: null,
           link: null,
         }),
         facebookConnection,
@@ -251,6 +252,49 @@ describe('provider consent and multi-connection safety', () => {
         ],
       ),
     ).rejects.toThrow('CONNECTION_CHANGED');
+  });
+  it('binds a Facebook photo proposal to one ready private conversation image', async () => {
+    const insert = (payload: object) =>
+      db.query(
+        "insert into proposed_actions(workspace_id,conversation_id,agent,action_type,summary,payload,connection_id) values($1,$2,'social','facebook.publish','photo post',$3,$4)",
+        [wA, cA, JSON.stringify(payload), facebookConnection],
+      );
+    await expect(
+      insert({
+        pageId: '12345',
+        message: 'Approved photo',
+        imageFileId: id(),
+        link: null,
+      }),
+    ).rejects.toThrow('INVALID_INPUT');
+    const imageFileId = id();
+    await db.query(
+      "insert into uploaded_files(id,workspace_id,conversation_id,uploaded_by,filename,object_path,mime_type,size_bytes,sha256,status) values($1,$2,$3,$4,'cargo.png',$5,'image/png',1024,$6,'ready')",
+      [
+        imageFileId,
+        wA,
+        cA,
+        ownerA,
+        `${wA}/${imageFileId}/cargo.png`,
+        '0'.repeat(64),
+      ],
+    );
+    await expect(
+      insert({
+        pageId: '12345',
+        message: 'Approved photo',
+        imageFileId,
+        link: 'https://example.com',
+      }),
+    ).rejects.toThrow('INVALID_INPUT');
+    await expect(
+      insert({
+        pageId: '12345',
+        message: 'Approved photo',
+        imageFileId,
+        link: null,
+      }),
+    ).resolves.toBeDefined();
   });
   it('does not allow a sending marker before approval or after denial', async () => {
     const action = await facebookAction();

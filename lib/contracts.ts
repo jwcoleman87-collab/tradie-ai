@@ -57,6 +57,7 @@ export const FacebookPayload = z
   .object({
     pageId: z.string().regex(/^\d{1,30}$/),
     message: z.string().trim().min(1).max(5000),
+    imageFileId: Uuid.nullable(),
     link: z
       .url({ protocol: /^https$/ })
       .max(2000)
@@ -64,6 +65,11 @@ export const FacebookPayload = z
   })
   .strict()
   .superRefine((p, ctx) => {
+    if (p.imageFileId && p.link)
+      ctx.addIssue({
+        code: 'custom',
+        message: 'A Facebook photo post cannot also use a link preview.',
+      });
     if (p.link && (new URL(p.link).username || new URL(p.link).password))
       ctx.addIssue({
         code: 'custom',
