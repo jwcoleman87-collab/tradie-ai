@@ -63,6 +63,38 @@ it('does not grant an unselected agent a proposal', async () => {
     }),
   ).rejects.toThrow();
 });
+it('accepts clear Facebook image permission without a magic phrase', async () => {
+  const instructions: string[] = [];
+  const provider = {
+    model: 'test',
+    structured: vi
+      .fn()
+      .mockImplementation(async (_schema, systemInstructions) => {
+        instructions.push(systemInstructions);
+        return instructions.length === 1
+          ? { agents: ['social'], reason: 'facebook photo' }
+          : { reply: 'Ready for approval', proposals: [], escalation: 'none' };
+      }),
+  } as ModelProvider;
+  await runTeam(provider, {
+    history: [
+      {
+        role: 'user',
+        content: 'I own this image and have permission to publish it.',
+      },
+    ],
+    records: [],
+    timeZone: 'Australia/Sydney',
+    calendar: {},
+    attachments: [],
+  });
+  expect(instructions[1]).toContain(
+    'Do not require the owner to repeat a magic phrase or exact wording.',
+  );
+  expect(instructions[1]).toContain(
+    'do not ask them to repeat themselves: propose facebook.publish',
+  );
+});
 it('requests non-stored structured output with no execution tools', async () => {
   process.env.OPENAI_API_KEY = 'test-not-real';
   const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
