@@ -4,14 +4,14 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
-import { ArrowLeft, ShieldCheck } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { requestApi } from '@/lib/client';
 import type { OnboardingSnapshot } from '@/lib/contracts';
 import { useWorkbenchAuth } from '@/lib/use-workbench-auth';
 
-type AuthView = 'sign-in' | 'reset-request' | 'password-recovery';
+type AuthView = 'sign-in' | 'sign-up' | 'reset-request' | 'password-recovery';
 const messageOf = (error: unknown) =>
   error instanceof Error
     ? error.message
@@ -42,8 +42,11 @@ export default function SignIn() {
     if (
       url.searchParams.get('view') === 'recovery' ||
       hash.get('type') === 'recovery'
-    )
+    ) {
       setView('password-recovery');
+    } else if (url.searchParams.get('view') === 'signup') {
+      setView('sign-up');
+    }
   }, []);
   useEffect(() => {
     if (event === 'PASSWORD_RECOVERY') {
@@ -153,36 +156,21 @@ export default function SignIn() {
 
   return (
     <main className="auth-page">
-      <section className="auth-brand-panel">
-        <Link href="/" className="back-link">
-          <ArrowLeft size={16} /> Back to Workbench
-        </Link>
-        <div className="auth-brand-copy">
+      <header className="auth-header">
+        <Link href="/" aria-label="Workbench home">
           <Image
             src="/workbench/lockup.png"
             alt="Workbench"
             width={620}
             height={116}
-            style={{ height: 'auto' }}
             priority
             unoptimized
           />
-          <p className="eyebrow">YOUR BUSINESS. YOUR CREW. ONE PLACE.</p>
-          <h1>
-            You build it.
-            <br />
-            We handle the business.
-          </h1>
-          <p>
-            Open your private workspace, or join the controlled pilot and let
-            Magic learn the useful parts of your business with you.
-          </p>
-          <div className="auth-trust-note">
-            <ShieldCheck size={20} />
-            <span>External changes still wait for your clear approval.</span>
-          </div>
-        </div>
-      </section>
+        </Link>
+        <Link href="/" className="back-link">
+          <ArrowLeft size={15} /> Back
+        </Link>
+      </header>
       <section className="auth-form-panel">
         <div className="standalone-auth-form">
           <Image
@@ -290,6 +278,56 @@ export default function SignIn() {
                 account exists.
               </p>
             </form>
+          ) : view === 'sign-up' ? (
+            <form
+              onSubmit={(submitEvent) => {
+                submitEvent.preventDefault();
+                void signIn(true);
+              }}
+            >
+              <span className="section-label">MEET MAGIC</span>
+              <h2>Create your private Workbench.</h2>
+              <p className="muted">
+                One account step, then Magic will guide the setup.
+              </p>
+              <label htmlFor="account-email">Email</label>
+              <Input
+                id="account-email"
+                type="email"
+                autoComplete="email"
+                value={email}
+                onChange={(change) => setEmail(change.target.value)}
+                required
+              />
+              <label htmlFor="account-password">Password</label>
+              <Input
+                id="account-password"
+                type="password"
+                minLength={10}
+                autoComplete="new-password"
+                value={password}
+                onChange={(change) => setPassword(change.target.value)}
+                required
+              />
+              <Button
+                className="auth-primary"
+                type="submit"
+                disabled={busy || password.length < 10 || !email.trim()}
+              >
+                Continue to Magic
+              </Button>
+              <button
+                className="auth-mode-switch"
+                type="button"
+                disabled={busy}
+                onClick={() => setView('sign-in')}
+              >
+                Already have an account? Sign in
+              </button>
+              <p className="auth-fine-print">
+                You’ll confirm your email before the private setup begins.
+              </p>
+            </form>
           ) : (
             <form
               onSubmit={(submitEvent) => {
@@ -297,12 +335,8 @@ export default function SignIn() {
                 void signIn(false);
               }}
             >
-              <span className="section-label">SIGN IN OR START</span>
-              <h2>G’day. Let’s open your Workbench.</h2>
-              <p className="muted">
-                Existing owners can sign in. New accounts enter the controlled
-                pilot onboarding.
-              </p>
+              <span className="section-label">WELCOME BACK</span>
+              <h2>Open your Workbench.</h2>
               <label htmlFor="account-email">Email</label>
               <Input
                 id="account-email"
@@ -337,19 +371,15 @@ export default function SignIn() {
                 <Button type="submit" disabled={busy}>
                   Sign in
                 </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  disabled={busy || password.length < 10 || !email.trim()}
-                  onClick={() => void signIn(true)}
-                >
-                  Join controlled pilot
-                </Button>
               </div>
-              <p className="auth-fine-print">
-                New accounts require email confirmation. Use at least 10
-                characters for your password.
-              </p>
+              <button
+                className="auth-mode-switch"
+                type="button"
+                disabled={busy}
+                onClick={() => setView('sign-up')}
+              >
+                New here? Start with Magic
+              </button>
             </form>
           )}
           {(error || authError) && (

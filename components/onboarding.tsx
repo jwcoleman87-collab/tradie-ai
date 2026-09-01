@@ -9,7 +9,6 @@ import {
   Check,
   ExternalLink,
   LogOut,
-  SearchX,
   ShieldCheck,
   Sparkles,
 } from 'lucide-react';
@@ -223,38 +222,6 @@ export default function Onboarding() {
       </header>
 
       <div className="onboarding-layout">
-        <aside className="onboarding-rail">
-          <span className="eyebrow">MAGIC BUSINESS DISCOVERY</span>
-          <h1>A useful profile, without the long setup form.</h1>
-          <p>
-            Answer a few high-information prompts. Magic keeps the evidence,
-            shows its confidence and asks only about useful gaps.
-          </p>
-          <div className="onboarding-progress" aria-label="Onboarding progress">
-            {[1, 2, 3, 4, 5].map((step) => (
-              <span
-                key={step}
-                className={step <= state.promptCount ? 'complete' : ''}
-              />
-            ))}
-          </div>
-          <p className="progress-caption">
-            {reviewing
-              ? 'Ready for your review'
-              : `${state.promptCount} of no more than 5 owner prompts`}
-          </p>
-          <div className={`discovery-status ${state.discovery.status}`}>
-            <SearchX size={20} />
-            <div>
-              <strong>{state.discovery.label}</strong>
-              <p>{state.discovery.detail}</p>
-            </div>
-          </div>
-          <p className="onboarding-control-note">
-            Nothing is connected, sent, booked or published during this setup.
-          </p>
-        </aside>
-
         <section className="onboarding-main">
           <div className="magic-heading">
             <div className="magic-avatar">
@@ -271,9 +238,31 @@ export default function Onboarding() {
               <h2>
                 {reviewing
                   ? 'What Magic found'
-                  : 'Let’s learn the useful parts.'}
+                  : 'G’day. Let’s get your Workbench ready.'}
               </h2>
+              <p className="magic-subtitle">
+                {reviewing
+                  ? 'Check the details before opening your workspace.'
+                  : 'Answer naturally. Magic will guide the rest.'}
+              </p>
             </div>
+          </div>
+
+          <div className="onboarding-context-row">
+            <span>
+              {reviewing
+                ? 'Ready for your review'
+                : state.promptCount
+                  ? `${state.promptCount} answered · up to 5`
+                  : 'A few simple questions'}
+            </span>
+            <details>
+              <summary>About this setup</summary>
+              <p>{state.discovery.detail}</p>
+              <p>
+                Nothing is connected, sent, booked or published during setup.
+              </p>
+            </details>
           </div>
 
           {!reviewing ? (
