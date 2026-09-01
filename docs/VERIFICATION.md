@@ -77,9 +77,12 @@ workspaces and the file were removed successfully without weakening audit/RLS.
 
 Fallback is validated with simulated quota/rate/service errors in both directions;
 real provider quota was not intentionally exhausted. Live image/PDF handling,
-full authenticated chat/approval UI acceptance, final Google account OAuth, Meta and Ads are
-still outstanding. No real Facebook post, advertising mutation or Calendar event
-was made. Keys supplied in chat must be rotated before customer onboarding.
+full authenticated chat/approval UI acceptance, final Google account OAuth, Meta
+and Ads reporting are still outstanding. Google confirmed receipt of the
+reporting-only Basic Access application on 2026-09-01; production advertiser
+access remains pending review. No real Facebook post, advertising mutation or
+Calendar event was made. Keys supplied in chat must be rotated before customer
+onboarding.
 
 Transport fix follows the supported structured-output subsets in the official
 [OpenAI](https://developers.openai.com/api/docs/guides/structured-outputs) and

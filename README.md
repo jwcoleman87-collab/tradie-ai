@@ -28,8 +28,10 @@ Google Calendar API and the testing-only OAuth client are configured, with
 credentials saved privately and activated in the hosted app. The owner is the
 sole Google test user. The Meta app is configured and the owner workspace has a
 selected Facebook Page. No Facebook post was sent while implementing or testing
-single-photo publishing. Google Ads production API access remains an external
-provider step. Rotate the secrets shared in chat before onboarding customer data.
+single-photo publishing. Google received the reporting-only Google Ads Basic
+Access application on 2026-09-01; production advertiser access and the final
+GreenVac workspace connection remain pending provider review. Rotate the secrets
+shared in chat before onboarding customer data.
 Start with [the continuation checkpoint](docs/CONTINUATION.md),
 [connection setup](docs/CONNECTIONS.md) and [verification](docs/VERIFICATION.md).
 

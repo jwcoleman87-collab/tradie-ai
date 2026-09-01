@@ -198,8 +198,13 @@ linked in CONNECTIONS.
   owner still needs to complete the in-app Facebook OAuth flow, select the exact
   GreenVac Page and separately approve any test post. GreenVac business
   verification/app review remain production blockers.
-- `GOOGLE_ADS_DEVELOPER_TOKEN`; Ads API/consent and advertiser access. Optional
-  separate `GOOGLE_ADS_CLIENT_ID`/`GOOGLE_ADS_CLIENT_SECRET`.
+- Google Ads production configuration is installed. Google received the Basic
+  Access application on 2026-09-01 for Cloud project `834544866435`, manager
+  account `644-561-3241` and reporting-only Tradie AI. The four-page design PDF
+  was attached. Review contact is `james@greenvac.com.au`; the authenticated
+  submitting identity is `j.w.coleman87@gmail.com`. GreenVac advertiser
+  `577-483-5580` remains unconnected pending approval and must eventually be
+  attached to the GreenVac Tradie AI workspace, not `Test 01 James`.
 
 OpenAI, Anthropic and Google client keys, Supabase URL/publishable/server keys and encryption secret already exist in
 ignored local `.env` and hosted settings. Do not print, overwrite, commit or
@@ -234,8 +239,10 @@ ChatGPT/Codex/Claude subscriptions do not supply backend API credits.
    Page from the returned list, then verify the connected record without posting.
    Get exact test-post approval before enabling publishing in any environment.
    Do not auto-enable production publishing or post to a business Page as a test.
-10. Connect an eligible Google Ads test/advertiser account; verify read-only report
-    currency/time zone/period and manager context. Do not add spending mutations
+10. Wait for Google's Basic Access decision. After approval, use the GreenVac
+    Tradie AI workspace to consent, select advertiser `577-483-5580`, and verify
+    the read-only report currency/time zone/period and manager context. Do not
+    connect that advertiser to `Test 01 James`. Do not add spending mutations
     without new approved action schemas and budget-specific acceptance tests.
 11. For further runtime changes, deploy the exact tested source through the
     existing Sites workflow. Recheck owner-only access, push source, package `dist/`,
