@@ -28,7 +28,6 @@ import {
   Archive,
   RotateCcw,
   Building2,
-  TestTube2,
 } from 'lucide-react';
 import { authClient, requestApi, type ClientConfig } from '@/lib/client';
 import { supportPayload } from '@/lib/server/privacy';
@@ -78,14 +77,16 @@ const starters = [
   'Help me understand this invoice.',
   'Update the services on my website.',
 ];
-const workspaceSections = [
-  { id: 'actions', label: 'To do', group: 'work', icon: Check },
-  { id: 'files', label: 'Files', group: 'work', icon: FileText },
-  { id: 'records', label: 'Records', group: 'work', icon: Building2 },
-  { id: 'cases', label: 'Support', group: 'work', icon: LifeBuoy },
-  { id: 'connections', label: 'Connections', group: 'manage', icon: Globe },
-  { id: 'archive', label: 'History & archive', group: 'manage', icon: Archive },
-  { id: 'audit', label: 'Audit trail', group: 'manage', icon: ShieldCheck },
+const workspacePrimarySections = [
+  { id: 'actions', label: 'To do', icon: Check },
+  { id: 'files', label: 'Files', icon: FileText },
+  { id: 'records', label: 'Records', icon: Building2 },
+] as const;
+const workspaceMoreSections = [
+  { id: 'cases', label: 'Support', icon: LifeBuoy },
+  { id: 'connections', label: 'Connections', icon: Globe },
+  { id: 'archive', label: 'History', icon: Archive },
+  { id: 'audit', label: 'Audit', icon: ShieldCheck },
 ] as const;
 const workspaceHeadings: Record<
   string,
@@ -137,6 +138,7 @@ export default function Workspace() {
     [activeAgents, setActiveAgents] = useState<string[]>([]);
   const [mobile, setMobile] = useState('chat'),
     [view, setView] = useState('actions'),
+    [moreOpen, setMoreOpen] = useState(false),
     [authView, setAuthView] = useState<AuthView>('sign-in'),
     [email, setEmail] = useState(''),
     [password, setPassword] = useState(''),
@@ -228,6 +230,7 @@ export default function Workspace() {
     );
     if (connectionState) {
       setView('connections');
+      setMoreOpen(true);
       setMobile('actions');
       setNotice(
         'Review your connection status and choose the account or Page to finish connecting.',
@@ -490,6 +493,7 @@ export default function Workspace() {
   }
   const chooseView = (next: string) => {
     setView(next);
+    setMoreOpen(workspaceMoreSections.some((section) => section.id === next));
     setMobile('actions');
   };
   const activeActions =
@@ -518,21 +522,6 @@ export default function Workspace() {
       snapshot?.conversations.filter(
         (conversation) => conversation.status === 'archived',
       ) || [],
-    filedCount =
-      actionHistory.length +
-      archivedRecords.length +
-      archivedConversations.length +
-      resolvedCases.length,
-    workspaceCounts: Record<string, number | undefined> = {
-      actions: activeActions.length,
-      files: snapshot?.uploads.length || 0,
-      records: activeRecords.length,
-      cases: activeCases.length,
-      connections: undefined,
-      archive: filedCount,
-      audit: snapshot?.audit.length || 0,
-    },
-    activeWorkspaceType = snapshot?.workspace.workspace_type || 'business',
     activeWorkspaceHeading =
       workspaceHeadings[view] || workspaceHeadings.actions;
   return (
@@ -599,18 +588,8 @@ export default function Workspace() {
             <div
               className={`workspace-switcher-card ${snapshot.workspace.workspace_type}`}
             >
-              <div className="workspace-switcher-heading">
-                <span className="workspace-kind-icon" aria-hidden="true">
-                  {snapshot.workspace.workspace_type === 'sandbox' ? (
-                    <TestTube2 size={18} />
-                  ) : (
-                    <Building2 size={18} />
-                  )}
-                </span>
-                <div>
-                  <span className="section-label">ACTIVE WORKSPACE</span>
-                  <strong>{snapshot.workspace.name}</strong>
-                </div>
+              <div className="workspace-switcher-simple-heading">
+                <span className="section-label">WORKSPACE</span>
                 <span className="workspace-kind-badge">
                   {snapshot.workspace.workspace_type === 'sandbox'
                     ? 'Sandbox'
@@ -661,15 +640,15 @@ export default function Workspace() {
               </select>
               <p className="workspace-scope-note">
                 {snapshot.workspace.workspace_type === 'sandbox'
-                  ? 'Testing and learning only. Its work and connections stay separate from GreenVac.'
-                  : 'Live business work. Files, records and connections stay inside this workspace.'}
+                  ? 'Testing only — separate from GreenVac.'
+                  : 'Live business workspace.'}
               </p>
               <button
                 type="button"
                 className="workspace-manage-link"
                 onClick={() => chooseView('archive')}
               >
-                Manage workspaces <span aria-hidden="true">→</span>
+                Workspaces & archive <span aria-hidden="true">→</span>
               </button>
             </div>
           )}
@@ -753,38 +732,12 @@ export default function Workspace() {
                 : authView === 'password-recovery'
                   ? 'Password recovery'
                   : snapshot
-                    ? 'Your private team'
+                    ? snapshot.workspace.workspace_type === 'sandbox'
+                      ? 'Sandbox · testing'
+                      : `${snapshot.workspace.name} · Business`
                     : 'Setup & sign in'}
             </span>
           </div>
-          {snapshot && authView !== 'password-recovery' && (
-            <output
-              className={`workspace-context-strip ${activeWorkspaceType}`}
-            >
-              <span className="workspace-context-icon" aria-hidden="true">
-                {activeWorkspaceType === 'sandbox' ? (
-                  <TestTube2 size={17} />
-                ) : (
-                  <Building2 size={17} />
-                )}
-              </span>
-              <div>
-                <strong>
-                  {activeWorkspaceType === 'sandbox'
-                    ? 'Sandbox — testing only'
-                    : `${snapshot.workspace.name} business workspace`}
-                </strong>
-                <span>
-                  {activeWorkspaceType === 'sandbox'
-                    ? 'Nothing here carries into GreenVac unless you deliberately recreate it there.'
-                    : 'Use this space for live company conversations, files and connected accounts.'}
-                </span>
-              </div>
-              <span className="workspace-status-badge">
-                {snapshot.workspace.status}
-              </span>
-            </output>
-          )}
           {snapshot && authView !== 'password-recovery' && (
             <div className="conversation-toolbar">
               <select
@@ -1290,74 +1243,49 @@ export default function Workspace() {
             <h2>{activeWorkspaceHeading.title}</h2>
             <p className="muted small">{activeWorkspaceHeading.description}</p>
           </div>
-          <div
-            className="workspace-summary-grid"
-            aria-label="Workspace summary"
-          >
-            <button type="button" onClick={() => setView('actions')}>
-              <strong>{activeActions.length}</strong>
-              <span>Need attention</span>
+          <nav className="workspace-simple-nav" aria-label="Workspace sections">
+            {workspacePrimarySections.map(({ id, label, icon: Icon }) => (
+              <button
+                key={id}
+                type="button"
+                className={view === id ? 'active' : ''}
+                aria-current={view === id ? 'page' : undefined}
+                onClick={() => chooseView(id)}
+              >
+                <Icon size={15} />
+                <span>{label}</span>
+              </button>
+            ))}
+            <button
+              type="button"
+              className={
+                workspaceMoreSections.some((section) => section.id === view)
+                  ? 'active'
+                  : ''
+              }
+              aria-expanded={moreOpen}
+              onClick={() => setMoreOpen((open) => !open)}
+            >
+              <Plus size={15} />
+              <span>More</span>
             </button>
-            <button type="button" onClick={() => setView('records')}>
-              <strong>{activeRecords.length}</strong>
-              <span>Active records</span>
-            </button>
-            <button type="button" onClick={() => setView('archive')}>
-              <strong>{filedCount}</strong>
-              <span>Filed away</span>
-            </button>
-          </div>
-          <nav
-            className="workspace-section-nav"
-            aria-label="Workspace sections"
-          >
-            <div className="workspace-nav-group">
-              <span className="workspace-nav-label">CURRENT WORK</span>
-              <div className="workspace-nav-items">
-                {workspaceSections
-                  .filter((section) => section.group === 'work')
-                  .map(({ id, label, icon: Icon }) => (
-                    <button
-                      key={id}
-                      type="button"
-                      className={view === id ? 'active' : ''}
-                      aria-current={view === id ? 'page' : undefined}
-                      onClick={() => setView(id)}
-                    >
-                      <Icon size={15} />
-                      <span>{label}</span>
-                      <span className="workspace-nav-count">
-                        {workspaceCounts[id]}
-                      </span>
-                    </button>
-                  ))}
-              </div>
-            </div>
-            <div className="workspace-nav-group">
-              <span className="workspace-nav-label">MANAGE & REVIEW</span>
-              <div className="workspace-nav-items">
-                {workspaceSections
-                  .filter((section) => section.group === 'manage')
-                  .map(({ id, label, icon: Icon }) => (
-                    <button
-                      key={id}
-                      type="button"
-                      className={view === id ? 'active' : ''}
-                      aria-current={view === id ? 'page' : undefined}
-                      onClick={() => setView(id)}
-                    >
-                      <Icon size={15} />
-                      <span>{label}</span>
-                      {workspaceCounts[id] !== undefined && (
-                        <span className="workspace-nav-count">
-                          {workspaceCounts[id]}
-                        </span>
-                      )}
-                    </button>
-                  ))}
-              </div>
-            </div>
           </nav>
+          {moreOpen && (
+            <div className="workspace-more-nav">
+              {workspaceMoreSections.map(({ id, label, icon: Icon }) => (
+                <button
+                  key={id}
+                  type="button"
+                  className={view === id ? 'active' : ''}
+                  aria-current={view === id ? 'page' : undefined}
+                  onClick={() => chooseView(id)}
+                >
+                  <Icon size={14} />
+                  <span>{label}</span>
+                </button>
+              ))}
+            </div>
+          )}
           <div className="workspace-view-body">
             {view === 'connections' &&
               snapshot &&
