@@ -166,8 +166,15 @@ linked in CONNECTIONS.
 
 - Google setup: https://console.cloud.google.com/auth/overview?project=tradie-ai-507211
 - Google client credentials and an account connection are present, not missing.
-- `META_APP_ID`, `META_APP_SECRET`, `META_LOGIN_CONFIG_ID`, supported
-  `META_GRAPH_VERSION`, Page permissions/app review/business verification.
+- Meta app `Tradie Ai` is created under GreenVac and remains unpublished. Its
+  app ID, secret, Business Login configuration and supported Graph API `v26.0`
+  are installed in ignored local and hosted settings. The exact OAuth callback
+  is saved. `pages_show_list`, `pages_read_engagement` and
+  `pages_manage_posts` are ready for testing and selected in the login
+  configuration. `FACEBOOK_PUBLISHING_ENABLED=false` remains enforced. The
+  owner still needs to complete the in-app Facebook OAuth flow, select the exact
+  GreenVac Page and separately approve any test post. GreenVac business
+  verification/app review remain production blockers.
 - `GOOGLE_ADS_DEVELOPER_TOKEN`; Ads API/consent and advertiser access. Optional
   separate `GOOGLE_ADS_CLIENT_ID`/`GOOGLE_ADS_CLIENT_SECRET`.
 
@@ -187,10 +194,10 @@ ChatGPT/Codex/Claude subscriptions do not supply backend API credits.
 3. Run `npm run setup:check -- --remote`; require all four schema probes `ready`.
 4. For code changes, run typecheck, lint, tests, production build and dependency audit.
    Use the existing lockfile/runtime; no dependency replacement is necessary.
-5. Preserve the existing Google account connection, then obtain Meta and Ads
-   setup through the owner's intended accounts. `.env.example` and CONNECTIONS.md
-   have exact callbacks/settings. AI and Calendar app keys already exist; do not
-   request or print them again. Do not publish the testing-only Google app.
+5. Preserve the existing Google account connection and installed Meta/Ads
+   configuration. `.env.example` and CONNECTIONS.md have exact callbacks and
+   settings. AI, Calendar, Meta and Ads credentials already exist; do not request
+   or print them again. Do not publish the testing-only Google or Meta apps.
 6. Verify UI settings persist with a staging owner and cannot be changed by a
    member or another workspace. Preserve the owner's current provider consent.
 7. OpenAI routing/generation passed in workerd. Claude needs its API credit/usage
@@ -199,8 +206,10 @@ ChatGPT/Codex/Claude subscriptions do not supply backend API credits.
    exhausting paid quota. Inspect safe Audit outcomes for new failures.
 8. Obtain approval for one exact harmless Calendar test event. Verify Deny and
    retries/duplicates. No real Calendar event has yet been created.
-9. Verify Meta permissions/version with the actual dashboard. Connect a test Page,
-   get exact test-post approval, then enable publishing in that environment.
+9. Meta dashboard configuration is complete through owner-ready standard access
+   on Graph API `v26.0`. Complete OAuth from Tradie AI, choose the exact GreenVac
+   Page from the returned list, then verify the connected record without posting.
+   Get exact test-post approval before enabling publishing in any environment.
    Do not auto-enable production publishing or post to a business Page as a test.
 10. Connect an eligible Google Ads test/advertiser account; verify read-only report
     currency/time zone/period and manager context. Do not add spending mutations
@@ -217,8 +226,9 @@ ChatGPT/Codex/Claude subscriptions do not supply backend API credits.
 Current verification: 129 automated tests; type check, lint, build and zero-finding
 audit pass locally and in clean Linux CI. Tests use PGlite for real SQL/RLS,
 mocked provider/API services, and actual workerd request semantics. Real OpenAI
-routing/generation passed in workerd; latest Claude call reports a quota error. Meta/Ads
-remain unconfigured. Local signed-out browser
+routing/generation passed in workerd; latest Claude call reports a quota error.
+Meta and Ads runtime configuration is installed; Meta OAuth/Page selection and
+Ads production account reporting remain unverified. Local signed-out browser
 Connections/navigation checks passed on desktop and at a 390px phone viewport
 (no horizontal overflow); a full authenticated settings UI pass remains.
 Prior hosted Supabase password sign-in, two-user isolation and private Storage
