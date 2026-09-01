@@ -4,6 +4,14 @@ import Link from 'next/link';
 import Image from 'next/image';
 import type { Session, SupabaseClient } from '@supabase/supabase-js';
 import { Button } from '@/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { ConnectionsPanel } from './connections-panel';
@@ -1120,23 +1128,48 @@ export default function Workspace() {
                     ))}
                   </div>
                 )}
-                {snapshot?.messages.map((m) => (
-                  <article className={`message ${m.role}`} key={m.id}>
-                    <span className="meta">
-                      {m.role === 'user' ? 'You' : 'Your AI team'} ·{' '}
-                      {new Date(m.created_at).toLocaleTimeString([], {
-                        hour: '2-digit',
-                        minute: '2-digit',
-                      })}
-                    </span>
-                    {m.content}
-                    {m.attachment_ids.length > 0 && (
-                      <span className="meta mt-2">
-                        {m.attachment_ids.length} private attachment(s)
+                {snapshot?.messages.map((m) => {
+                  const attachments = m.attachment_ids
+                    .map((id) =>
+                      snapshot.uploads.find((file) => file.id === id),
+                    )
+                    .filter((file): file is Upload => Boolean(file));
+                  return (
+                    <article className={`message ${m.role}`} key={m.id}>
+                      <span className="meta">
+                        {m.role === 'user' ? 'You' : 'Your AI team'} ·{' '}
+                        {new Date(m.created_at).toLocaleTimeString([], {
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })}
                       </span>
-                    )}
-                  </article>
-                ))}
+                      {m.content}
+                      {m.attachment_ids.length > 0 && (
+                        <div className="message-attachments">
+                          {attachments.map((file) =>
+                            isImageUpload(file) ? (
+                              <PrivateImagePreview
+                                key={file.id}
+                                file={file}
+                                token={token}
+                                variant="message"
+                              />
+                            ) : (
+                              <span className="attachment-file" key={file.id}>
+                                <FileText size={13} /> {file.filename}
+                              </span>
+                            ),
+                          )}
+                          {attachments.length === 0 && (
+                            <span className="meta">
+                              {m.attachment_ids.length} private attachment(s)
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </article>
+                  );
+                })}
                 {busy && (
                   <output className="pending-state block">
                     Working on your request…
@@ -1412,21 +1445,25 @@ export default function Workspace() {
                   Up to four files per message; 10 MB each. Select only the
                   files your team needs.
                 </p>
-                {snapshot?.uploads.map((f) => (
-                  <FileCard
-                    key={f.id}
-                    file={f}
-                    token={token}
-                    selected={selectedFiles.includes(f.id)}
-                    onSelect={() =>
-                      setSelectedFiles((p) =>
-                        p.includes(f.id)
-                          ? p.filter((id) => id !== f.id)
-                          : [...p, f.id].slice(-4),
-                      )
-                    }
-                  />
-                ))}
+                {!!snapshot?.uploads.length && (
+                  <div className="file-grid">
+                    {snapshot.uploads.map((f) => (
+                      <FileCard
+                        key={f.id}
+                        file={f}
+                        token={token}
+                        selected={selectedFiles.includes(f.id)}
+                        onSelect={() =>
+                          setSelectedFiles((p) =>
+                            p.includes(f.id)
+                              ? p.filter((id) => id !== f.id)
+                              : [...p, f.id].slice(-4),
+                          )
+                        }
+                      />
+                    ))}
+                  </div>
+                )}
                 {!snapshot?.uploads.length && (
                   <p className="muted mt-4">
                     Attach your first photo or document using +.
@@ -2097,6 +2134,13 @@ function ActionCard({
           <>
             <strong>{String(a.payload.title)}</strong>
             <p>{String(a.payload.body)}</p>
+            {typeof a.payload.imageFileId === 'string' && imageFile && (
+              <PrivateImagePreview
+                file={imageFile}
+                token={token}
+                variant="feature"
+              />
+            )}
             <span className="auth-hint">
               {a.action_type === 'draft.save'
                 ? 'Accept saves this draft privately. It will not publish or send.'
@@ -2177,30 +2221,83 @@ function FacebookImagePreview({
   file: Upload;
   token: string;
 }) {
+  return <PrivateImagePreview file={file} token={token} variant="feature" />;
+}
+
+function isImageUpload(file: Upload) {
+  return file.mime_type.startsWith('image/');
+}
+
+function PrivateImagePreview({
+  file,
+  token,
+  variant = 'thumbnail',
+}: {
+  file: Upload;
+  token: string;
+  variant?: 'thumbnail' | 'feature' | 'message';
+}) {
   const [url, setUrl] = useState('');
   const [error, setError] = useState('');
-  useEffect(() => {
-    let active = true;
-    requestApi<{ signedUrl: string }>(token, `uploads/${file.id}/url?preview=1`)
-      .then((result) => {
-        if (active) setUrl(result.signedUrl);
-      })
-      .catch((reason) => {
-        if (active) setError(messageOf(reason));
-      });
-    return () => {
-      active = false;
-    };
+  const loadPreview = useCallback(async () => {
+    try {
+      const result = await requestApi<{ signedUrl: string }>(
+        token,
+        `uploads/${file.id}/url?preview=1`,
+      );
+      setUrl(result.signedUrl);
+      setError('');
+    } catch (reason) {
+      setError(messageOf(reason));
+    }
   }, [file.id, token]);
+
+  useEffect(() => {
+    void loadPreview();
+  }, [loadPreview]);
+
   if (error)
-    return <p role="alert">The private image preview could not be loaded.</p>;
-  if (!url) return <p className="auth-hint">Loading private preview…</p>;
+    return (
+      <div className={`private-image-fallback ${variant}`} role="alert">
+        <Camera size={20} />
+        <span>Private image preview unavailable</span>
+      </div>
+    );
+  if (!url)
+    return (
+      <div className={`private-image-loading ${variant}`}>Loading image…</div>
+    );
+
   return (
-    <div className="facebook-photo-preview">
-      {/* The URL is a private, short-lived Supabase Storage signature. */}
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={url} alt={`Selected for Facebook: ${file.filename}`} />
-    </div>
+    <Dialog
+      onOpenChange={(open) => {
+        if (open) void loadPreview();
+      }}
+    >
+      <DialogTrigger
+        className={`private-image-trigger ${variant}`}
+        aria-label={`Open a larger preview of ${file.filename}`}
+      >
+        {/* Private storage URLs are short-lived and cannot be configured as stable image hosts. */}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={url} alt={file.filename} />
+        <span>View larger</span>
+      </DialogTrigger>
+      <DialogContent className="private-image-dialog">
+        <DialogHeader>
+          <DialogTitle className="break-all">{file.filename}</DialogTitle>
+          <DialogDescription>
+            Private image · {Math.ceil(file.size_bytes / 1024)} KB
+          </DialogDescription>
+        </DialogHeader>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          className="private-image-full"
+          src={url}
+          alt={`Large preview of ${file.filename}`}
+        />
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -2217,9 +2314,16 @@ function FileCard({
 }) {
   const [url, setUrl] = useState(''),
     [error, setError] = useState('');
+  const image = isImageUpload(file);
   return (
-    <article className="action-card">
-      <FileText size={17} />
+    <article
+      className={`action-card file-card ${image ? 'image-file-card' : ''}`}
+    >
+      {image ? (
+        <PrivateImagePreview file={file} token={token} />
+      ) : (
+        <FileText size={17} />
+      )}
       <h3 className="mt-2 break-all">{file.filename}</h3>
       <p>{Math.ceil(file.size_bytes / 1024)} KB · Private</p>
       <div className="button-row">
