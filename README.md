@@ -5,24 +5,25 @@ agents, private customer workspaces, and explicit approval before execution.
 
 ## Delivery status
 
-Supabase Auth/Postgres/Storage and all four migrations are live. The private
+Supabase Auth/Postgres/Storage and all five migrations are live. The private
 hosted app includes the selected blue four-tile logo, OpenAI + Claude backup,
-Facebook Page connections and read-only Google Ads reporting.
+Facebook Page connections, approved single-photo publishing and read-only Google
+Ads reporting.
 
 Both AI keys are configured privately. A reported hosted chat failure was traced
 to `redirect: 'error'`, which the Worker engine rejects before contacting either
 provider. Manual redirect handling fixes that without forwarding credentials.
 OpenAI passed real routing/generation inside the Worker engine; the latest Claude
 test reports `AI_QUOTA_EXCEEDED` (HTTP 400), so its API credits/usage limit needs
-attention despite earlier success. All 129 automated tests pass. Each workspace
+attention despite earlier success. All 131 automated tests pass. Each workspace
 must explicitly allow its chosen providers before AI processing.
 
 Google Calendar API and the testing-only OAuth client are configured, with
 credentials saved privately and activated in the hosted app. The owner is the
-sole Google test user. A metadata-only check confirms a connected Calendar record;
-event creation/refresh still needs a separately approved live test.
-Meta app and Google Ads credentials remain missing. No post, event or ad spend was made.
-Rotate the secrets shared in chat before onboarding customer data.
+sole Google test user. The Meta app is configured and the owner workspace has a
+selected Facebook Page. No Facebook post was sent while implementing or testing
+single-photo publishing. Google Ads production API access remains an external
+provider step. Rotate the secrets shared in chat before onboarding customer data.
 Start with [the continuation checkpoint](docs/CONTINUATION.md),
 [connection setup](docs/CONNECTIONS.md) and [verification](docs/VERIFICATION.md).
 
@@ -36,7 +37,8 @@ can be integrated without rebuilding the backend.
 
 ## Included
 
-- Supabase email/password Auth, confirmation and server-verified JWTs.
+- Supabase email/password Auth, confirmation, privacy-safe password reset and
+  server-verified JWTs.
 - PostgreSQL migrations, tenant RLS, private Storage policies and durable records.
 - Finance, Marketing, Social, Maintenance and Website Markdown skills. Exact
   version and SHA-256 are recorded on every successful agent run.
@@ -59,10 +61,12 @@ can be integrated without rebuilding the backend.
   processing is explained beside the composer, with a settings shortcut.
 - Independent Calendar, Facebook Page and Google Ads connections per workspace.
   Encrypted, expiring resource selection; no provider token reaches the browser.
-- Facebook immediate text/link publishing after owner approval; a durable sending
-  marker blocks automatic reposts when the external outcome is uncertain.
+- Facebook immediate text/link or single JPEG/PNG photo publishing after owner
+  approval; a durable sending marker blocks automatic reposts when the external
+  outcome is uncertain. Private images are uploaded directly from Storage.
 - Google Ads account selection and last-30-days campaign reporting, read-only.
-  No advertising mutations, image publishing, scheduling or Instagram support yet.
+  No advertising mutations, multiple-image publishing, scheduling or Instagram
+  support yet.
 
 ## Quick start
 

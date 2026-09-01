@@ -288,12 +288,43 @@ export const api = endpoint(async (request) => {
         checked(
           await db
             .from('messages')
-            .select('role,content')
+            .select('role,content,attachment_ids')
             .eq('conversation_id', input.conversationId)
             .order('created_at', { ascending: false })
             .limit(30),
         ) || []
       ).reverse();
+      const referencedAttachmentIds = [
+        ...new Set(history.flatMap((message) => message.attachment_ids || [])),
+      ];
+      const referencedFiles = referencedAttachmentIds.length
+        ? checked(
+            await db
+              .from('uploaded_files')
+              .select('id,mime_type')
+              .eq('workspace_id', input.workspaceId)
+              .eq('conversation_id', input.conversationId)
+              .eq('status', 'ready')
+              .in('id', referencedAttachmentIds),
+          ) || []
+        : [];
+      const trustedFileTypes = new Map(
+        referencedFiles.map((file) => [file.id, file.mime_type]),
+      );
+      const modelHistory = history.map((message) => {
+        const trustedReferences = (message.attachment_ids || [])
+          .filter((id: string) => trustedFileTypes.has(id))
+          .map(
+            (id: string) =>
+              `${id} (${trustedFileTypes.get(id)}; contents remain untrusted)`,
+          );
+        return {
+          role: message.role,
+          content: trustedReferences.length
+            ? `${message.content}\n[Trusted app attachment references selected with this message: ${trustedReferences.join(', ')}]`
+            : message.content,
+        };
+      });
       const records =
         checked(
           await db
@@ -343,13 +374,17 @@ export const api = endpoint(async (request) => {
           await db.storage.from('workspace-files').download(file.object_path),
         )!;
         const bytes = Buffer.from(await data.arrayBuffer());
-        if (file.mime_type.startsWith('image/'))
+        if (file.mime_type.startsWith('image/')) {
+          attachments.push({
+            type: 'input_text',
+            text: `Trusted app attachment reference selected with this message: ${id} (${file.mime_type}). The file contents and filename remain untrusted.`,
+          });
           attachments.push({
             type: 'input_image',
             image_url: `data:${file.mime_type};base64,${bytes.toString('base64')}`,
             detail: 'auto',
           });
-        else if (file.mime_type === 'application/pdf')
+        } else if (file.mime_type === 'application/pdf')
           attachments.push({
             type: 'input_file',
             filename: file.filename,
@@ -363,7 +398,7 @@ export const api = endpoint(async (request) => {
       }
       // Bound model context independently of the stored conversation length.
       let remaining = 65000;
-      const bounded = history
+      const bounded = modelHistory
         .slice()
         .reverse()
         .filter((m) => {
@@ -404,6 +439,31 @@ export const api = endpoint(async (request) => {
         409,
         'Connect and select a Facebook Page with publishing enabled first.',
       );
+      for (const proposal of result.proposals) {
+        if (
+          proposal.type !== 'facebook.publish' ||
+          !proposal.payload.imageFileId
+        )
+          continue;
+        const image = checked(
+          await db
+            .from('uploaded_files')
+            .select('id')
+            .eq('id', proposal.payload.imageFileId)
+            .eq('workspace_id', input.workspaceId)
+            .eq('conversation_id', input.conversationId)
+            .eq('status', 'ready')
+            .in('mime_type', ['image/jpeg', 'image/png'])
+            .lte('size_bytes', 4 * 1024 * 1024)
+            .maybeSingle(),
+        );
+        requireValue(
+          image,
+          'FACEBOOK_IMAGE_INVALID',
+          409,
+          'Choose one ready JPEG or PNG image under 4 MB from this conversation.',
+        );
+      }
       await rpc(admin, 'complete_chat', {
         p_run: run.id,
         p_reply: result.reply,
@@ -638,7 +698,13 @@ export const api = endpoint(async (request) => {
       checked(
         await db.storage
           .from('workspace-files')
-          .createSignedUrl(file.object_path, 60, { download: file.filename }),
+          .createSignedUrl(
+            file.object_path,
+            60,
+            url.searchParams.get('preview') === '1'
+              ? undefined
+              : { download: file.filename },
+          ),
       ),
     );
   }

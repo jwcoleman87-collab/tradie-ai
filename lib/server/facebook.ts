@@ -8,26 +8,97 @@ import { graphRead, appSecretProof } from './provider-http';
 import { graphVersion } from './provider-config';
 import { env } from './config';
 import { AppError, requireValue, timedFetch } from './errors';
-import { adminDb, rpc } from './db';
+import { adminDb, checked, rpc } from './db';
+import { validateFile } from './uploads';
 export type PublishReceipt = { postId: string; url: string; published: true };
+export type FacebookImage = {
+  bytes: Uint8Array;
+  filename: string;
+  mimeType: 'image/jpeg' | 'image/png';
+};
+
+async function loadFacebookImage(
+  workspaceId: string,
+  conversationId: string,
+  imageFileId: string,
+): Promise<FacebookImage> {
+  const db = adminDb();
+  const file = checked(
+    await db
+      .from('uploaded_files')
+      .select('filename,mime_type,object_path,size_bytes,sha256')
+      .eq('id', imageFileId)
+      .eq('workspace_id', workspaceId)
+      .eq('conversation_id', conversationId)
+      .eq('status', 'ready')
+      .in('mime_type', ['image/jpeg', 'image/png'])
+      .lte('size_bytes', 4 * 1024 * 1024)
+      .maybeSingle(),
+  );
+  requireValue(
+    file,
+    'FACEBOOK_IMAGE_INVALID',
+    409,
+    'The approved Facebook image is unavailable or unsupported.',
+  );
+  const data = checked(
+    await db.storage.from('workspace-files').download(file.object_path),
+  );
+  requireValue(data, 'FACEBOOK_IMAGE_INVALID', 409);
+  const bytes = new Uint8Array(await data.arrayBuffer());
+  validateFile(bytes, file.mime_type);
+  const digest = Buffer.from(
+    await crypto.subtle.digest('SHA-256', bytes),
+  ).toString('hex');
+  requireValue(digest === file.sha256, 'FACEBOOK_IMAGE_INVALID', 409);
+  return {
+    bytes,
+    filename: file.filename,
+    mimeType: z.enum(['image/jpeg', 'image/png']).parse(file.mime_type),
+  };
+}
+
 export async function sendFacebookPost(
   token: string,
   payload: unknown,
+  image?: FacebookImage,
 ): Promise<PublishReceipt> {
   const p = FacebookPayload.parse(payload);
+  requireValue(!!image === !!p.imageFileId, 'FACEBOOK_IMAGE_INVALID', 409);
+  const proof = await appSecretProof(token);
+  let body: FormData | URLSearchParams;
+  if (image) {
+    const imageBuffer = new ArrayBuffer(image.bytes.byteLength);
+    new Uint8Array(imageBuffer).set(image.bytes);
+    body = new FormData();
+    body.set(
+      'source',
+      new Blob([imageBuffer], { type: image.mimeType }),
+      image.filename,
+    );
+    body.set('caption', p.message);
+    body.set('published', 'true');
+    body.set('appsecret_proof', proof);
+  } else {
+    body = new URLSearchParams({
+      message: p.message,
+      ...(p.link ? { link: p.link } : {}),
+      appsecret_proof: proof,
+    });
+  }
   let response: Response;
   try {
     response = await timedFetch(
-      'https://graph.facebook.com/' + graphVersion() + '/' + p.pageId + '/feed',
+      'https://graph.facebook.com/' +
+        graphVersion() +
+        '/' +
+        p.pageId +
+        (image ? '/photos' : '/feed'),
       {
         method: 'POST',
         headers: { Authorization: 'Bearer ' + token },
         redirect: 'manual',
-        body: new URLSearchParams({
-          message: p.message,
-          ...(p.link ? { link: p.link } : {}),
-          appsecret_proof: await appSecretProof(token),
-        }),
+        body,
       },
     );
   } catch {
@@ -58,22 +129,31 @@ export async function sendFacebookPost(
         : 'The publication result is uncertain. Check the Page; automatic reposting is blocked.',
     );
   }
-  const parsed = z
-    .object({ id: z.string().regex(/^\d+_\d+$/) })
-    .safeParse(data);
-  requireValue(
-    parsed.success && parsed.data.id.startsWith(p.pageId + '_'),
-    'PUBLICATION_UNCERTAIN',
-    409,
-  );
+  let postId = '';
+  if (image) {
+    const parsed = z
+      .object({
+        id: z.string().regex(/^\d+$/),
+        post_id: z.string().regex(/^\d+_\d+$/),
+      })
+      .safeParse(data);
+    if (parsed.success) postId = parsed.data.post_id;
+  } else {
+    const parsed = z
+      .object({ id: z.string().regex(/^\d+_\d+$/) })
+      .safeParse(data);
+    if (parsed.success) postId = parsed.data.id;
+  }
+  requireValue(postId.startsWith(p.pageId + '_'), 'PUBLICATION_UNCERTAIN', 409);
   return {
-    postId: parsed.data.id,
-    url: 'https://www.facebook.com/' + parsed.data.id,
+    postId,
+    url: 'https://www.facebook.com/' + postId,
     published: true,
   };
 }
 export async function publishFacebook(
   workspaceId: string,
+  conversationId: string,
   actionId: string,
   payload: unknown,
   connectionId: string,
@@ -97,6 +177,9 @@ export async function publishFacebook(
     .parse(await graphRead(p.pageId, connection.token, { fields: 'id' }));
   requireValue(access.id === p.pageId, 'CONNECTION_CHANGED', 409);
   await recordConnectionVerification(workspaceId, 'facebook', connectionId);
+  const image = p.imageFileId
+    ? await loadFacebookImage(workspaceId, conversationId, p.imageFileId)
+    : undefined;
   // Commit the sending marker before making the non-idempotent provider call.
   const attempt = await rpc<{ send: boolean; receipt?: PublishReceipt }>(
     adminDb(),
@@ -106,7 +189,7 @@ export async function publishFacebook(
   if (!attempt.send) return attempt.receipt!;
   let receipt: PublishReceipt;
   try {
-    receipt = await sendFacebookPost(connection.token, p);
+    receipt = await sendFacebookPost(connection.token, p, image);
   } catch (error) {
     try {
       await rpc(adminDb(), 'record_external_publish', {

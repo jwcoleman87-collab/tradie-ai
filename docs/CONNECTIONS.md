@@ -111,7 +111,7 @@ The following steps describe repeat setup; steps 1–4 are complete here.
 1. In [Google Cloud Console](https://console.cloud.google.com/), select the
    intended project, enable Google Calendar API and configure Google Auth Platform.
 2. Create a Web Application OAuth client. Add the hosted redirect exactly:
-   `https://tradie-ai-business-team.j-w-coleman87.chatgpt.site/api/google/callback`.
+   `https://tradie-ai-nine.vercel.app/api/google/callback`.
    For local testing add `http://localhost:3000/api/google/callback` separately.
 3. Set `GOOGLE_CLIENT_ID`, secret `GOOGLE_CLIENT_SECRET`, and the exact
    `APP_ORIGIN`. Preserve the existing secret `TOKEN_ENCRYPTION_KEY`.
@@ -140,7 +140,7 @@ can be revoked separately in [Google account connections](https://myaccount.goog
    Page access. Set `META_LOGIN_CONFIG_ID` and `META_APP_ID` plus secret
    `META_APP_SECRET`.
 3. Add the exact OAuth redirect:
-   `https://tradie-ai-business-team.j-w-coleman87.chatgpt.site/api/integrations/facebook/callback`.
+   `https://tradie-ai-nine.vercel.app/api/integrations/facebook/callback`.
 4. Complete Meta’s required app review/business verification for the intended
    external users. Permission eligibility/version details still require dashboard
    verification; successful unit tests are not Meta approval.
@@ -152,10 +152,12 @@ can be revoked separately in [Google account connections](https://myaccount.goog
 7. Prepare a post, review exact text/link/Page ID and press **Publish to Facebook**.
    Verify the provider receipt and audit. A draft’s Accept button only saves it.
 
-Supported: immediate text and optional HTTPS link. Not supported: photo/image
-publishing, scheduling, Instagram, replies, messages, Facebook ads or deletion.
-Photo requests are private drafts until image publishing is implemented; the
-agent must not silently drop the photos and publish text instead.
+Supported: immediate text, optional HTTPS link, or one private JPEG/PNG photo
+under 4 MB. The owner sees the exact caption and selected image in a separate
+approval card before the server uploads it directly to Meta. The private Storage
+object is never exposed as a public URL. Not supported: multiple photos,
+scheduling, Instagram, replies, messages, Facebook ads or deletion. The agent
+must never silently drop a requested photo and publish text instead.
 
 ### Uncertain Facebook publication
 
@@ -176,7 +178,7 @@ reconciliation screen is not implemented.
    level permits test or production accounts. Set secret `GOOGLE_ADS_DEVELOPER_TOKEN`.
 3. Google Ads can reuse the Calendar OAuth client, but needs this additional
    redirect exactly:
-   `https://tradie-ai-business-team.j-w-coleman87.chatgpt.site/api/integrations/google_ads/callback`.
+   `https://tradie-ai-nine.vercel.app/api/integrations/google_ads/callback`.
    Optional separate credentials: `GOOGLE_ADS_CLIENT_ID` / `GOOGLE_ADS_CLIENT_SECRET`.
 4. Consent scope is `https://www.googleapis.com/auth/adwords`. Although Google’s
    scope permits broad access, this server exposes only fixed read queries. The

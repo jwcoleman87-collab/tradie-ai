@@ -10,9 +10,10 @@ afterEach(() => {
 const post = {
   pageId: '12345',
   message: 'A completed job, with owner approval.',
+  imageFileId: null,
   link: null,
 };
-it('accepts only social text/link proposals and rejects credentials and hidden scheduling', () => {
+it('accepts only social Page proposals and rejects credentials, mixed media and hidden scheduling', () => {
   expect(
     Proposal.safeParse({
       type: 'facebook.publish',
@@ -28,6 +29,13 @@ it('accepts only social text/link proposals and rejects credentials and hidden s
     FacebookPayload.safeParse({
       ...post,
       link: 'https://secret:password@example.com',
+    }).success,
+  ).toBe(false);
+  expect(
+    FacebookPayload.safeParse({
+      ...post,
+      imageFileId: crypto.randomUUID(),
+      link: 'https://example.com/product',
     }).success,
   ).toBe(false);
 });
@@ -47,6 +55,30 @@ it('publishes the exact validated content and returns a receipt without credenti
   expect(url).toBe('https://graph.facebook.com/v25.0/12345/feed');
   expect((options!.body as URLSearchParams).get('message')).toBe(post.message);
   expect(JSON.stringify(receipt)).not.toMatch(/token|secret/);
+});
+it('uploads one approved private photo with its exact caption', async () => {
+  vi.stubEnv('META_GRAPH_VERSION', 'v25.0');
+  vi.stubEnv('META_APP_SECRET', 'test-secret');
+  const photo = { ...post, imageFileId: crypto.randomUUID() };
+  const mock = vi
+    .spyOn(globalThis, 'fetch')
+    .mockResolvedValue(Response.json({ id: '999', post_id: '12345_1000' }));
+  const receipt = await sendFacebookPost('test-page-token', photo, {
+    bytes: new Uint8Array([255, 216, 255, 1]),
+    filename: 'cargo-pack.jpg',
+    mimeType: 'image/jpeg',
+  });
+  expect(receipt).toEqual({
+    postId: '12345_1000',
+    url: 'https://www.facebook.com/12345_1000',
+    published: true,
+  });
+  const [url, options] = mock.mock.calls[0];
+  expect(url).toBe('https://graph.facebook.com/v25.0/12345/photos');
+  const body = options!.body as FormData;
+  expect(body.get('caption')).toBe(photo.message);
+  expect(body.get('published')).toBe('true');
+  expect(body.get('source')).toBeInstanceOf(Blob);
 });
 for (const [status, data, code] of [
   [403, { error: { code: 200 } }, 'FACEBOOK_REJECTED'],

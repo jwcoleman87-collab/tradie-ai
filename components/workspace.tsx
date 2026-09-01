@@ -76,6 +76,7 @@ const starters = [
 ];
 const messageOf = (e: unknown) =>
   e instanceof Error ? e.message : 'Something went wrong. Please try again.';
+type AuthView = 'sign-in' | 'reset-request' | 'password-recovery';
 
 export default function Workspace() {
   const [config, setConfig] = useState<ClientConfig | null>(null),
@@ -90,8 +91,10 @@ export default function Workspace() {
     [activeAgents, setActiveAgents] = useState<string[]>([]);
   const [mobile, setMobile] = useState('chat'),
     [view, setView] = useState('actions'),
+    [authView, setAuthView] = useState<AuthView>('sign-in'),
     [email, setEmail] = useState(''),
     [password, setPassword] = useState(''),
+    [passwordConfirmation, setPasswordConfirmation] = useState(''),
     [business, setBusiness] = useState('My business');
   const [problem, setProblem] = useState(''),
     [caseAgent, setCaseAgent] = useState<AgentName>('maintenance'),
@@ -113,7 +116,10 @@ export default function Workspace() {
     config?.aiProviders,
     busy,
   );
-  const canChat = !blockedReason && !!snapshot?.conversationId;
+  const canChat =
+    authView !== 'password-recovery' &&
+    !blockedReason &&
+    !!snapshot?.conversationId;
 
   useEffect(() => {
     let alive = true;
@@ -131,9 +137,15 @@ export default function Workspace() {
           clientRef.current = client;
           const { data } = await client.auth.getSession();
           if (alive) setSession(data.session);
-          const result = client.auth.onAuthStateChange((_event, s) => {
+          const result = client.auth.onAuthStateChange((event, s) => {
             loadSequence.current++;
             setSession(s);
+            if (event === 'PASSWORD_RECOVERY') {
+              setAuthView('password-recovery');
+              setPassword('');
+              setPasswordConfirmation('');
+              setNotice('Choose a new password for your Tradie AI account.');
+            }
             if (!s) {
               setSnapshot(null);
               scope.current = { workspaceId: '', conversationId: '' };
@@ -165,6 +177,11 @@ export default function Workspace() {
           ? 'Google Calendar connected. Prepare a new booking to use this connection.'
           : 'Google Calendar connection was cancelled.',
       );
+    const recoveryParams = new URLSearchParams(
+      window.location.hash.replace(/^#/, ''),
+    );
+    if (recoveryParams.get('type') === 'recovery')
+      setAuthView('password-recovery');
     return () => {
       alive = false;
       unsubscribe?.();
@@ -238,6 +255,47 @@ export default function Workspace() {
         setNotice(
           'Check your email to confirm your account, then sign in here.',
         );
+    });
+  }
+  async function requestPasswordReset(event: { preventDefault(): void }) {
+    event.preventDefault();
+    await perform(async () => {
+      const client = clientRef.current;
+      if (!client) throw Error('Supabase is not configured.');
+      const normalizedEmail = email.trim();
+      if (!normalizedEmail) throw Error('Enter your email address first.');
+      const { error } = await client.auth.resetPasswordForEmail(
+        normalizedEmail,
+        { redirectTo: window.location.origin },
+      );
+      if (error) throw error;
+      setAuthView('sign-in');
+      setPassword('');
+      setNotice(
+        'If an account exists for that email, a password reset link is on its way.',
+      );
+    });
+  }
+  async function updatePassword(event: { preventDefault(): void }) {
+    event.preventDefault();
+    await perform(async () => {
+      const client = clientRef.current;
+      if (!client) throw Error('Supabase is not configured.');
+      if (password.length < 10)
+        throw Error('Use at least 10 characters for your new password.');
+      if (password !== passwordConfirmation)
+        throw Error('The two passwords do not match.');
+      const { error } = await client.auth.updateUser({ password });
+      if (error) throw error;
+      const { error: signOutError } = await client.auth.signOut({
+        scope: 'local',
+      });
+      if (signOutError) throw signOutError;
+      setPassword('');
+      setPasswordConfirmation('');
+      setAuthView('sign-in');
+      window.history.replaceState({}, document.title, window.location.pathname);
+      setNotice('Password updated. Sign in with your new password.');
     });
   }
   async function send(event?: { preventDefault(): void }) {
@@ -528,12 +586,14 @@ export default function Workspace() {
             <span className="status-pill">
               {busy
                 ? 'Working…'
+                : authView === 'password-recovery'
+                  ? 'Password recovery'
                 : snapshot
                   ? 'Your private team'
                   : 'Setup & sign in'}
             </span>
           </div>
-          {snapshot && (
+          {snapshot && authView !== 'password-recovery' && (
             <div className="panel-controls px-5 pt-3">
               <select
                 aria-label="Conversation history"
@@ -595,6 +655,47 @@ export default function Workspace() {
             )}
             {loading ? (
               <p className="muted">Opening your private workspace…</p>
+            ) : authView === 'password-recovery' ? (
+              <form className="auth-form" onSubmit={updatePassword}>
+                <h2>Choose a new password</h2>
+                <p className="muted">
+                  Use at least 10 characters, then sign in again.
+                </p>
+                <label htmlFor="new-password">
+                  New password
+                  <Input
+                    id="new-password"
+                    type="password"
+                    minLength={10}
+                    autoComplete="new-password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                  />
+                </label>
+                <label htmlFor="confirm-new-password">
+                  Confirm new password
+                  <Input
+                    id="confirm-new-password"
+                    type="password"
+                    minLength={10}
+                    autoComplete="new-password"
+                    value={passwordConfirmation}
+                    onChange={(e) => setPasswordConfirmation(e.target.value)}
+                    required
+                  />
+                </label>
+                <Button
+                  type="submit"
+                  disabled={
+                    busy ||
+                    password.length < 10 ||
+                    password !== passwordConfirmation
+                  }
+                >
+                  Update password
+                </Button>
+              </form>
             ) : (
               <>
                 {!snapshot?.messages.length && (
@@ -632,7 +733,55 @@ export default function Workspace() {
                     </p>
                   </div>
                 )}
-                {config?.configured && !session && (
+                {config?.configured &&
+                  !session &&
+                  authView === 'reset-request' && (
+                    <form
+                      className="auth-form"
+                      onSubmit={requestPasswordReset}
+                    >
+                      <h2>Reset your password</h2>
+                      <p className="muted">
+                        Enter your account email and we’ll send a secure reset
+                        link.
+                      </p>
+                      <label htmlFor="reset-email">
+                        Email
+                        <Input
+                          id="reset-email"
+                          type="email"
+                          autoComplete="email"
+                          value={email}
+                          onChange={(e) => setEmail(e.target.value)}
+                          required
+                        />
+                      </label>
+                      <div className="button-row">
+                        <Button type="submit" disabled={busy || !email.trim()}>
+                          Send reset link
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          disabled={busy}
+                          onClick={() => {
+                            setAuthView('sign-in');
+                            setError('');
+                            setNotice('');
+                          }}
+                        >
+                          Back to sign in
+                        </Button>
+                      </div>
+                      <p className="auth-hint">
+                        For privacy, the same confirmation is shown whether or
+                        not an account exists.
+                      </p>
+                    </form>
+                  )}
+                {config?.configured &&
+                  !session &&
+                  authView === 'sign-in' && (
                   <form className="auth-form" onSubmit={(e) => signIn(e)}>
                     <label htmlFor="account-email">
                       Email
@@ -657,6 +806,19 @@ export default function Workspace() {
                         required
                       />
                     </label>
+                    <button
+                      type="button"
+                      className="auth-link"
+                      disabled={busy}
+                      onClick={() => {
+                        setAuthView('reset-request');
+                        setPassword('');
+                        setError('');
+                        setNotice('');
+                      }}
+                    >
+                      Forgot password?
+                    </button>
                     <div className="button-row">
                       <Button type="submit" disabled={busy}>
                         Sign in
@@ -675,7 +837,7 @@ export default function Workspace() {
                       characters for your password.
                     </p>
                   </form>
-                )}
+                  )}
                 {session && !snapshot && !loading && (
                   <form
                     className="auth-form"
@@ -988,6 +1150,10 @@ export default function Workspace() {
                 <ActionCard
                   key={a.id}
                   action={a}
+                  token={token}
+                  imageFile={snapshot?.uploads.find(
+                    (file) => file.id === a.payload.imageFileId,
+                  )}
                   disabled={busy || !owner}
                   onDecision={(d) => decide(a, d)}
                   onRetry={() =>
@@ -1248,11 +1414,15 @@ export default function Workspace() {
 
 function ActionCard({
   action: a,
+  token,
+  imageFile,
   disabled,
   onDecision,
   onRetry,
 }: {
   action: Action;
+  token: string;
+  imageFile?: Upload;
   disabled: boolean;
   onDecision: (d: 'accept' | 'deny') => void;
   onRetry: () => void;
@@ -1301,10 +1471,22 @@ function ActionCard({
                   <dd className="break-all">{a.payload.link}</dd>
                 </>
               )}
+              {typeof a.payload.imageFileId === 'string' && (
+                <>
+                  <dt>Selected photo</dt>
+                  <dd>{imageFile?.filename || 'Private workspace image'}</dd>
+                </>
+              )}
             </dl>
+            {typeof a.payload.imageFileId === 'string' && imageFile && (
+              <FacebookImagePreview file={imageFile} token={token} />
+            )}
             <p className="auth-hint">
-              Accept publishes this exact text/link immediately to the selected
-              Page. It is not a private draft.
+              Accept publishes this exact caption
+              {typeof a.payload.imageFileId === 'string'
+                ? ' and selected photo'
+                : '/link'}{' '}
+              immediately to the selected Page. It is not a private draft.
             </p>
           </>
         ) : (
@@ -1383,6 +1565,41 @@ function ActionCard({
     </article>
   );
 }
+
+function FacebookImagePreview({
+  file,
+  token,
+}: {
+  file: Upload;
+  token: string;
+}) {
+  const [url, setUrl] = useState('');
+  const [error, setError] = useState('');
+  useEffect(() => {
+    let active = true;
+    requestApi<{ signedUrl: string }>(token, `uploads/${file.id}/url?preview=1`)
+      .then((result) => {
+        if (active) setUrl(result.signedUrl);
+      })
+      .catch((reason) => {
+        if (active) setError(messageOf(reason));
+      });
+    return () => {
+      active = false;
+    };
+  }, [file.id, token]);
+  if (error)
+    return <p role="alert">The private image preview could not be loaded.</p>;
+  if (!url) return <p className="auth-hint">Loading private preview…</p>;
+  return (
+    <div className="facebook-photo-preview">
+      {/* The URL is a private, short-lived Supabase Storage signature. */}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={url} alt={`Selected for Facebook: ${file.filename}`} />
+    </div>
+  );
+}
+
 function FileCard({
   file,
   token,
