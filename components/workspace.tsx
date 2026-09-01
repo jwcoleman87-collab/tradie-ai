@@ -1143,53 +1143,66 @@ export default function Workspace() {
                     ))}
                   </div>
                 )}
-                {snapshot?.messages.map((m) => {
-                  const attachments = m.attachment_ids
-                    .map((id) =>
-                      snapshot.uploads.find((file) => file.id === id),
-                    )
-                    .filter((file): file is Upload => Boolean(file));
-                  return (
-                    <article className={`message ${m.role}`} key={m.id}>
-                      <span className="meta">
-                        {m.role === 'user' ? 'You' : 'Magic + your crew'} ·{' '}
-                        {new Date(m.created_at).toLocaleTimeString([], {
-                          hour: '2-digit',
-                          minute: '2-digit',
-                        })}
-                      </span>
-                      <div className="message-copy">{m.content}</div>
-                      <BrandMentions text={m.content} />
-                      {m.attachment_ids.length > 0 && (
-                        <div className="message-attachments">
-                          {attachments.map((file) =>
-                            isImageUpload(file) ? (
-                              <PrivateImagePreview
-                                key={file.id}
-                                file={file}
-                                token={token}
-                                variant="message"
-                              />
-                            ) : (
-                              <span className="attachment-file" key={file.id}>
-                                <FileText size={13} /> {file.filename}
-                              </span>
-                            ),
+                {(Boolean(snapshot?.messages.length) || busy) && (
+                  <div
+                    className="message-thread"
+                    role="log"
+                    aria-label="Conversation messages"
+                    aria-live="polite"
+                  >
+                    {snapshot?.messages.map((m) => {
+                      const attachments = m.attachment_ids
+                        .map((id) =>
+                          snapshot.uploads.find((file) => file.id === id),
+                        )
+                        .filter((file): file is Upload => Boolean(file));
+                      return (
+                        <article className={`message ${m.role}`} key={m.id}>
+                          <span className="meta">
+                            {m.role === 'user' ? 'You' : 'Magic + your crew'} ·{' '}
+                            {new Date(m.created_at).toLocaleTimeString([], {
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            })}
+                          </span>
+                          <div className="message-copy">{m.content}</div>
+                          <BrandMentions text={m.content} />
+                          {m.attachment_ids.length > 0 && (
+                            <div className="message-attachments">
+                              {attachments.map((file) =>
+                                isImageUpload(file) ? (
+                                  <PrivateImagePreview
+                                    key={file.id}
+                                    file={file}
+                                    token={token}
+                                    variant="message"
+                                  />
+                                ) : (
+                                  <span
+                                    className="attachment-file"
+                                    key={file.id}
+                                  >
+                                    <FileText size={13} /> {file.filename}
+                                  </span>
+                                ),
+                              )}
+                              {attachments.length === 0 && (
+                                <span className="meta">
+                                  {m.attachment_ids.length} private
+                                  attachment(s)
+                                </span>
+                              )}
+                            </div>
                           )}
-                          {attachments.length === 0 && (
-                            <span className="meta">
-                              {m.attachment_ids.length} private attachment(s)
-                            </span>
-                          )}
-                        </div>
-                      )}
-                    </article>
-                  );
-                })}
-                {busy && (
-                  <output className="pending-state block">
-                    Working on your request…
-                  </output>
+                        </article>
+                      );
+                    })}
+                    {busy && (
+                      <output className="pending-state block">
+                        Working on your request…
+                      </output>
+                    )}
+                  </div>
                 )}
               </>
             )}
