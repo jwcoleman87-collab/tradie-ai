@@ -2,8 +2,10 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Button } from './ui/button';
 import { AISettings } from './ai-settings';
+import { BrandMark } from './brand';
 import { requestApi, type ClientConfig } from '@/lib/client';
 import type { Snapshot } from '@/lib/contracts';
+import { integrationBrands } from '@/lib/brands';
 import {
   providerNames,
   type ConnectionInfo,
@@ -73,11 +75,18 @@ export function ConnectionsPanel({
         External connections are private to this workspace. Connecting never
         posts, books or changes ad spending.
       </p>
+      <p className="auth-hint brand-disclaimer">
+        Service logos identify the account being connected; they do not imply
+        endorsement.
+      </p>
       {error && <p role="alert">{error}</p>}
       {!state && <output className="block">Loading connections…</output>}
       {state?.connections.map((c) => (
         <article key={c.provider} className="action-card">
-          <h3>{providerNames[c.provider]}</h3>
+          <div className="brand-heading">
+            <BrandMark brand={integrationBrands[c.provider]} />
+            <h3>{providerNames[c.provider]}</h3>
+          </div>
           <p>{c.status.replaceAll('_', ' ')}</p>
           {c.displayName && (
             <p>
@@ -262,7 +271,10 @@ function ResourcePicker({
   const [choice, setChoice] = useState('');
   return (
     <article className="action-card connection-form">
-      <h3>Choose your {providerNames[candidate.provider]}</h3>
+      <div className="brand-heading">
+        <BrandMark brand={integrationBrands[candidate.provider]} />
+        <h3>Choose your {providerNames[candidate.provider]}</h3>
+      </div>
       <p>
         Nothing is connected until you select it. Expires{' '}
         {new Date(candidate.expiresAt).toLocaleTimeString()}.

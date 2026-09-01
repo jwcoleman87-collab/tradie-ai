@@ -1,6 +1,7 @@
 'use client';
 import { useState } from 'react';
 import { Button } from './ui/button';
+import { BrandMark } from './brand';
 import {
   aiProviderNames,
   aiProviderLabel,
@@ -9,6 +10,7 @@ import {
 } from '@/lib/ai-settings';
 import type { WorkspaceData } from '@/lib/contracts';
 import { requestApi } from '@/lib/client';
+import { aiBrands } from '@/lib/brands';
 
 export function AISettings({
   workspace,
@@ -32,7 +34,11 @@ export function AISettings({
   return (
     <article className="action-card">
       <span className="section-label">AI CONNECTIONS</span>
-      <h3>OpenAI + Claude</h3>
+      <div className="brand-lockup-row" aria-label="OpenAI and Anthropic">
+        <BrandMark brand="openai" showLabel />
+        <span aria-hidden="true">+</span>
+        <BrandMark brand="anthropic" showLabel />
+      </div>
       <p>
         Choose who may process this workspace. Relevant conversation history,
         saved records, selected files, calendar busy times and connection names
@@ -62,13 +68,16 @@ export function AISettings({
                 )
               }
             />
-            <span>
-              Allow {aiProviderLabel(name)}{' '}
-              <small className="block">
-                {available[name]
-                  ? 'API key configured · test a request to verify access'
-                  : 'API key not configured'}
-              </small>
+            <span className="ai-provider-option">
+              <BrandMark brand={aiBrands[name]} />
+              <span>
+                Allow {aiProviderLabel(name)}{' '}
+                <small className="block">
+                  {available[name]
+                    ? 'API key configured · test a request to verify access'
+                    : 'API key not configured'}
+                </small>
+              </span>
             </span>
           </label>
         ))}
