@@ -61,6 +61,9 @@ can be integrated without rebuilding the backend.
   processing is explained beside the composer, with a settings shortcut.
 - Independent Calendar, Facebook Page and Google Ads connections per workspace.
   Encrypted, expiring resource selection; no provider token reaches the browser.
+- Separate business and sandbox workspaces with reversible conversation and
+  record archives. Completed actions and resolved cases move out of active work;
+  archive and restore events retain immutable audit evidence.
 - Facebook immediate text/link or single JPEG/PNG photo publishing after owner
   approval; a durable sending marker blocks automatic reposts when the external
   outcome is uncertain. Private images are uploaded directly from Storage.
@@ -110,7 +113,7 @@ exact app origin. Configure these **server runtime** values:
 | OPENAI_API_KEY            | Project-scoped API key with billing | Server only   |
 | OPENAI_MODEL              | `gpt-5-mini` default; configurable  | Server config |
 | ANTHROPIC_API_KEY         | Anthropic API key with credits      | Server only   |
-| ANTHROPIC_MODEL           | `claude-haiku-4-5-20251001` default  | Server config |
+| ANTHROPIC_MODEL           | `claude-haiku-4-5-20251001` default | Server config |
 | GOOGLE_CLIENT_ID          | Google OAuth web client             | Server config |
 | GOOGLE_CLIENT_SECRET      | Same OAuth client                   | Server only   |
 | TOKEN_ENCRYPTION_KEY      | 32 random bytes, base64 encoded     | Server only   |
@@ -218,6 +221,8 @@ idempotent replies and safe database/case errors. See
   version with changed contents is rejected by the database.
 
 See `docs/ARCHITECTURE.md`, `docs/ENVIRONMENT.md` and `docs/VERIFICATION.md`.
+The operational archive and retention baseline is documented in
+`docs/WORKSPACE-GOVERNANCE.md`.
 
 ## Primary implementation references
 

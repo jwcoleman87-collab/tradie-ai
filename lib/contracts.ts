@@ -185,8 +185,17 @@ export type WorkspaceData = AIPreferences & {
   name: string;
   time_zone: string;
   ai_consent_at: string | null;
+  workspace_type: 'business' | 'sandbox';
+  status: 'active' | 'archived';
+  archived_at: string | null;
 };
-export type Conversation = { id: string; title: string; created_at: string };
+export type Conversation = {
+  id: string;
+  title: string;
+  status: 'active' | 'archived';
+  archived_at: string | null;
+  created_at: string;
+};
 export type Upload = {
   id: string;
   filename: string;
@@ -209,6 +218,10 @@ export type BusinessRecord = {
   title: string;
   body: string;
   source: string;
+  status: 'active' | 'archived';
+  archived_at: string | null;
+  retention_class: string;
+  legal_hold: boolean;
   created_at: string;
 };
 export type Snapshot = {

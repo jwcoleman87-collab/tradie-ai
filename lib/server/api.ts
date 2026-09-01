@@ -54,13 +54,16 @@ export const api = endpoint(async (request) => {
         await db
           .from('workspaces')
           .select(
-            'id,name,time_zone,ai_consent_at,ai_primary_provider,ai_fallback_enabled,ai_allowed_providers',
+            'id,name,time_zone,ai_consent_at,ai_primary_provider,ai_fallback_enabled,ai_allowed_providers,workspace_type,status,archived_at',
           )
+          .order('status')
           .order('created_at'),
       ) || [];
     if (!workspaces.length) return json({ workspaces: [] });
     const workspaceId = Uuid.parse(
-      url.searchParams.get('workspaceId') || workspaces[0].id,
+      url.searchParams.get('workspaceId') ||
+        workspaces.find((workspace) => workspace.status === 'active')?.id ||
+        workspaces[0].id,
     );
     const role = await membership(db, user.id, workspaceId);
     const workspace = workspaces.find((w) => w.id === workspaceId);
@@ -69,13 +72,17 @@ export const api = endpoint(async (request) => {
       checked(
         await db
           .from('conversations')
-          .select('id,title,created_at')
+          .select('id,title,status,archived_at,created_at')
           .eq('workspace_id', workspaceId)
+          .order('status')
           .order('created_at', { ascending: false })
           .limit(100),
       ) || [];
     const conversationId =
-      url.searchParams.get('conversationId') || conversations[0]?.id || null;
+      url.searchParams.get('conversationId') ||
+      conversations.find((conversation) => conversation.status === 'active')
+        ?.id ||
+      null;
     if (conversationId) {
       Uuid.parse(conversationId);
       requireValue(
@@ -129,7 +136,9 @@ export const api = endpoint(async (request) => {
         .limit(100),
       db
         .from('business_records')
-        .select('id,kind,title,body,source,created_at')
+        .select(
+          'id,kind,title,body,source,status,archived_at,retention_class,legal_hold,created_at',
+        )
         .eq('workspace_id', workspaceId)
         .order('created_at', { ascending: false })
         .limit(100),
@@ -180,6 +189,59 @@ export const api = endpoint(async (request) => {
       calendarConnected: !!checked(connection),
     });
   }
+  if (path === 'workspaces' && method === 'POST') {
+    const input = z
+      .object({
+        name: z.string().trim().min(1).max(120),
+        workspaceType: z.enum(['business', 'sandbox']).default('business'),
+      })
+      .strict()
+      .parse(await body(request));
+    return json(
+      {
+        id: await rpc<string>(admin, 'create_workspace', {
+          p_name: input.name,
+          p_user: user.id,
+          p_workspace_type: input.workspaceType,
+        }),
+      },
+      201,
+    );
+  }
+  const workspaceMatch = path.match(/^workspaces\/([^/]+)$/);
+  if (workspaceMatch && method === 'PATCH') {
+    const workspaceId = Uuid.parse(workspaceMatch[1]);
+    const input = z
+      .object({
+        name: z.string().trim().min(1).max(120),
+        workspaceType: z.enum(['business', 'sandbox']),
+      })
+      .strict()
+      .parse(await body(request));
+    await membership(db, user.id, workspaceId, true);
+    await rpc(admin, 'update_workspace', {
+      p_workspace: workspaceId,
+      p_user: user.id,
+      p_name: input.name,
+      p_workspace_type: input.workspaceType,
+    });
+    return json({ ok: true });
+  }
+  const workspaceStatusMatch = path.match(/^workspaces\/([^/]+)\/status$/);
+  if (workspaceStatusMatch && method === 'PATCH') {
+    const workspaceId = Uuid.parse(workspaceStatusMatch[1]);
+    const input = z
+      .object({ status: z.enum(['active', 'archived']) })
+      .strict()
+      .parse(await body(request));
+    await membership(db, user.id, workspaceId, true);
+    await rpc(admin, 'set_workspace_status', {
+      p_workspace: workspaceId,
+      p_user: user.id,
+      p_status: input.status,
+    });
+    return json({ ok: true });
+  }
   if (path === 'consent' && method === 'POST') {
     const input = AIConsentInput.parse(await body(request));
     await membership(db, user.id, input.workspaceId, true);
@@ -205,6 +267,19 @@ export const api = endpoint(async (request) => {
       .strict()
       .parse(await body(request));
     await membership(db, user.id, input.workspaceId);
+    const activeWorkspace = checked(
+      await db
+        .from('workspaces')
+        .select('status')
+        .eq('id', input.workspaceId)
+        .single(),
+    );
+    requireValue(
+      activeWorkspace?.status === 'active',
+      'WORKSPACE_ARCHIVED',
+      409,
+      'Restore this workspace before creating new work.',
+    );
     await rpc(admin, 'consume_rate', {
       p_workspace: input.workspaceId,
       p_user: user.id,
@@ -226,6 +301,46 @@ export const api = endpoint(async (request) => {
       201,
     );
   }
+  const conversationStatusMatch = path.match(
+    /^conversations\/([^/]+)\/status$/,
+  );
+  if (conversationStatusMatch && method === 'PATCH') {
+    const conversationId = Uuid.parse(conversationStatusMatch[1]);
+    const input = z
+      .object({
+        workspaceId: Uuid,
+        status: z.enum(['active', 'archived']),
+      })
+      .strict()
+      .parse(await body(request));
+    await membership(db, user.id, input.workspaceId, true);
+    await rpc(admin, 'set_conversation_status', {
+      p_workspace: input.workspaceId,
+      p_conversation: conversationId,
+      p_user: user.id,
+      p_status: input.status,
+    });
+    return json({ ok: true });
+  }
+  const recordStatusMatch = path.match(/^records\/([^/]+)\/status$/);
+  if (recordStatusMatch && method === 'PATCH') {
+    const recordId = Uuid.parse(recordStatusMatch[1]);
+    const input = z
+      .object({
+        workspaceId: Uuid,
+        status: z.enum(['active', 'archived']),
+      })
+      .strict()
+      .parse(await body(request));
+    await membership(db, user.id, input.workspaceId, true);
+    await rpc(admin, 'set_record_status', {
+      p_workspace: input.workspaceId,
+      p_record: recordId,
+      p_user: user.id,
+      p_status: input.status,
+    });
+    return json({ ok: true });
+  }
   if (path === 'chat' && method === 'POST') {
     const input = ChatInput.parse(await body(request));
     await membership(db, user.id, input.workspaceId);
@@ -233,11 +348,31 @@ export const api = endpoint(async (request) => {
       await db
         .from('workspaces')
         .select(
-          'ai_consent_at,ai_primary_provider,ai_fallback_enabled,ai_allowed_providers',
+          'status,ai_consent_at,ai_primary_provider,ai_fallback_enabled,ai_allowed_providers',
         )
         .eq('id', input.workspaceId)
         .single(),
     )!;
+    requireValue(
+      preferences.status === 'active',
+      'WORKSPACE_ARCHIVED',
+      409,
+      'Restore this workspace before sending new work.',
+    );
+    const activeConversation = checked(
+      await db
+        .from('conversations')
+        .select('status')
+        .eq('workspace_id', input.workspaceId)
+        .eq('id', input.conversationId)
+        .single(),
+    );
+    requireValue(
+      activeConversation?.status === 'active',
+      'CONVERSATION_ARCHIVED',
+      409,
+      'Restore this conversation before sending a message.',
+    );
     requireValue(
       preferences.ai_consent_at,
       'AI_CONSENT_REQUIRED',

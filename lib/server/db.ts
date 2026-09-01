@@ -91,17 +91,26 @@ export async function rpc<T = unknown>(
       CONNECTION_CHANGED: 409,
       PUBLICATION_UNCERTAIN: 409,
       RETRY_LIMIT: 409,
+      ACTIVE_WORK_REMAINS: 409,
+      WORKSPACE_ARCHIVED: 409,
+      CONVERSATION_ARCHIVED: 409,
     };
     throw new AppError(
       code || 'DATABASE_ERROR',
       code ? statuses[code] || 400 : 503,
       code === 'PUBLICATION_UNCERTAIN'
         ? 'Facebook may already have published this post. Check the Page; automatic reposting is blocked.'
-        : code === 'RATE_LIMITED'
-          ? 'Please wait a minute before trying again.'
-          : code === 'BUSY'
-            ? 'Your team is still working on the previous request.'
-            : 'The change was not applied. Refresh the workspace and try again.',
+        : code === 'ACTIVE_WORK_REMAINS'
+          ? 'Finish or deny work that still needs attention before archiving.'
+          : code === 'WORKSPACE_ARCHIVED'
+            ? 'Restore this workspace before adding new work.'
+            : code === 'CONVERSATION_ARCHIVED'
+              ? 'Restore this conversation before adding new messages.'
+              : code === 'RATE_LIMITED'
+                ? 'Please wait a minute before trying again.'
+                : code === 'BUSY'
+                  ? 'Your team is still working on the previous request.'
+                  : 'The change was not applied. Refresh the workspace and try again.',
     );
   }
   return data as T;

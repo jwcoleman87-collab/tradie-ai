@@ -75,11 +75,14 @@ function query(table: string) {
     if (table === 'workspaces')
       return {
         data: {
+          status: 'active',
           ai_consent_at: consent ? '2026-08-31' : null,
           time_zone: 'Australia/Sydney',
         },
         error: null,
       };
+    if (table === 'conversations')
+      return { data: { status: 'active' }, error: null };
     if (table === 'integration_credentials') return { data: null, error: null };
     if (table === 'messages')
       return { data: [{ role: 'user', content: input.text }], error: null };

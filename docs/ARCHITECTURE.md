@@ -86,6 +86,21 @@ Agent skill bodies stay in the server source bundle. Metadata and release hashes
 are recorded in agent_versions; no client write policy or customer edit endpoint
 exists. AI knowledge does not automatically change managed instructions.
 
+## Workspace and record lifecycle
+
+One owner may maintain multiple isolated workspaces. Each is classified as a
+business workspace or sandbox; integrations, credentials and private records
+remain tenant-bound and are never copied during workspace creation. Workspaces,
+conversations and business records use reversible active/archive states.
+
+Archived containers are read-only. Database triggers reject new conversations,
+runs, messages, proposals and files until the container is restored. Archiving
+is blocked while a model run or approval/execution state is live. Completed,
+denied and expired actions are history rather than active approvals; resolved
+cases are also separated from open cases. Every lifecycle transition creates an
+append-only audit receipt. See `WORKSPACE-GOVERNANCE.md` for retention classes,
+legal holds and disposition responsibilities.
+
 ## Privacy
 
 Private escalation_cases store Problem, Solution and Outcome under one Case ID.
