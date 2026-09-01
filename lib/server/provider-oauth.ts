@@ -9,6 +9,7 @@ import { adminDb, checked, rpc } from './db';
 import { randomSecret, sha256, encrypt, decrypt } from './crypto';
 import { requireValue, timedFetch } from './errors';
 import { noStore } from './http';
+import { providerReturnUrl } from './oauth-return';
 import {
   adsScope,
   facebookScopes,
@@ -206,19 +207,13 @@ export async function finishProvider(
     p_cookie: await sha256(nonce),
   });
   requireValue(stored.provider === provider, 'OAUTH_STATE_INVALID', 403);
-  const redirect = (status: string, candidate?: string) =>
+  const redirect = (status: 'cancelled' | 'choose', candidate?: string) =>
     new Response(null, {
       status: 303,
       headers: {
         ...noStore,
         'Set-Cookie': cookie(provider, '', 0),
-        Location:
-          appOrigin() +
-          '/?connection=' +
-          provider +
-          '&status=' +
-          status +
-          (candidate ? '&candidate=' + candidate : ''),
+        Location: providerReturnUrl(appOrigin(), provider, status, candidate),
       },
     });
   if (url.searchParams.has('error')) return redirect('cancelled');

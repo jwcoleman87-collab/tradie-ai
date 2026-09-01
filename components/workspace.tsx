@@ -234,13 +234,14 @@ export default function Workspace() {
     const connectionState = new URLSearchParams(window.location.search).get(
       'connection',
     );
-    if (connectionState) {
+    if (connectionState || state) {
       setView('connections');
       setMoreOpen(true);
       setMobile('actions');
-      setNotice(
-        'Review your connection status and choose the account or Page to finish connecting.',
-      );
+      if (connectionState)
+        setNotice(
+          'Review your connection status and choose the account or Page to finish connecting.',
+        );
     }
     if (state)
       setNotice(

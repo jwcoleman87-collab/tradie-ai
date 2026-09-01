@@ -3,6 +3,7 @@ import { adminDb, checked, rpc } from './db';
 import { encrypt, randomSecret, sha256 } from './crypto';
 import { requireValue, timedFetch } from './errors';
 import { noStore } from './http';
+import { calendarReturnUrl } from './oauth-return';
 const scope = 'https://www.googleapis.com/auth/calendar.events';
 const cookieName = 'tradie_oauth';
 function cookie(value: string, maxAge: number) {
@@ -79,7 +80,7 @@ export async function finishGoogle(request: Request) {
       status: 303,
       headers: {
         ...noStore,
-        Location: `${appOrigin()}/?calendar=cancelled`,
+        Location: calendarReturnUrl(appOrigin(), 'cancelled'),
         'Set-Cookie': cookie('', 0),
       },
     });
@@ -135,7 +136,7 @@ export async function finishGoogle(request: Request) {
     status: 303,
     headers: {
       ...noStore,
-      Location: `${appOrigin()}/?calendar=connected`,
+      Location: calendarReturnUrl(appOrigin(), 'connected'),
       'Set-Cookie': cookie('', 0),
     },
   });
