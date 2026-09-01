@@ -15,7 +15,9 @@ import {
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { ConnectionsPanel } from './connections-panel';
+import { BrandMark, BrandMentions } from './brand';
 import { eligibleAIProviders, aiProviderLabel } from '@/lib/ai-settings';
+import { aiBrands } from '@/lib/brands';
 import { aiProblem } from '@/lib/ai-diagnostics';
 import { chatBlockedReason, submitChat } from '@/lib/chat-client';
 import {
@@ -646,6 +648,7 @@ export default function Workspace() {
                   </optgroup>
                 )}
               </select>
+              <BrandMentions text={snapshot.workspace.name} />
               <p className="workspace-scope-note">
                 {snapshot.workspace.workspace_type === 'sandbox'
                   ? 'Testing only — separate from GreenVac.'
@@ -942,6 +945,7 @@ export default function Workspace() {
                       Required: Supabase URL, public key and server key; AI API
                       key; Google OAuth client and encryption key.
                     </p>
+                    <BrandMentions text="Supabase and Google Calendar" />
                   </div>
                 )}
                 {config?.configured &&
@@ -1080,6 +1084,7 @@ export default function Workspace() {
                       whether a backup provider may process this workspace. No
                       AI request is sent until you allow it.
                     </p>
+                    <BrandMentions text="OpenAI and Claude by Anthropic" />
                     {owner && (
                       <Button
                         className="mt-3"
@@ -1095,6 +1100,7 @@ export default function Workspace() {
                   <div className="setup-notice">
                     Your records are connected. An OpenAI or Anthropic API key
                     is still needed to activate the team. Add both for backup.
+                    <BrandMentions text="OpenAI and Anthropic" />
                   </div>
                 )}
                 {snapshot &&
@@ -1143,7 +1149,8 @@ export default function Workspace() {
                           minute: '2-digit',
                         })}
                       </span>
-                      {m.content}
+                      <div className="message-copy">{m.content}</div>
+                      <BrandMentions text={m.content} />
                       {m.attachment_ids.length > 0 && (
                         <div className="message-attachments">
                           {attachments.map((file) =>
@@ -1365,11 +1372,14 @@ export default function Workspace() {
                   )}
                   {run.provider_trace.map((r, i) => (
                     <div key={i} className="mt-2">
-                      <p>
-                        {aiProviderLabel(r.provider)} · {r.model} ·{' '}
-                        {r.step || 'request'} · {r.status}
-                        {r.errorCode ? ` (${r.errorCode})` : ''}
-                      </p>
+                      <div className="provider-trace-line">
+                        <BrandMark brand={aiBrands[r.provider]} />
+                        <p>
+                          {aiProviderLabel(r.provider)} · {r.model} ·{' '}
+                          {r.step || 'request'} · {r.status}
+                          {r.errorCode ? ` (${r.errorCode})` : ''}
+                        </p>
+                      </div>
                       {(r.httpStatus || r.elapsedMs !== undefined) && (
                         <p className="auth-hint">
                           {r.httpStatus
@@ -1493,6 +1503,7 @@ export default function Workspace() {
                     </span>
                     <h3>{r.title}</h3>
                     <p>{r.body}</p>
+                    <BrandMentions text={`${r.title} ${r.body}`} />
                     {owner && (
                       <Button
                         size="xs"
@@ -1859,6 +1870,7 @@ export default function Workspace() {
                     <article className="archive-row" key={conversation.id}>
                       <div>
                         <h3>{conversation.title}</h3>
+                        <BrandMentions text={conversation.title} />
                         <p>
                           {new Date(
                             conversation.created_at,
@@ -1917,6 +1929,7 @@ export default function Workspace() {
                     <article className="archive-row" key={action.id}>
                       <div>
                         <h3>{action.summary}</h3>
+                        <BrandMentions text={action.summary} />
                         <p>
                           {action.status.replaceAll('_', ' ')} ·{' '}
                           {new Date(action.created_at).toLocaleDateString()}
@@ -1935,6 +1948,7 @@ export default function Workspace() {
                     <article className="archive-row" key={record.id}>
                       <div>
                         <h3>{record.title}</h3>
+                        <BrandMentions text={record.title} />
                         <p>
                           {record.kind} ·{' '}
                           {record.retention_class.replaceAll('_', ' ')}
@@ -1976,6 +1990,7 @@ export default function Workspace() {
                       <div>
                         <h3>{value.case_id}</h3>
                         <p>{value.outcome || 'Resolved'}</p>
+                        <BrandMentions text={value.outcome || ''} />
                       </div>
                     </article>
                   ))}
@@ -1985,7 +2000,7 @@ export default function Workspace() {
             {view === 'connections' && (
               <>
                 <div className="connection-card mt-6">
-                  <CalendarDays size={19} />
+                  <BrandMark brand="google_calendar" />
                   <div>
                     <h3>Google Calendar</h3>
                     <p>
@@ -2071,11 +2086,19 @@ function ActionCard({
   const calendar = a.action_type === 'calendar.create',
     facebook = a.action_type === 'facebook.publish',
     expired = Date.parse(a.expires_at) <= Date.now();
+  const brandText = [
+    calendar ? 'Google Calendar' : facebook ? 'Facebook' : '',
+    a.summary,
+    ...Object.values(a.payload).filter(
+      (value): value is string => typeof value === 'string',
+    ),
+  ].join(' ');
   return (
     <article className="action-card">
       <span className="section-label">
         {a.agent} · {a.status.replaceAll('_', ' ')}
       </span>
+      <BrandMentions text={brandText} />
       <h3 className="mt-2">{a.summary}</h3>
       <div className="action-details">
         {calendar ? (
@@ -2325,6 +2348,7 @@ function FileCard({
         <FileText size={17} />
       )}
       <h3 className="mt-2 break-all">{file.filename}</h3>
+      <BrandMentions text={file.filename} />
       <p>{Math.ceil(file.size_bytes / 1024)} KB · Private</p>
       <div className="button-row">
         <Button
