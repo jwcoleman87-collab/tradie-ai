@@ -10,6 +10,33 @@
 Updated 2 September 2026 (Australia/Sydney). Read this before making changes.
 Do not restart setup. See the current repair note and release checkpoint below.
 
+## Current release: connector OAuth returns and Facebook publishing lock
+
+Calendar, Facebook and Google Ads OAuth callbacks now return to `/workspace`
+instead of the public landing page. Both successful and cancelled returns reopen
+Connections; Facebook and Ads discovery returns preserve the encrypted candidate
+ID so the owner can choose the exact Page or advertiser account. Eight direct
+regression tests cover all three start URLs, Calendar success/cancellation,
+Facebook and Ads cancellation, and the Ads resource-picker return.
+
+Source commit `b4b4fd2` was pushed and deployed to Vercel production as
+`dpl_7abscesSp8smW9PqhMmu2eBWSmhD`. The deployment is Ready and the stable
+`https://tradie-ai-nine.vercel.app` alias points to it. The production Sensitive
+environment variable `FACEBOOK_PUBLISHING_ENABLED` is explicitly `false`.
+Authenticated browser verification shows Calendar connected, Facebook connected
+to Werka Mechanical Hitch with publishing disabled, and Google Ads available to
+connect but not connected. Live Calendar and Ads callback-state URLs reopen
+Connections. No OAuth flow, provider disconnect, post, event or ad action was
+initiated during verification.
+
+Verification passes: typecheck, lint, all 151 tests in 15 suites, production
+build, dependency audit with zero vulnerabilities, remote setup readiness and
+`git diff --check`. The landing, sign-in and workspace routes return HTTP 200;
+the post-deployment error-log window was empty. Google Ads API Center now shows
+Basic Access granted. Google Auth remains External / Testing with incomplete
+branding, and the Meta app remains in Development; those are still external
+customer blockers.
+
 ## Current release: public landing and intelligent onboarding
 
 The existing Next.js/Vercel application has separate `/`, `/sign-in`,
@@ -246,17 +273,15 @@ linked in CONNECTIONS.
   are installed in ignored local and hosted settings. The exact OAuth callback
   is saved. `pages_show_list`, `pages_read_engagement` and
   `pages_manage_posts` are ready for testing and selected in the login
-  configuration. `FACEBOOK_PUBLISHING_ENABLED=false` remains enforced. The
-  owner still needs to complete the in-app Facebook OAuth flow, select the exact
-  GreenVac Page and separately approve any test post. GreenVac business
-  verification/app review remain production blockers.
-- Google Ads production configuration is installed. Google received the Basic
-  Access application on 2026-09-01 for Cloud project `834544866435`, manager
-  account `644-561-3241` and reporting-only Tradie AI. The four-page design PDF
-  was attached. Review contact is `james@greenvac.com.au`; the authenticated
-  submitting identity is `j.w.coleman87@gmail.com`. GreenVac advertiser
-  `577-483-5580` remains unconnected pending approval and must eventually be
-  attached to the GreenVac Tradie AI workspace, not `Test 01 James`.
+  configuration. `FACEBOOK_PUBLISHING_ENABLED=false` is enforced in production.
+  The Sandbox workspace is connected to Werka Mechanical Hitch; do not reconnect
+  it unnecessarily or publish a test post. GreenVac business verification/app
+  review remain external-customer blockers.
+- Google Ads production configuration and Basic Access are installed. Google Ads
+  API Center showed Basic Access granted on 2026-09-02 for Cloud project
+  `834544866435` and manager account `644-561-3241`. GreenVac advertiser
+  `577-483-5580` remains unconnected and must eventually be attached to the
+  GreenVac Tradie AI workspace, not Sandbox/Test 01 James.
 
 OpenAI, Anthropic and Google client keys, Supabase URL/publishable/server keys and encryption secret already exist in
 ignored local `.env` and hosted settings. Do not print, overwrite, commit or
@@ -291,8 +316,8 @@ ChatGPT/Codex/Claude subscriptions do not supply backend API credits.
    Page from the returned list, then verify the connected record without posting.
    Get exact test-post approval before enabling publishing in any environment.
    Do not auto-enable production publishing or post to a business Page as a test.
-10. Wait for Google's Basic Access decision. After approval, use the GreenVac
-    Tradie AI workspace to consent, select advertiser `577-483-5580`, and verify
+10. Basic Access is granted. Use the GreenVac Tradie AI workspace to consent,
+    select advertiser `577-483-5580`, and verify
     the read-only report currency/time zone/period and manager context. Do not
     connect that advertiser to `Test 01 James`. Do not add spending mutations
     without new approved action schemas and budget-specific acceptance tests.
@@ -305,7 +330,7 @@ ChatGPT/Codex/Claude subscriptions do not supply backend API credits.
 
 ## Tests and limits
 
-Current verification: 143 automated tests in 14 suites; type check, lint, build
+Current verification: 151 automated tests in 15 suites; type check, lint, build
 and zero-finding audit pass locally. Tests use PGlite for real SQL/RLS,
 mocked provider/API services, and actual workerd request semantics. Real OpenAI
 routing/generation passed in workerd; latest Claude call reports a quota error.

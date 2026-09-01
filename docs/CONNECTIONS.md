@@ -172,14 +172,11 @@ reconciliation screen is not implemented.
 
 ## 5. Google Ads — read-only first release
 
-Live provider status (2026-09-01): production readiness passes with the Google
-OAuth client, encryption key and developer token configured. Google received the
-Basic Access application for Cloud project `834544866435` / `tradie-ai-507211`
-and manager account `644-561-3241`. It was submitted while authenticated as
-`j.w.coleman87@gmail.com`, with `james@greenvac.com.au` as the monitored review
-contact and the four-page read-only tool-design PDF attached. Google states that
-the initial review normally takes up to five business days. GreenVac advertiser
-`577-483-5580` is not connected while production access is pending.
+Live provider status (2026-09-02): production readiness passes with the Google
+OAuth client, encryption key and developer token configured. The Google Ads API
+Center now shows **Basic Access** for Cloud project `834544866435` /
+`tradie-ai-507211` and manager account `644-561-3241`; the prior review is no
+longer pending. GreenVac advertiser `577-483-5580` is still not connected.
 
 The GreenVac advertiser belongs in the future GreenVac Tradie AI workspace. Do
 not persist its OAuth credential in the current `Test 01 James` workspace merely
@@ -190,8 +187,8 @@ until those policies are accurate and hosted on a GreenVac-controlled domain.
 
 1. Enable Google Ads API in the intended [Google Cloud project](https://console.cloud.google.com/).
 2. Obtain a developer token through the manager account’s
-   [Google Ads API Center](https://ads.google.com/). Confirm whether its access
-   level permits test or production accounts. Set secret `GOOGLE_ADS_DEVELOPER_TOKEN`.
+   [Google Ads API Center](https://ads.google.com/). This project has Basic
+   Access. Set secret `GOOGLE_ADS_DEVELOPER_TOKEN`.
 3. Google Ads can reuse the Calendar OAuth client, but needs this additional
    redirect exactly:
    `https://tradie-ai-nine.vercel.app/api/integrations/google_ads/callback`.

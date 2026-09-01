@@ -1,5 +1,24 @@
 # Verification — 31 August 2026
 
+## Current connector return-path release — 2 September 2026
+
+Calendar, Facebook and Google Ads OAuth callbacks now return to `/workspace` and
+reopen Connections. Direct tests cover all three OAuth start callbacks, Calendar
+success/cancellation, Facebook and Ads cancellation, and the Ads account-picker
+return. The full gate passes: **151 tests in 15 suites**, typecheck, lint,
+production build, zero-vulnerability dependency audit and all five hosted schema
+readiness probes.
+
+Commit `b4b4fd2` is live on Vercel deployment
+`dpl_7abscesSp8smW9PqhMmu2eBWSmhD`; it is Ready and owns the stable
+`tradie-ai-nine.vercel.app` alias. Authenticated production QA confirmed Calendar
+connected, Facebook connected with publishing disabled, Google Ads ready but not
+connected, and both Calendar/Ads return states opening Connections. The
+production Sensitive variable `FACEBOOK_PUBLISHING_ENABLED` is explicitly false.
+No OAuth consent, disconnect, post, event or ad operation was performed. Google
+Ads Basic Access is granted; Google OAuth branding and Meta app review remain
+external-customer blockers. The deployment error-log window was empty.
+
 ## Current chat-audit repair (supersedes earlier runtime conclusions)
 
 Metadata-only reads confirmed four failed production runs with `AI_UNAVAILABLE`,
@@ -78,11 +97,11 @@ workspaces and the file were removed successfully without weakening audit/RLS.
 Fallback is validated with simulated quota/rate/service errors in both directions;
 real provider quota was not intentionally exhausted. Live image/PDF handling,
 full authenticated chat/approval UI acceptance, final Google account OAuth, Meta
-and Ads reporting are still outstanding. Google confirmed receipt of the
-reporting-only Basic Access application on 2026-09-01; production advertiser
-access remains pending review. No real Facebook post, advertising mutation or
-Calendar event was made. Keys supplied in chat must be rotated before customer
-onboarding.
+and Ads reporting are still outstanding. At this historical checkpoint Google
+had only confirmed receipt of the reporting-only Basic Access application; the
+current section above records the later grant. No real Facebook post, advertising
+mutation or Calendar event was made. Keys supplied in chat must be rotated before
+customer onboarding.
 
 Transport fix follows the supported structured-output subsets in the official
 [OpenAI](https://developers.openai.com/api/docs/guides/structured-outputs) and
