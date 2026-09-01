@@ -1,5 +1,12 @@
 # Workbench — continuation checkpoint for Claude or another engineer
 
+> **Current next-build handover (2 September 2026):** Read
+> [`HANDOVER-LANDING-ONBOARDING.md`](./HANDOVER-LANDING-ONBOARDING.md) before
+> starting new work. It contains James's locked-aesthetic direction and the
+> authoritative landing page/intelligent onboarding assignment. Where dated
+> operational statements below conflict with later provider receipts or that
+> handover, treat the newer evidence as authoritative.
+
 Updated 1 September 2026 (Australia/Sydney). Read this before making changes.
 Do not restart setup. See the current repair note and release checkpoint below.
 
