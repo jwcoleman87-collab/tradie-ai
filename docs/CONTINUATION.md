@@ -12,19 +12,22 @@ Do not restart setup. See the current repair note and release checkpoint below.
 
 ## Current release: public landing and intelligent onboarding
 
-The existing Next.js/Vercel application now has separate `/`, `/sign-in`,
-`/onboarding` and `/workspace` routes. The public landing page implements the
-approved Workbench system and describes only shipped product behaviour. Existing
-workspace visuals remain intact behind `/workspace`; signed-out workspace visits
-go to the dedicated sign-in route.
+The existing Next.js/Vercel application has separate `/`, `/sign-in`,
+`/onboarding` and `/workspace` routes. The public route is deliberately a
+single-screen branded entry point: one promise, one primary **Start with Magic**
+action and a quiet existing-owner sign-in link. It does not expose the crew,
+feature catalogue or product internals. Sign-up is one small account step before
+Magic takes over as the guide. Existing workspace visuals remain intact behind
+`/workspace`; signed-out workspace visits go to the dedicated sign-in route.
 
-Onboarding is a bounded, adaptive owner conversation with at most five prompts,
-followed by a **What Magic found** review. Facts retain their source and
-confidence, corrections remain owner-supplied, and confirmation is required
-before entering the workspace. Website, public-profile and registry research is
-an explicit unavailable adapter: the UI and API state that no external research
-ran rather than presenting guesses as discoveries. Onboarding performs no
-external actions.
+Onboarding is a focused, single-column Magic conversation with at most five
+adaptive prompts, followed by a **What Magic found** review. Secondary setup
+details are collapsed so the first screen contains only the guide, current
+question and answer composer. Facts retain their source and confidence,
+corrections remain owner-supplied, and confirmation is required before entering
+the workspace. Website, public-profile and registry research is an explicit
+unavailable adapter: the UI and API state that no external research ran rather
+than presenting guesses as discoveries. Onboarding performs no external actions.
 
 Migration `202609020007_intelligent_onboarding.sql` is applied and recorded in
 the hosted Supabase migration ledger. It adds tenant-scoped business profiles,
@@ -41,14 +44,14 @@ and `git diff --check`. Local browser QA passed on desktop and at 390px with no
 horizontal overflow or browser errors. Signed-out `/onboarding` and `/workspace`
 redirect correctly.
 
-Source commit `7a32ea4` was pushed and deployed to Vercel production as
-`dpl_E4bkQHcrt6oDcCa8T5a6Sb6DBuis`; the deployment reached Ready and the stable
+Source commit `97f6236` was pushed and deployed to Vercel production as
+`dpl_9P8aBPBQ3mL1ZoXGzz4JZ7wmuDtK`; the deployment reached Ready and the stable
 `https://tradie-ai-nine.vercel.app` alias points to it. Production browser checks
-passed for the landing page, both signed-out redirects, the existing authenticated
-workspace and the read-only first onboarding screen. No onboarding response or
-external action was submitted. The current deployment logged HTTP 200 for
-`/api/state` and `/api/onboarding`; its post-deployment log window contained no
-application errors or HTTP 500 responses.
+passed for the one-screen landing, focused sign-up path, both signed-out redirects,
+the existing authenticated workspace and the read-only first onboarding screen.
+The initial Magic screen fits without document scroll in the authenticated browser.
+No onboarding response or external action was submitted. Its post-deployment log
+window contained no application errors or HTTP 500 responses.
 
 ## Current release: Facebook photo publishing and password recovery
 
