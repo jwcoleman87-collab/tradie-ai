@@ -1,4 +1,4 @@
-# Tradie AI — continuation checkpoint for Claude or another engineer
+# Workbench — continuation checkpoint for Claude or another engineer
 
 Updated 1 September 2026 (Australia/Sydney). Read this before making changes.
 Do not restart setup. See the current repair note and release checkpoint below.
@@ -61,22 +61,24 @@ fixtures were removed; customer messages were untouched. Full interactive hosted
 chat/approval acceptance remains distinct from these checks and the real OpenAI
 test inside local workerd. No claim of live Calendar execution is made.
 
-## Logo update
+## Workbench brand update
 
-The owner selected the blue four-tile mark from their screenshot. It replaces
-the purple initial/sparkle branding in the header, welcome screen and favicon.
-`public/favicon.svg` is the shared crisp vector source; its colours match the
-reference. The existing three-panel purple/lilac theme is otherwise unchanged.
-The social preview `public/og.png` now includes the same mark beside the title.
-The selected branding is included in the live release.
+On 2 September 2026 the owner approved the Workbench identity. The primary
+source is `docs/brand/workbench-styleboard.png`; implementation tokens and logo
+rules are in `docs/brand/README.md`. The product language is **Crew → Magic Chat
+→ Workspace**, using the joined owner-and-crew mark, Workbench yellow, workshop
+ink/navy, Work Sans headings and Inter body copy. Do not restore the former blue
+tile logo or purple/lilac Tradie AI theme. Preserve legacy `tradie-ai` cloud,
+database, OAuth and repository identifiers until each can be migrated safely.
 
 ## User intent
 
-Continue the existing three-panel Tradie AI business team without redesigning it.
+Continue the existing three-panel Workbench product without rewriting its working
+architecture. Apply the approved Workbench brand system consistently.
 Complete real connections for OpenAI and Claude, Google Calendar, Facebook
 socials and Google Ads. OpenAI and Claude should back each other up if API quota
 or availability fails. Preserve private customer workspaces, managed Markdown
-agents, Proposed Actions, owner Accept/Deny, audit and privacy-safe Ask James.
+crew specialists, Proposed Actions, owner Accept/Deny, audit and privacy-safe Ask James.
 Do not pause for minor choices. Do not invent credentials, claim fake connections,
 publish posts or spend money without the appropriate exact approval.
 

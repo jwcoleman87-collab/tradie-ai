@@ -1,8 +1,8 @@
-# Tradie AI Workspace and Records Governance Standard
+# Workbench Workspace and Records Governance Standard
 
 **Status:** Approved product baseline
 
-**Owner:** Tradie AI product owner
+**Owner:** Workbench product owner
 
 **Review cycle:** Annual, and whenever legislation, integrations or record types change
 
@@ -10,7 +10,7 @@
 
 ## 1. Purpose
 
-Tradie AI separates current work from historical evidence without silently deleting business information. This standard follows the lifecycle principles of [ISO 15489-1:2016](https://www.iso.org/standard/62542.html): records must retain their business context and remain authentic, reliable, intact and usable over time.
+Workbench separates current work from historical evidence without silently deleting business information. This standard follows the lifecycle principles of [ISO 15489-1:2016](https://www.iso.org/standard/62542.html): records must retain their business context and remain authentic, reliable, intact and usable over time.
 
 This is a product and operating standard, not legal advice. GreenVac should confirm final retention periods with its accountant, employment adviser and insurer.
 
@@ -33,7 +33,7 @@ Additional brands or customers should receive separate workspaces when their rec
 2. **Closed/history** — a completed, denied or expired action; or a resolved support case. The system files it automatically and it remains readable.
 3. **Archived** — inactive workspace, conversation or record. It is read-only, excluded from normal working lists and can be restored. Archiving is not deletion.
 4. **Legal hold** — disposal is suspended regardless of the normal retention period. A hold remains until an authorised owner releases it.
-5. **Disposition review** — after the retention period, an authorised owner decides whether to retain, export, de-identify or destroy the record. Tradie AI does not yet perform automatic destruction.
+5. **Disposition review** — after the retention period, an authorised owner decides whether to retain, export, de-identify or destroy the record. Workbench does not yet perform automatic destruction.
 
 Archiving must be blocked while an AI request, approval or external action is still live. Every archive and restore operation creates an audit receipt.
 

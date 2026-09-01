@@ -1,12 +1,16 @@
-# Tradie AI
+# Workbench
 
-A V1 codebase for a managed business team: one conversation, five versioned
-agents, private customer workspaces, and explicit approval before execution.
+An AI crew for trades businesses: Magic Chat, five versioned specialists,
+private customer workspaces, and explicit owner approval before execution.
+
+The approved Workbench visual source, tokens and logo rules are stored in
+[`docs/brand`](docs/brand/README.md). Legacy cloud projects may retain their
+existing Tradie AI identifiers until they can be migrated safely.
 
 ## Delivery status
 
 Supabase Auth/Postgres/Storage and all five migrations are live. The private
-hosted app includes the selected blue four-tile logo, OpenAI + Claude backup,
+hosted app includes the approved Workbench identity, OpenAI + Claude backup,
 Facebook Page connections, approved single-photo publishing and read-only Google
 Ads reporting.
 
@@ -27,13 +31,11 @@ provider step. Rotate the secrets shared in chat before onboarding customer data
 Start with [the continuation checkpoint](docs/CONTINUATION.md),
 [connection setup](docs/CONNECTIONS.md) and [verification](docs/VERIFICATION.md).
 
-The original ChatGPT canvas source was not available in the referenced task,
-local files, Sites projects or GitHub repositories. This implementation follows
-the recovered visual brief: white/lilac/purple, rounded cards, left AI team,
-central independently scrolling chat with a bounded composer, and right review
-workspace. It is not claimed to be pixel-identical to the missing canvas. The UI
-is isolated in `components/workspace.tsx` and `app/workspace.css` so the original
-can be integrated without rebuilding the backend.
+The current interface follows the owner-approved Workbench styleboard: workshop
+ink/navy, selective Workbench yellow, a dark Crew rail, central Magic Chat and a
+light owner-review Workspace. Shared tokens live in `app/globals.css`; the
+Workbench application layer is in `app/workbench.css` and the working interface
+remains in `components/workspace.tsx`.
 
 ## Included
 
@@ -86,7 +88,7 @@ the internet. No credentials are committed.
 
 ### Supabase
 
-Use a dedicated **staging** Supabase project for Tradie AI. Do not point these
+Use a dedicated **staging** Supabase project for Workbench. Do not point these
 migrations at PaddockMe, GreenVac or another existing product database.
 
 ```sh
@@ -138,7 +140,7 @@ See [all provider variables and callbacks](docs/CONNECTIONS.md).
 3. Create a Web Application OAuth client. Allow exactly
    `https://YOUR_APP_ORIGIN/api/google/callback` and localhost for development.
 4. Configure the client credentials and encryption key on the backend.
-5. Sign in to Tradie AI and press **Connect** beside Google Calendar.
+5. Sign in to Workbench and press **Connect** beside Google Calendar.
 
 Scope: `https://www.googleapis.com/auth/calendar.events`. The app reads busy
 periods on the primary calendar for the next 14 days and creates events only

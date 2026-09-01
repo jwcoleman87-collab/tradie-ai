@@ -54,13 +54,13 @@ export function chatBlockedReason(
   availability: AIAvailability | undefined,
   busy: boolean,
 ): string {
-  if (!signedIn) return 'Sign in to message your team.';
-  if (!workspace) return 'Create your private workspace to message your team.';
+  if (!signedIn) return 'Sign in to message Magic.';
+  if (!workspace) return 'Create your Workbench to message Magic.';
   if (!workspace.ai_consent_at)
     return 'AI processing is off. Open Connections to choose your providers and enable it.';
   if (!availability || !eligibleAIProviders(workspace, availability).length)
     return 'No permitted AI provider is configured. Review AI providers in Connections.';
   return busy
-    ? 'Working on your request. Please wait before sending another message.'
+    ? 'Your crew is working. Please wait before sending another message.'
     : '';
 }

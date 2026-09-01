@@ -629,7 +629,7 @@ export const api = endpoint(async (request) => {
               agent: result.agents[0],
               category: result.escalation,
               problem:
-                'The AI team needs clarification or a specialist review. Please review this conversation in your private workspace.',
+                'The Workbench crew needs clarification or a specialist review. Please review this conversation in your private workspace.',
               created_by: user.id,
             }),
           );
