@@ -507,6 +507,143 @@ describe('migrations and tenant security on real PostgreSQL', () => {
     ).toHaveLength(1);
   });
 });
+describe('workspace lifecycle and reversible archives', () => {
+  it('creates separate business and sandbox workspaces for one owner', async () => {
+    const businessWorkspace = await call<string>('create_workspace', [
+      'GreenVac',
+      ownerA,
+      'business',
+    ]);
+    const sandboxWorkspace = await call<string>('create_workspace', [
+      'Sandbox — James',
+      ownerA,
+      'sandbox',
+    ]);
+    const rows = await asUser<{
+      id: string;
+      workspace_type: string;
+      status: string;
+    }>(
+      ownerA,
+      'select id,workspace_type,status from workspaces where id in ($1,$2) order by workspace_type',
+      [businessWorkspace, sandboxWorkspace],
+    );
+    expect(rows).toHaveLength(2);
+    expect(rows.map((row) => row.workspace_type).sort()).toEqual([
+      'business',
+      'sandbox',
+    ]);
+    expect(
+      (
+        await db.query(
+          'select id from conversations where workspace_id in ($1,$2)',
+          [businessWorkspace, sandboxWorkspace],
+        )
+      ).rows,
+    ).toHaveLength(2);
+  });
+  it('archives and restores a conversation without deleting its contents', async () => {
+    const workspace = await call<string>('create_workspace', [
+      'Archive fixture',
+      ownerA,
+      'sandbox',
+    ]);
+    const conversation = (
+      await db.query<{ id: string }>(
+        'select id from conversations where workspace_id=$1',
+        [workspace],
+      )
+    ).rows[0].id;
+    await db.query('update workspaces set ai_consent_at=now() where id=$1', [
+      workspace,
+    ]);
+    await call('set_conversation_status', [
+      workspace,
+      conversation,
+      ownerA,
+      'archived',
+    ]);
+    await expect(
+      call('begin_chat', [
+        workspace,
+        conversation,
+        ownerA,
+        id(),
+        'must not save',
+        [],
+      ]),
+    ).rejects.toThrow('CONVERSATION_ARCHIVED');
+    expect(
+      (
+        await db.query<{ status: string }>(
+          'select status from conversations where id=$1',
+          [conversation],
+        )
+      ).rows[0].status,
+    ).toBe('archived');
+    await call('set_conversation_status', [
+      workspace,
+      conversation,
+      ownerA,
+      'active',
+    ]);
+    expect(
+      (
+        await db.query<{ status: string }>(
+          'select status from conversations where id=$1',
+          [conversation],
+        )
+      ).rows[0].status,
+    ).toBe('active');
+  });
+  it('blocks workspace archiving while approval work is live, then restores it', async () => {
+    const workspace = await call<string>('create_workspace', [
+      'Lifecycle fixture',
+      ownerA,
+      'sandbox',
+    ]);
+    const conversation = (
+      await db.query<{ id: string }>(
+        'select id from conversations where workspace_id=$1',
+        [workspace],
+      )
+    ).rows[0].id;
+    const action = id();
+    await db.query(
+      "insert into proposed_actions(id,workspace_id,conversation_id,agent,action_type,summary,payload) values($1,$2,$3,'maintenance','record.create','Pending fixture',$4)",
+      [
+        action,
+        workspace,
+        conversation,
+        JSON.stringify({
+          kind: 'note',
+          title: 'Pending fixture',
+          body: 'This action must be decided before archiving.',
+        }),
+      ],
+    );
+    await expect(
+      call('set_workspace_status', [workspace, ownerA, 'archived']),
+    ).rejects.toThrow('ACTIVE_WORK_REMAINS');
+    await call('decide_action', [action, ownerA, 'deny']);
+    await call('set_workspace_status', [workspace, ownerA, 'archived']);
+    await expect(
+      db.query(
+        'insert into conversations(workspace_id,created_by) values($1,$2)',
+        [workspace, ownerA],
+      ),
+    ).rejects.toThrow('WORKSPACE_ARCHIVED');
+    await call('set_workspace_status', [workspace, ownerA, 'active']);
+    expect(
+      (
+        await db.query<{ event: string }>(
+          "select event from audit_logs where workspace_id=$1 and event like 'workspace.%' order by id",
+          [workspace],
+        )
+      ).rows.map((row) => row.event),
+    ).toEqual(['workspace.created', 'workspace.archived', 'workspace.active']);
+  });
+});
 describe('approval and execution state machine', () => {
   it('does not execute a pending or denied action', async () => {
     const a = await proposal();
