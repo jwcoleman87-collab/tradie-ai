@@ -28,6 +28,7 @@ import {
   Archive,
   RotateCcw,
   Building2,
+  TestTube2,
 } from 'lucide-react';
 import { authClient, requestApi, type ClientConfig } from '@/lib/client';
 import { supportPayload } from '@/lib/server/privacy';
@@ -77,6 +78,48 @@ const starters = [
   'Help me understand this invoice.',
   'Update the services on my website.',
 ];
+const workspaceSections = [
+  { id: 'actions', label: 'To do', group: 'work', icon: Check },
+  { id: 'files', label: 'Files', group: 'work', icon: FileText },
+  { id: 'records', label: 'Records', group: 'work', icon: Building2 },
+  { id: 'cases', label: 'Support', group: 'work', icon: LifeBuoy },
+  { id: 'connections', label: 'Connections', group: 'manage', icon: Globe },
+  { id: 'archive', label: 'History & archive', group: 'manage', icon: Archive },
+  { id: 'audit', label: 'Audit trail', group: 'manage', icon: ShieldCheck },
+] as const;
+const workspaceHeadings: Record<
+  string,
+  { title: string; description: string }
+> = {
+  actions: {
+    title: 'Work needing attention',
+    description: 'Review approvals, failures and work still in progress.',
+  },
+  files: {
+    title: 'Conversation files',
+    description: 'Private files attached to this conversation.',
+  },
+  records: {
+    title: 'Business records',
+    description: 'Useful business memory kept separately from the chat.',
+  },
+  cases: {
+    title: 'Support cases',
+    description: 'Ask James without exposing the whole workspace.',
+  },
+  connections: {
+    title: 'Connected accounts',
+    description: 'Connections belong only to this workspace.',
+  },
+  archive: {
+    title: 'History & archive',
+    description: 'Closed work stays available without cluttering current work.',
+  },
+  audit: {
+    title: 'Audit trail',
+    description: 'Receipts for AI requests, approvals and workspace changes.',
+  },
+};
 const messageOf = (e: unknown) =>
   e instanceof Error ? e.message : 'Something went wrong. Please try again.';
 type AuthView = 'sign-in' | 'reset-request' | 'password-recovery';
@@ -286,7 +329,9 @@ export default function Workspace() {
       if (!normalizedEmail) throw Error('Enter your email address first.');
       const { error } = await client.auth.resetPasswordForEmail(
         normalizedEmail,
-        { redirectTo: window.location.origin },
+        {
+          redirectTo: window.location.origin,
+        },
       );
       if (error) throw error;
       setAuthView('sign-in');
@@ -428,7 +473,9 @@ export default function Workspace() {
           token,
           `actions/${action.id}/decision`,
           'POST',
-          { decision },
+          {
+            decision,
+          },
         );
         if (result.status === 'approved')
           await requestApi(token, `actions/${action.id}/execute`, 'POST', {});
@@ -470,7 +517,24 @@ export default function Workspace() {
     archivedConversations =
       snapshot?.conversations.filter(
         (conversation) => conversation.status === 'archived',
-      ) || [];
+      ) || [],
+    filedCount =
+      actionHistory.length +
+      archivedRecords.length +
+      archivedConversations.length +
+      resolvedCases.length,
+    workspaceCounts: Record<string, number | undefined> = {
+      actions: activeActions.length,
+      files: snapshot?.uploads.length || 0,
+      records: activeRecords.length,
+      cases: activeCases.length,
+      connections: undefined,
+      archive: filedCount,
+      audit: snapshot?.audit.length || 0,
+    },
+    activeWorkspaceType = snapshot?.workspace.workspace_type || 'business',
+    activeWorkspaceHeading =
+      workspaceHeadings[view] || workspaceHeadings.actions;
   return (
     <main className="app-shell">
       <header className="topbar">
@@ -532,9 +596,29 @@ export default function Workspace() {
             Just talk. The right agents get to work.
           </p>
           {snapshot && (
-            <>
+            <div
+              className={`workspace-switcher-card ${snapshot.workspace.workspace_type}`}
+            >
+              <div className="workspace-switcher-heading">
+                <span className="workspace-kind-icon" aria-hidden="true">
+                  {snapshot.workspace.workspace_type === 'sandbox' ? (
+                    <TestTube2 size={18} />
+                  ) : (
+                    <Building2 size={18} />
+                  )}
+                </span>
+                <div>
+                  <span className="section-label">ACTIVE WORKSPACE</span>
+                  <strong>{snapshot.workspace.name}</strong>
+                </div>
+                <span className="workspace-kind-badge">
+                  {snapshot.workspace.workspace_type === 'sandbox'
+                    ? 'Sandbox'
+                    : 'Business'}
+                </span>
+              </div>
               <label className="sr-only" htmlFor="workspace-choice">
-                Private workspace
+                Switch private workspace
               </label>
               <select
                 id="workspace-choice"
@@ -575,14 +659,19 @@ export default function Workspace() {
                   </optgroup>
                 )}
               </select>
+              <p className="workspace-scope-note">
+                {snapshot.workspace.workspace_type === 'sandbox'
+                  ? 'Testing and learning only. Its work and connections stay separate from GreenVac.'
+                  : 'Live business work. Files, records and connections stay inside this workspace.'}
+              </p>
               <button
                 type="button"
                 className="workspace-manage-link"
                 onClick={() => chooseView('archive')}
               >
-                <Archive size={13} /> Manage workspaces & archive
+                Manage workspaces <span aria-hidden="true">→</span>
               </button>
-            </>
+            </div>
           )}
           <div className="team-list">
             {team.map(({ id, name, detail, icon: Icon }) => (
@@ -669,7 +758,35 @@ export default function Workspace() {
             </span>
           </div>
           {snapshot && authView !== 'password-recovery' && (
-            <div className="panel-controls px-5 pt-3">
+            <output
+              className={`workspace-context-strip ${activeWorkspaceType}`}
+            >
+              <span className="workspace-context-icon" aria-hidden="true">
+                {activeWorkspaceType === 'sandbox' ? (
+                  <TestTube2 size={17} />
+                ) : (
+                  <Building2 size={17} />
+                )}
+              </span>
+              <div>
+                <strong>
+                  {activeWorkspaceType === 'sandbox'
+                    ? 'Sandbox — testing only'
+                    : `${snapshot.workspace.name} business workspace`}
+                </strong>
+                <span>
+                  {activeWorkspaceType === 'sandbox'
+                    ? 'Nothing here carries into GreenVac unless you deliberately recreate it there.'
+                    : 'Use this space for live company conversations, files and connected accounts.'}
+                </span>
+              </div>
+              <span className="workspace-status-badge">
+                {snapshot.workspace.status}
+              </span>
+            </output>
+          )}
+          {snapshot && authView !== 'password-recovery' && (
+            <div className="conversation-toolbar">
               <select
                 aria-label="Conversation history"
                 className="workspace-select !mt-0 !w-auto max-w-[55%]"
@@ -713,7 +830,9 @@ export default function Workspace() {
                       token,
                       'conversations',
                       'POST',
-                      { workspaceId },
+                      {
+                        workspaceId,
+                      },
                     );
                     setSelectedFiles([]);
                     setText('');
@@ -1164,743 +1283,805 @@ export default function Workspace() {
           </p>
         </section>
         <aside className="actions-panel">
-          <div className="section-label">YOUR WORKSPACE</div>
-          <h2>
-            {view === 'connections'
-              ? 'Connected, on your terms.'
-              : view === 'cases'
-                ? 'A helping hand.'
-                : view === 'archive'
-                  ? 'Filed, traceable, restorable.'
-                  : view === 'records'
-                    ? 'Your business memory.'
-                    : view === 'audit'
-                      ? 'Every change, a receipt.'
-                      : 'Ready for your say-so.'}
-          </h2>
-          <p className="muted small">
-            {view === 'actions'
-              ? 'Only work that still needs attention.'
-              : view === 'archive'
-                ? 'Closed work stays out of the way without being deleted.'
-                : 'Private to your workspace.'}
-          </p>
-          <div className="panel-controls mt-4">
-            {[
-              'actions',
-              'files',
-              'records',
-              'cases',
-              'audit',
-              'connections',
-              'archive',
-            ].map((v) => (
-              <Button
-                key={v}
-                size="xs"
-                variant={view === v ? 'default' : 'ghost'}
-                onClick={() => setView(v)}
-              >
-                {v === 'cases'
-                  ? 'Ask James'
-                  : v === 'archive'
-                    ? 'Archive'
-                    : v[0].toUpperCase() + v.slice(1)}
-              </Button>
-            ))}
-          </div>
-          {view === 'connections' &&
-            snapshot &&
-            snapshot.workspace.status === 'active' &&
-            config && (
-              <ConnectionsPanel
-                key={workspaceId}
-                snapshot={snapshot}
-                config={config}
-                token={token}
-                onSaved={refresh}
-              />
-            )}
-          {view === 'connections' &&
-            snapshot?.workspace.status === 'archived' && (
-              <div className="empty-actions">
-                <Archive size={22} />
-                <h3>Workspace archived</h3>
-                <p>Restore it from Archive before changing connections.</p>
-              </div>
-            )}
-          {view === 'connections' && !snapshot && (
-            <p className="auth-hint">
-              Sign in and create your private workspace to manage connections.
-            </p>
-          )}
-          {view === 'audit' &&
-            snapshot?.runs.map((run, runIndex) => (
-              <article className="action-card" key={run.id}>
-                <h3>
-                  {runIndex === 0 ? 'Latest AI request' : 'AI request'} ·{' '}
-                  {run.status}
-                </h3>
-                <p className="auth-hint">
-                  {new Date(run.created_at).toLocaleString()}
-                </p>
-                {run.status === 'failed' && <p>{aiProblem(run.error_code)}</p>}
-                {run.status === 'working' && (
-                  <p>Reply pending. No proposed actions have been executed.</p>
-                )}
-                {run.provider_trace.map((r, i) => (
-                  <div key={i} className="mt-2">
-                    <p>
-                      {aiProviderLabel(r.provider)} · {r.model} ·{' '}
-                      {r.step || 'request'} · {r.status}
-                      {r.errorCode ? ` (${r.errorCode})` : ''}
-                    </p>
-                    {(r.httpStatus || r.elapsedMs !== undefined) && (
-                      <p className="auth-hint">
-                        {r.httpStatus
-                          ? `Provider HTTP ${r.httpStatus}`
-                          : 'No provider HTTP response'}
-                        {r.elapsedMs !== undefined
-                          ? ` · ${(r.elapsedMs / 1000).toFixed(1)}s`
-                          : ''}
-                      </p>
-                    )}
-                    {r.providerRequestId && (
-                      <p className="auth-hint break-all">
-                        Provider reference: {r.providerRequestId}
-                      </p>
-                    )}
-                  </div>
-                ))}
-                <p className="auth-hint break-all mt-2">Request: {run.id}</p>
-              </article>
-            ))}
-          {view === 'actions' && (
-            <>
-              {!activeActions.length && (
-                <div className="empty-actions">
-                  <span className="agent-icon">
-                    <CalendarDays size={23} />
-                  </span>
-                  <h3>You’re in control.</h3>
-                  <p>
-                    Proposed bookings, drafts and updates appear here. Review
-                    the details, then Accept or Deny.
-                  </p>
-                  <span className="outline-pill">
-                    Nothing awaiting approval
-                  </span>
-                </div>
-              )}
-              {activeActions.map((a) => (
-                <ActionCard
-                  key={a.id}
-                  action={a}
-                  token={token}
-                  imageFile={snapshot?.uploads.find(
-                    (file) => file.id === a.payload.imageFileId,
-                  )}
-                  disabled={
-                    busy || !owner || snapshot?.workspace.status === 'archived'
-                  }
-                  onDecision={(d) => decide(a, d)}
-                  onRetry={() =>
-                    perform(async () => {
-                      try {
-                        await requestApi(
-                          token,
-                          `actions/${a.id}/execute`,
-                          'POST',
-                          {},
-                        );
-                      } finally {
-                        await refresh();
-                      }
-                    })
-                  }
-                />
-              ))}
-            </>
-          )}
-          {view === 'files' && (
-            <div className="file-list">
-              <p className="auth-hint">
-                Up to four files per message; 10 MB each. Select only the files
-                your team needs.
-              </p>
-              {snapshot?.uploads.map((f) => (
-                <FileCard
-                  key={f.id}
-                  file={f}
-                  token={token}
-                  selected={selectedFiles.includes(f.id)}
-                  onSelect={() =>
-                    setSelectedFiles((p) =>
-                      p.includes(f.id)
-                        ? p.filter((id) => id !== f.id)
-                        : [...p, f.id].slice(-4),
-                    )
-                  }
-                />
-              ))}
-              {!snapshot?.uploads.length && (
-                <p className="muted mt-4">
-                  Attach your first photo or document using +.
-                </p>
-              )}
+          <div className="workspace-panel-intro">
+            <div className="section-label">
+              {snapshot?.workspace.name || 'YOUR WORKSPACE'}
             </div>
-          )}
-          {view === 'records' && (
-            <>
-              {!activeRecords.length && (
+            <h2>{activeWorkspaceHeading.title}</h2>
+            <p className="muted small">{activeWorkspaceHeading.description}</p>
+          </div>
+          <div
+            className="workspace-summary-grid"
+            aria-label="Workspace summary"
+          >
+            <button type="button" onClick={() => setView('actions')}>
+              <strong>{activeActions.length}</strong>
+              <span>Need attention</span>
+            </button>
+            <button type="button" onClick={() => setView('records')}>
+              <strong>{activeRecords.length}</strong>
+              <span>Active records</span>
+            </button>
+            <button type="button" onClick={() => setView('archive')}>
+              <strong>{filedCount}</strong>
+              <span>Filed away</span>
+            </button>
+          </div>
+          <nav
+            className="workspace-section-nav"
+            aria-label="Workspace sections"
+          >
+            <div className="workspace-nav-group">
+              <span className="workspace-nav-label">CURRENT WORK</span>
+              <div className="workspace-nav-items">
+                {workspaceSections
+                  .filter((section) => section.group === 'work')
+                  .map(({ id, label, icon: Icon }) => (
+                    <button
+                      key={id}
+                      type="button"
+                      className={view === id ? 'active' : ''}
+                      aria-current={view === id ? 'page' : undefined}
+                      onClick={() => setView(id)}
+                    >
+                      <Icon size={15} />
+                      <span>{label}</span>
+                      <span className="workspace-nav-count">
+                        {workspaceCounts[id]}
+                      </span>
+                    </button>
+                  ))}
+              </div>
+            </div>
+            <div className="workspace-nav-group">
+              <span className="workspace-nav-label">MANAGE & REVIEW</span>
+              <div className="workspace-nav-items">
+                {workspaceSections
+                  .filter((section) => section.group === 'manage')
+                  .map(({ id, label, icon: Icon }) => (
+                    <button
+                      key={id}
+                      type="button"
+                      className={view === id ? 'active' : ''}
+                      aria-current={view === id ? 'page' : undefined}
+                      onClick={() => setView(id)}
+                    >
+                      <Icon size={15} />
+                      <span>{label}</span>
+                      {workspaceCounts[id] !== undefined && (
+                        <span className="workspace-nav-count">
+                          {workspaceCounts[id]}
+                        </span>
+                      )}
+                    </button>
+                  ))}
+              </div>
+            </div>
+          </nav>
+          <div className="workspace-view-body">
+            {view === 'connections' &&
+              snapshot &&
+              snapshot.workspace.status === 'active' &&
+              config && (
+                <ConnectionsPanel
+                  key={workspaceId}
+                  snapshot={snapshot}
+                  config={config}
+                  token={token}
+                  onSaved={refresh}
+                />
+              )}
+            {view === 'connections' &&
+              snapshot?.workspace.status === 'archived' && (
                 <div className="empty-actions">
-                  <h3>Start with what you know.</h3>
-                  <p>
-                    Tell your team about a machine, customer, invoice or
-                    service. Review and accept the proposed record to save it
-                    here.
-                  </p>
+                  <Archive size={22} />
+                  <h3>Workspace archived</h3>
+                  <p>Restore it from Archive before changing connections.</p>
                 </div>
               )}
-              {activeRecords.map((r) => (
-                <article className="action-card" key={r.id}>
-                  <span className="section-label">
-                    {r.kind} ·{' '}
-                    {r.source === 'approved_ai_draft'
-                      ? 'AI DRAFT'
-                      : 'OWNER SUPPLIED'}
-                  </span>
-                  <h3>{r.title}</h3>
-                  <p>{r.body}</p>
-                  {owner && (
-                    <Button
-                      size="xs"
-                      variant="outline"
-                      disabled={
-                        busy ||
-                        r.legal_hold ||
-                        snapshot?.workspace.status === 'archived'
-                      }
-                      onClick={() =>
-                        perform(async () => {
-                          await requestApi(
-                            token,
-                            `records/${r.id}/status`,
-                            'PATCH',
-                            { workspaceId, status: 'archived' },
-                          );
-                          await refresh();
-                        })
-                      }
-                    >
-                      <Archive size={13} /> Archive record
-                    </Button>
+            {view === 'connections' && !snapshot && (
+              <p className="auth-hint">
+                Sign in and create your private workspace to manage connections.
+              </p>
+            )}
+            {view === 'audit' &&
+              snapshot?.runs.map((run, runIndex) => (
+                <article className="action-card" key={run.id}>
+                  <h3>
+                    {runIndex === 0 ? 'Latest AI request' : 'AI request'} ·{' '}
+                    {run.status}
+                  </h3>
+                  <p className="auth-hint">
+                    {new Date(run.created_at).toLocaleString()}
+                  </p>
+                  {run.status === 'failed' && (
+                    <p>{aiProblem(run.error_code)}</p>
                   )}
+                  {run.status === 'working' && (
+                    <p>
+                      Reply pending. No proposed actions have been executed.
+                    </p>
+                  )}
+                  {run.provider_trace.map((r, i) => (
+                    <div key={i} className="mt-2">
+                      <p>
+                        {aiProviderLabel(r.provider)} · {r.model} ·{' '}
+                        {r.step || 'request'} · {r.status}
+                        {r.errorCode ? ` (${r.errorCode})` : ''}
+                      </p>
+                      {(r.httpStatus || r.elapsedMs !== undefined) && (
+                        <p className="auth-hint">
+                          {r.httpStatus
+                            ? `Provider HTTP ${r.httpStatus}`
+                            : 'No provider HTTP response'}
+                          {r.elapsedMs !== undefined
+                            ? ` · ${(r.elapsedMs / 1000).toFixed(1)}s`
+                            : ''}
+                        </p>
+                      )}
+                      {r.providerRequestId && (
+                        <p className="auth-hint break-all">
+                          Provider reference: {r.providerRequestId}
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                  <p className="auth-hint break-all mt-2">Request: {run.id}</p>
                 </article>
               ))}
-            </>
-          )}
-          {view === 'audit' && (
-            <>
-              {snapshot?.audit.map((a) => (
-                <div className="audit-item" key={a.id}>
-                  {a.event.replaceAll('.', ' · ')}
-                  {a.errorCode && (
+            {view === 'actions' && (
+              <>
+                {!activeActions.length && (
+                  <div className="empty-actions">
+                    <span className="agent-icon">
+                      <CalendarDays size={23} />
+                    </span>
+                    <h3>You’re in control.</h3>
                     <p>
-                      {aiProblem(a.errorCode)} ({a.errorCode})
+                      Proposed bookings, drafts and updates appear here. Review
+                      the details, then Accept or Deny.
                     </p>
-                  )}
-                  <br />
-                  <span className="muted">
-                    {new Date(a.created_at).toLocaleString()}
-                  </span>
-                </div>
-              ))}
-              {!snapshot?.audit.length && (
-                <p className="muted mt-4">
-                  Your workspace receipts will appear here.
-                </p>
-              )}
-            </>
-          )}
-          {view === 'cases' && (
-            <>
-              <form
-                className="case-form"
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  void perform(async () => {
-                    const c = await requestApi<Escalation>(
-                      token,
-                      'cases',
-                      'POST',
-                      {
-                        workspaceId,
-                        conversationId: snapshot?.conversationId || null,
-                        agent: caseAgent,
-                        category,
-                        problem,
-                        shareWithSupport: share,
-                      },
-                    );
-                    setProblem('');
-                    setShare(false);
-                    setNotice(
-                      `${c.case_id} saved. ${c.shared_with_support ? 'A limited summary is in the support queue. No email or conversation was sent.' : 'This case is private; it has not been sent to support.'}`,
-                    );
-                    await refresh();
-                  });
-                }}
-              >
-                <label className="auth-hint">
-                  Agent
-                  <select
-                    aria-label="Case agent"
-                    className="workspace-select !mt-1"
-                    value={caseAgent}
-                    onChange={(e) => setCaseAgent(e.target.value as AgentName)}
-                  >
-                    {team.map((a) => (
-                      <option key={a.id} value={a.id}>
-                        {a.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <select
-                  aria-label="Case category"
-                  className="workspace-select !mt-0"
-                  value={category}
-                  onChange={(e) => setCategory(e.target.value)}
-                >
-                  <option value="general">General help</option>
-                  <option value="missing_information">
-                    Missing information or approval
-                  </option>
-                  <option value="integration_error">Connection problem</option>
-                  <option value="safety_review">Safety review</option>
-                </select>
-                <Textarea
-                  aria-label="Private problem description"
-                  placeholder="What do you need help with? (kept private)"
-                  value={problem}
-                  maxLength={2000}
-                  onChange={(e) => setProblem(e.target.value)}
-                  required
-                />
-                <label className="auth-hint flex gap-2">
-                  <input
-                    type="checkbox"
-                    checked={share}
-                    onChange={(e) => setShare(e.target.checked)}
-                  />
-                  Share a limited summary with Ask James
-                </label>
-                {share && (
-                  <p className="auth-hint">
-                    Support sees: Case ID, {caseAgent},{' '}
-                    {category.replaceAll('_', ' ')}, and “
-                    {supportPayload('preview', caseAgent, category).problem}” —
-                    no problem text, conversation or files.
-                  </p>
-                )}
-                <Button
-                  type="submit"
-                  disabled={
-                    !owner ||
-                    busy ||
-                    !problem.trim() ||
-                    snapshot?.workspace.status === 'archived'
-                  }
-                >
-                  Create case
-                </Button>
-              </form>
-              {activeCases.map((c) => (
-                <CaseCard
-                  key={c.id}
-                  value={c}
-                  disabled={!owner || busy}
-                  onResolve={(solution, outcome) =>
-                    perform(async () => {
-                      await requestApi(token, `cases/${c.id}`, 'PATCH', {
-                        solution,
-                        outcome,
-                      });
-                      await refresh();
-                    })
-                  }
-                />
-              ))}
-            </>
-          )}
-          {view === 'archive' && snapshot && (
-            <div className="archive-stack">
-              <article className="archive-policy-card">
-                <Archive size={20} />
-                <div>
-                  <h3>Archive, don’t delete</h3>
-                  <p>
-                    Archived work is read-only, searchable and restorable.
-                    Approval and audit receipts are always retained separately.
-                  </p>
-                </div>
-              </article>
-
-              <section className="archive-section">
-                <span className="section-label">CURRENT WORKSPACE</span>
-                <form
-                  className="archive-form"
-                  onSubmit={(event) => {
-                    event.preventDefault();
-                    void perform(async () => {
-                      await requestApi(
-                        token,
-                        `workspaces/${workspaceId}`,
-                        'PATCH',
-                        {
-                          name: workspaceName,
-                          workspaceType: snapshot.workspace.workspace_type,
-                        },
-                      );
-                      await refresh();
-                      setNotice('Workspace details saved.');
-                    });
-                  }}
-                >
-                  <label htmlFor="current-workspace-name">
-                    Workspace name
-                    <Input
-                      id="current-workspace-name"
-                      value={workspaceName}
-                      maxLength={120}
-                      disabled={!owner || busy}
-                      onChange={(event) => setWorkspaceName(event.target.value)}
-                    />
-                  </label>
-                  <label>
-                    Purpose
-                    <select
-                      className="workspace-select !mt-1"
-                      value={snapshot.workspace.workspace_type}
-                      disabled={!owner || busy}
-                      onChange={(event) =>
-                        void perform(async () => {
-                          await requestApi(
-                            token,
-                            `workspaces/${workspaceId}`,
-                            'PATCH',
-                            {
-                              name: workspaceName || snapshot.workspace.name,
-                              workspaceType: event.target.value,
-                            },
-                          );
-                          await refresh();
-                        })
-                      }
-                    >
-                      <option value="business">Business operations</option>
-                      <option value="sandbox">Sandbox / learning</option>
-                    </select>
-                  </label>
-                  <div className="button-row">
-                    <Button
-                      type="submit"
-                      size="sm"
-                      disabled={!owner || busy || !workspaceName.trim()}
-                    >
-                      Save details
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      disabled={!owner || busy}
-                      onClick={() =>
-                        perform(async () => {
-                          const status =
-                            snapshot.workspace.status === 'active'
-                              ? 'archived'
-                              : 'active';
-                          await requestApi(
-                            token,
-                            `workspaces/${workspaceId}/status`,
-                            'PATCH',
-                            { status },
-                          );
-                          await refresh(
-                            status === 'active' ? workspaceId : '',
-                            '',
-                          );
-                          setNotice(
-                            status === 'active'
-                              ? 'Workspace restored.'
-                              : 'Workspace archived. Nothing was deleted.',
-                          );
-                        })
-                      }
-                    >
-                      {snapshot.workspace.status === 'active' ? (
-                        <>
-                          <Archive size={14} /> Archive workspace
-                        </>
-                      ) : (
-                        <>
-                          <RotateCcw size={14} /> Restore workspace
-                        </>
-                      )}
-                    </Button>
+                    <span className="outline-pill">
+                      Nothing awaiting approval
+                    </span>
                   </div>
-                </form>
-              </section>
-
-              <section className="archive-section">
-                <span className="section-label">NEW WORKSPACE</span>
-                <form
-                  className="archive-form"
-                  onSubmit={(event) => {
-                    event.preventDefault();
-                    void perform(async () => {
-                      const created = await requestApi<{ id: string }>(
-                        token,
-                        'workspaces',
-                        'POST',
-                        {
-                          name: newWorkspaceName,
-                          workspaceType: newWorkspaceType,
-                        },
-                      );
-                      setNewWorkspaceName('');
-                      await refresh(created.id, '');
-                      setNotice(
-                        'Workspace created. Connections and private records start separate by design.',
-                      );
-                    });
-                  }}
-                >
-                  <label htmlFor="new-workspace-name">
-                    Name
-                    <Input
-                      id="new-workspace-name"
-                      placeholder="e.g. GreenVac"
-                      value={newWorkspaceName}
-                      maxLength={120}
-                      disabled={!owner || busy}
-                      onChange={(event) =>
-                        setNewWorkspaceName(event.target.value)
-                      }
-                    />
-                  </label>
-                  <label>
-                    Purpose
-                    <select
-                      className="workspace-select !mt-1"
-                      value={newWorkspaceType}
-                      disabled={!owner || busy}
-                      onChange={(event) =>
-                        setNewWorkspaceType(
-                          event.target.value as 'business' | 'sandbox',
-                        )
-                      }
-                    >
-                      <option value="business">Business operations</option>
-                      <option value="sandbox">Sandbox / learning</option>
-                    </select>
-                  </label>
-                  <Button
-                    type="submit"
-                    size="sm"
-                    disabled={!owner || busy || !newWorkspaceName.trim()}
-                  >
-                    <Building2 size={14} /> Create separate workspace
-                  </Button>
-                </form>
-              </section>
-
-              <section className="archive-section">
-                <span className="section-label">ARCHIVED CONVERSATIONS</span>
-                {!archivedConversations.length && (
-                  <p className="auth-hint">No archived conversations.</p>
                 )}
-                {archivedConversations.map((conversation) => (
-                  <article className="archive-row" key={conversation.id}>
-                    <div>
-                      <h3>{conversation.title}</h3>
-                      <p>
-                        {new Date(conversation.created_at).toLocaleDateString()}
-                      </p>
-                    </div>
-                    <div className="button-row">
-                      <Button
-                        size="xs"
-                        variant="ghost"
-                        disabled={busy}
-                        onClick={() =>
-                          perform(async () => {
-                            await refresh(workspaceId, conversation.id);
-                            setMobile('chat');
-                          })
+                {activeActions.map((a) => (
+                  <ActionCard
+                    key={a.id}
+                    action={a}
+                    token={token}
+                    imageFile={snapshot?.uploads.find(
+                      (file) => file.id === a.payload.imageFileId,
+                    )}
+                    disabled={
+                      busy ||
+                      !owner ||
+                      snapshot?.workspace.status === 'archived'
+                    }
+                    onDecision={(d) => decide(a, d)}
+                    onRetry={() =>
+                      perform(async () => {
+                        try {
+                          await requestApi(
+                            token,
+                            `actions/${a.id}/execute`,
+                            'POST',
+                            {},
+                          );
+                        } finally {
+                          await refresh();
                         }
-                      >
-                        Open read-only
-                      </Button>
+                      })
+                    }
+                  />
+                ))}
+              </>
+            )}
+            {view === 'files' && (
+              <div className="file-list">
+                <p className="auth-hint">
+                  Up to four files per message; 10 MB each. Select only the
+                  files your team needs.
+                </p>
+                {snapshot?.uploads.map((f) => (
+                  <FileCard
+                    key={f.id}
+                    file={f}
+                    token={token}
+                    selected={selectedFiles.includes(f.id)}
+                    onSelect={() =>
+                      setSelectedFiles((p) =>
+                        p.includes(f.id)
+                          ? p.filter((id) => id !== f.id)
+                          : [...p, f.id].slice(-4),
+                      )
+                    }
+                  />
+                ))}
+                {!snapshot?.uploads.length && (
+                  <p className="muted mt-4">
+                    Attach your first photo or document using +.
+                  </p>
+                )}
+              </div>
+            )}
+            {view === 'records' && (
+              <>
+                {!activeRecords.length && (
+                  <div className="empty-actions">
+                    <h3>Start with what you know.</h3>
+                    <p>
+                      Tell your team about a machine, customer, invoice or
+                      service. Review and accept the proposed record to save it
+                      here.
+                    </p>
+                  </div>
+                )}
+                {activeRecords.map((r) => (
+                  <article className="action-card" key={r.id}>
+                    <span className="section-label">
+                      {r.kind} ·{' '}
+                      {r.source === 'approved_ai_draft'
+                        ? 'AI DRAFT'
+                        : 'OWNER SUPPLIED'}
+                    </span>
+                    <h3>{r.title}</h3>
+                    <p>{r.body}</p>
+                    {owner && (
                       <Button
                         size="xs"
                         variant="outline"
                         disabled={
-                          !owner ||
                           busy ||
-                          snapshot.workspace.status === 'archived'
+                          r.legal_hold ||
+                          snapshot?.workspace.status === 'archived'
                         }
                         onClick={() =>
                           perform(async () => {
                             await requestApi(
                               token,
-                              `conversations/${conversation.id}/status`,
+                              `records/${r.id}/status`,
                               'PATCH',
-                              { workspaceId, status: 'active' },
+                              {
+                                workspaceId,
+                                status: 'archived',
+                              },
                             );
-                            await refresh(workspaceId, conversation.id);
+                            await refresh();
+                          })
+                        }
+                      >
+                        <Archive size={13} /> Archive record
+                      </Button>
+                    )}
+                  </article>
+                ))}
+              </>
+            )}
+            {view === 'audit' && (
+              <>
+                {snapshot?.audit.map((a) => (
+                  <div className="audit-item" key={a.id}>
+                    {a.event.replaceAll('.', ' · ')}
+                    {a.errorCode && (
+                      <p>
+                        {aiProblem(a.errorCode)} ({a.errorCode})
+                      </p>
+                    )}
+                    <br />
+                    <span className="muted">
+                      {new Date(a.created_at).toLocaleString()}
+                    </span>
+                  </div>
+                ))}
+                {!snapshot?.audit.length && (
+                  <p className="muted mt-4">
+                    Your workspace receipts will appear here.
+                  </p>
+                )}
+              </>
+            )}
+            {view === 'cases' && (
+              <>
+                <form
+                  className="case-form"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    void perform(async () => {
+                      const c = await requestApi<Escalation>(
+                        token,
+                        'cases',
+                        'POST',
+                        {
+                          workspaceId,
+                          conversationId: snapshot?.conversationId || null,
+                          agent: caseAgent,
+                          category,
+                          problem,
+                          shareWithSupport: share,
+                        },
+                      );
+                      setProblem('');
+                      setShare(false);
+                      setNotice(
+                        `${c.case_id} saved. ${c.shared_with_support ? 'A limited summary is in the support queue. No email or conversation was sent.' : 'This case is private; it has not been sent to support.'}`,
+                      );
+                      await refresh();
+                    });
+                  }}
+                >
+                  <label className="auth-hint">
+                    Agent
+                    <select
+                      aria-label="Case agent"
+                      className="workspace-select !mt-1"
+                      value={caseAgent}
+                      onChange={(e) =>
+                        setCaseAgent(e.target.value as AgentName)
+                      }
+                    >
+                      {team.map((a) => (
+                        <option key={a.id} value={a.id}>
+                          {a.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <select
+                    aria-label="Case category"
+                    className="workspace-select !mt-0"
+                    value={category}
+                    onChange={(e) => setCategory(e.target.value)}
+                  >
+                    <option value="general">General help</option>
+                    <option value="missing_information">
+                      Missing information or approval
+                    </option>
+                    <option value="integration_error">
+                      Connection problem
+                    </option>
+                    <option value="safety_review">Safety review</option>
+                  </select>
+                  <Textarea
+                    aria-label="Private problem description"
+                    placeholder="What do you need help with? (kept private)"
+                    value={problem}
+                    maxLength={2000}
+                    onChange={(e) => setProblem(e.target.value)}
+                    required
+                  />
+                  <label className="auth-hint flex gap-2">
+                    <input
+                      type="checkbox"
+                      checked={share}
+                      onChange={(e) => setShare(e.target.checked)}
+                    />
+                    Share a limited summary with Ask James
+                  </label>
+                  {share && (
+                    <p className="auth-hint">
+                      Support sees: Case ID, {caseAgent},{' '}
+                      {category.replaceAll('_', ' ')}, and “
+                      {supportPayload('preview', caseAgent, category).problem}”
+                      — no problem text, conversation or files.
+                    </p>
+                  )}
+                  <Button
+                    type="submit"
+                    disabled={
+                      !owner ||
+                      busy ||
+                      !problem.trim() ||
+                      snapshot?.workspace.status === 'archived'
+                    }
+                  >
+                    Create case
+                  </Button>
+                </form>
+                {activeCases.map((c) => (
+                  <CaseCard
+                    key={c.id}
+                    value={c}
+                    disabled={!owner || busy}
+                    onResolve={(solution, outcome) =>
+                      perform(async () => {
+                        await requestApi(token, `cases/${c.id}`, 'PATCH', {
+                          solution,
+                          outcome,
+                        });
+                        await refresh();
+                      })
+                    }
+                  />
+                ))}
+              </>
+            )}
+            {view === 'archive' && snapshot && (
+              <div className="archive-stack">
+                <article className="archive-policy-card">
+                  <Archive size={20} />
+                  <div>
+                    <h3>Archive, don’t delete</h3>
+                    <p>
+                      Archived work is read-only, searchable and restorable.
+                      Approval and audit receipts are always retained
+                      separately.
+                    </p>
+                  </div>
+                </article>
+
+                <section className="archive-section">
+                  <span className="section-label">CURRENT WORKSPACE</span>
+                  <form
+                    className="archive-form"
+                    onSubmit={(event) => {
+                      event.preventDefault();
+                      void perform(async () => {
+                        await requestApi(
+                          token,
+                          `workspaces/${workspaceId}`,
+                          'PATCH',
+                          {
+                            name: workspaceName,
+                            workspaceType: snapshot.workspace.workspace_type,
+                          },
+                        );
+                        await refresh();
+                        setNotice('Workspace details saved.');
+                      });
+                    }}
+                  >
+                    <label htmlFor="current-workspace-name">
+                      Workspace name
+                      <Input
+                        id="current-workspace-name"
+                        value={workspaceName}
+                        maxLength={120}
+                        disabled={!owner || busy}
+                        onChange={(event) =>
+                          setWorkspaceName(event.target.value)
+                        }
+                      />
+                    </label>
+                    <label>
+                      Purpose
+                      <select
+                        className="workspace-select !mt-1"
+                        value={snapshot.workspace.workspace_type}
+                        disabled={!owner || busy}
+                        onChange={(event) =>
+                          void perform(async () => {
+                            await requestApi(
+                              token,
+                              `workspaces/${workspaceId}`,
+                              'PATCH',
+                              {
+                                name: workspaceName || snapshot.workspace.name,
+                                workspaceType: event.target.value,
+                              },
+                            );
+                            await refresh();
+                          })
+                        }
+                      >
+                        <option value="business">Business operations</option>
+                        <option value="sandbox">Sandbox / learning</option>
+                      </select>
+                    </label>
+                    <div className="button-row">
+                      <Button
+                        type="submit"
+                        size="sm"
+                        disabled={!owner || busy || !workspaceName.trim()}
+                      >
+                        Save details
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        disabled={!owner || busy}
+                        onClick={() =>
+                          perform(async () => {
+                            const status =
+                              snapshot.workspace.status === 'active'
+                                ? 'archived'
+                                : 'active';
+                            await requestApi(
+                              token,
+                              `workspaces/${workspaceId}/status`,
+                              'PATCH',
+                              {
+                                status,
+                              },
+                            );
+                            await refresh(
+                              status === 'active' ? workspaceId : '',
+                              '',
+                            );
+                            setNotice(
+                              status === 'active'
+                                ? 'Workspace restored.'
+                                : 'Workspace archived. Nothing was deleted.',
+                            );
+                          })
+                        }
+                      >
+                        {snapshot.workspace.status === 'active' ? (
+                          <>
+                            <Archive size={14} /> Archive workspace
+                          </>
+                        ) : (
+                          <>
+                            <RotateCcw size={14} /> Restore workspace
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  </form>
+                </section>
+
+                <section className="archive-section">
+                  <span className="section-label">NEW WORKSPACE</span>
+                  <form
+                    className="archive-form"
+                    onSubmit={(event) => {
+                      event.preventDefault();
+                      void perform(async () => {
+                        const created = await requestApi<{ id: string }>(
+                          token,
+                          'workspaces',
+                          'POST',
+                          {
+                            name: newWorkspaceName,
+                            workspaceType: newWorkspaceType,
+                          },
+                        );
+                        setNewWorkspaceName('');
+                        await refresh(created.id, '');
+                        setNotice(
+                          'Workspace created. Connections and private records start separate by design.',
+                        );
+                      });
+                    }}
+                  >
+                    <label htmlFor="new-workspace-name">
+                      Name
+                      <Input
+                        id="new-workspace-name"
+                        placeholder="e.g. GreenVac"
+                        value={newWorkspaceName}
+                        maxLength={120}
+                        disabled={!owner || busy}
+                        onChange={(event) =>
+                          setNewWorkspaceName(event.target.value)
+                        }
+                      />
+                    </label>
+                    <label>
+                      Purpose
+                      <select
+                        className="workspace-select !mt-1"
+                        value={newWorkspaceType}
+                        disabled={!owner || busy}
+                        onChange={(event) =>
+                          setNewWorkspaceType(
+                            event.target.value as 'business' | 'sandbox',
+                          )
+                        }
+                      >
+                        <option value="business">Business operations</option>
+                        <option value="sandbox">Sandbox / learning</option>
+                      </select>
+                    </label>
+                    <Button
+                      type="submit"
+                      size="sm"
+                      disabled={!owner || busy || !newWorkspaceName.trim()}
+                    >
+                      <Building2 size={14} /> Create separate workspace
+                    </Button>
+                  </form>
+                </section>
+
+                <section className="archive-section">
+                  <span className="section-label">ARCHIVED CONVERSATIONS</span>
+                  {!archivedConversations.length && (
+                    <p className="auth-hint">No archived conversations.</p>
+                  )}
+                  {archivedConversations.map((conversation) => (
+                    <article className="archive-row" key={conversation.id}>
+                      <div>
+                        <h3>{conversation.title}</h3>
+                        <p>
+                          {new Date(
+                            conversation.created_at,
+                          ).toLocaleDateString()}
+                        </p>
+                      </div>
+                      <div className="button-row">
+                        <Button
+                          size="xs"
+                          variant="ghost"
+                          disabled={busy}
+                          onClick={() =>
+                            perform(async () => {
+                              await refresh(workspaceId, conversation.id);
+                              setMobile('chat');
+                            })
+                          }
+                        >
+                          Open read-only
+                        </Button>
+                        <Button
+                          size="xs"
+                          variant="outline"
+                          disabled={
+                            !owner ||
+                            busy ||
+                            snapshot.workspace.status === 'archived'
+                          }
+                          onClick={() =>
+                            perform(async () => {
+                              await requestApi(
+                                token,
+                                `conversations/${conversation.id}/status`,
+                                'PATCH',
+                                { workspaceId, status: 'active' },
+                              );
+                              await refresh(workspaceId, conversation.id);
+                            })
+                          }
+                        >
+                          <RotateCcw size={13} /> Restore
+                        </Button>
+                      </div>
+                    </article>
+                  ))}
+                </section>
+
+                <section className="archive-section">
+                  <span className="section-label">ACTION HISTORY</span>
+                  {!actionHistory.length && (
+                    <p className="auth-hint">
+                      No completed action history yet.
+                    </p>
+                  )}
+                  {actionHistory.map((action) => (
+                    <article className="archive-row" key={action.id}>
+                      <div>
+                        <h3>{action.summary}</h3>
+                        <p>
+                          {action.status.replaceAll('_', ' ')} ·{' '}
+                          {new Date(action.created_at).toLocaleDateString()}
+                        </p>
+                      </div>
+                    </article>
+                  ))}
+                </section>
+
+                <section className="archive-section">
+                  <span className="section-label">ARCHIVED RECORDS</span>
+                  {!archivedRecords.length && (
+                    <p className="auth-hint">No archived business records.</p>
+                  )}
+                  {archivedRecords.map((record) => (
+                    <article className="archive-row" key={record.id}>
+                      <div>
+                        <h3>{record.title}</h3>
+                        <p>
+                          {record.kind} ·{' '}
+                          {record.retention_class.replaceAll('_', ' ')}
+                          {record.legal_hold ? ' · Legal hold' : ''}
+                        </p>
+                      </div>
+                      <Button
+                        size="xs"
+                        variant="outline"
+                        disabled={!owner || busy}
+                        onClick={() =>
+                          perform(async () => {
+                            await requestApi(
+                              token,
+                              `records/${record.id}/status`,
+                              'PATCH',
+                              {
+                                workspaceId,
+                                status: 'active',
+                              },
+                            );
+                            await refresh();
                           })
                         }
                       >
                         <RotateCcw size={13} /> Restore
                       </Button>
-                    </div>
-                  </article>
-                ))}
-              </section>
+                    </article>
+                  ))}
+                </section>
 
-              <section className="archive-section">
-                <span className="section-label">ACTION HISTORY</span>
-                {!actionHistory.length && (
-                  <p className="auth-hint">No completed action history yet.</p>
-                )}
-                {actionHistory.map((action) => (
-                  <article className="archive-row" key={action.id}>
-                    <div>
-                      <h3>{action.summary}</h3>
-                      <p>
-                        {action.status.replaceAll('_', ' ')} ·{' '}
-                        {new Date(action.created_at).toLocaleDateString()}
-                      </p>
-                    </div>
-                  </article>
-                ))}
-              </section>
-
-              <section className="archive-section">
-                <span className="section-label">ARCHIVED RECORDS</span>
-                {!archivedRecords.length && (
-                  <p className="auth-hint">No archived business records.</p>
-                )}
-                {archivedRecords.map((record) => (
-                  <article className="archive-row" key={record.id}>
-                    <div>
-                      <h3>{record.title}</h3>
-                      <p>
-                        {record.kind} ·{' '}
-                        {record.retention_class.replaceAll('_', ' ')}
-                        {record.legal_hold ? ' · Legal hold' : ''}
-                      </p>
-                    </div>
+                <section className="archive-section">
+                  <span className="section-label">RESOLVED SUPPORT CASES</span>
+                  {!resolvedCases.length && (
+                    <p className="auth-hint">No resolved cases.</p>
+                  )}
+                  {resolvedCases.map((value) => (
+                    <article className="archive-row" key={value.id}>
+                      <div>
+                        <h3>{value.case_id}</h3>
+                        <p>{value.outcome || 'Resolved'}</p>
+                      </div>
+                    </article>
+                  ))}
+                </section>
+              </div>
+            )}
+            {view === 'connections' && (
+              <>
+                <div className="connection-card mt-6">
+                  <CalendarDays size={19} />
+                  <div>
+                    <h3>Google Calendar</h3>
+                    <p>
+                      {snapshot?.calendarConnected
+                        ? 'Connected'
+                        : 'Not connected'}
+                    </p>
+                  </div>
+                  {snapshot && owner && (
                     <Button
                       size="xs"
                       variant="outline"
-                      disabled={!owner || busy}
+                      disabled={
+                        busy ||
+                        !config?.googleReady ||
+                        snapshot.workspace.status === 'archived'
+                      }
                       onClick={() =>
                         perform(async () => {
-                          await requestApi(
-                            token,
-                            `records/${record.id}/status`,
-                            'PATCH',
-                            { workspaceId, status: 'active' },
-                          );
-                          await refresh();
+                          if (snapshot.calendarConnected) {
+                            await requestApi(
+                              token,
+                              'google/disconnect',
+                              'POST',
+                              {
+                                workspaceId,
+                              },
+                            );
+                            await refresh();
+                          } else {
+                            const result = await requestApi<{ url: string }>(
+                              token,
+                              'google/start',
+                              'POST',
+                              { workspaceId },
+                            );
+                            window.location.assign(result.url);
+                          }
                         })
                       }
                     >
-                      <RotateCcw size={13} /> Restore
+                      {snapshot.calendarConnected ? 'Disconnect' : 'Connect'}
                     </Button>
-                  </article>
-                ))}
-              </section>
-
-              <section className="archive-section">
-                <span className="section-label">RESOLVED SUPPORT CASES</span>
-                {!resolvedCases.length && (
-                  <p className="auth-hint">No resolved cases.</p>
-                )}
-                {resolvedCases.map((value) => (
-                  <article className="archive-row" key={value.id}>
-                    <div>
-                      <h3>{value.case_id}</h3>
-                      <p>{value.outcome || 'Resolved'}</p>
-                    </div>
-                  </article>
-                ))}
-              </section>
-            </div>
-          )}
-          {view === 'connections' && (
-            <>
-              <div className="connection-card mt-6">
-                <CalendarDays size={19} />
-                <div>
-                  <h3>Google Calendar</h3>
-                  <p>
-                    {snapshot?.calendarConnected
-                      ? 'Connected'
-                      : 'Not connected'}
-                  </p>
+                  )}
                 </div>
-                {snapshot && owner && (
-                  <Button
-                    size="xs"
-                    variant="outline"
-                    disabled={
-                      busy ||
-                      !config?.googleReady ||
-                      snapshot.workspace.status === 'archived'
-                    }
-                    onClick={() =>
-                      perform(async () => {
-                        if (snapshot.calendarConnected) {
-                          await requestApi(token, 'google/disconnect', 'POST', {
-                            workspaceId,
-                          });
-                          await refresh();
-                        } else {
-                          const result = await requestApi<{ url: string }>(
-                            token,
-                            'google/start',
-                            'POST',
-                            { workspaceId },
-                          );
-                          window.location.assign(result.url);
-                        }
-                      })
-                    }
-                  >
-                    {snapshot.calendarConnected ? 'Disconnect' : 'Connect'}
-                  </Button>
+                {!config?.googleReady && (
+                  <p className="auth-hint mt-2">
+                    Google OAuth setup is required before connecting.
+                  </p>
                 )}
-              </div>
-              {!config?.googleReady && (
-                <p className="auth-hint mt-2">
-                  Google OAuth setup is required before connecting.
-                </p>
-              )}
-              <div className="how-it-works">
-                <span>01</span>
-                <p>Tell us what you need</p>
-                <span>02</span>
-                <p>Your team prepares it</p>
-                <span>03</span>
-                <p>You review and approve</p>
-              </div>
-            </>
-          )}
+                <div className="how-it-works">
+                  <span>01</span>
+                  <p>Tell us what you need</p>
+                  <span>02</span>
+                  <p>Your team prepares it</p>
+                  <span>03</span>
+                  <p>You review and approve</p>
+                </div>
+              </>
+            )}
+          </div>
         </aside>
       </div>
     </main>
