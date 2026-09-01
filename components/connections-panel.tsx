@@ -94,7 +94,7 @@ export function ConnectionsPanel({
             {c.provider === 'google_calendar'
               ? 'Create bookings after you approve the exact details.'
               : c.provider === 'facebook'
-                ? 'Immediate text and link posts only. Every post needs your explicit approval. Images and scheduling are not connected.'
+                ? 'Publish immediate text, link or single JPEG/PNG photo posts after you approve the exact post. Scheduling is not connected yet.'
                 : 'Read-only campaign reporting. This app cannot create ads, change budgets or spend money.'}
           </p>
           {c.provider === 'facebook' &&
