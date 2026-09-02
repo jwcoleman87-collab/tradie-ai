@@ -15,6 +15,7 @@ import {
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { ConnectionsPanel } from './connections-panel';
+import { MessageCopy } from './message-copy';
 import { BrandMark, BrandMentions } from './brand';
 import { eligibleAIProviders, aiProviderLabel } from '@/lib/ai-settings';
 import { aiBrands } from '@/lib/brands';
@@ -1158,7 +1159,7 @@ export default function Workspace() {
                           minute: '2-digit',
                         })}
                       </span>
-                      <div className="message-copy">{m.content}</div>
+                      <MessageCopy text={m.content} />
                       <BrandMentions text={m.content} />
                       {m.attachment_ids.length > 0 && (
                         <div className="message-attachments">

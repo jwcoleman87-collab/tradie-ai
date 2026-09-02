@@ -121,7 +121,12 @@ export const ChatInput = z
   })
   .strict();
 export const RouteOutput = z
-  .object({ agents: z.array(Agent).min(1).max(5), reason: z.string().max(500) })
+  .object({
+    agents: z.array(Agent).min(1).max(5),
+    reason: z.string().max(500),
+    webSearch: z.boolean(),
+    searchQuery: z.string().trim().min(3).max(300).nullable(),
+  })
   .strict();
 export const AgentOutput = z
   .object({
@@ -259,7 +264,7 @@ export type Snapshot = {
       httpStatus?: number;
       providerRequestId?: string;
       clientRequestId?: string;
-      step?: 'routing' | 'response';
+      step?: 'routing' | 'research' | 'response';
     }[];
   }[];
   calendarConnected: boolean;

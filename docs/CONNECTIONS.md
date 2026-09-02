@@ -39,8 +39,9 @@ verified. Do not request the key again. These steps are for rotation/new setup.
    local and hosted runtime settings. An OpenAI Developers provisioning skill can
    assist when installed; it was unavailable during this build.
 3. Optional settings: `OPENAI_MODEL=gpt-5-mini`,
-   `OPENAI_MAX_OUTPUT_TOKENS=5000`. Choose a model that supports Responses,
-   structured outputs and the files your customers use; verify project access.
+   `OPENAI_MAX_OUTPUT_TOKENS=5000`, `WEB_SEARCH_ENABLED=true`. Choose a model
+   that supports Responses, structured outputs, web search and the files your
+   customers use; verify project access.
 4. After deploying/restarting, Connections reports key **configured**, not
    verified. Enable OpenAI for a test workspace, send a harmless request and
    inspect the AI audit trace before calling it live.
@@ -70,8 +71,9 @@ verified. Workspace provider consent remains an explicit owner choice.
   once to the other configured, consented provider. The request stays on backup.
 - No switch for safety refusal, incomplete/max-output-token response, invalid
   JSON/schema, invalid keys, forbidden access, unavailable model or bad request.
-- One routing call + one generation call; at most three total attempts across
-  at most two providers. No loop, parallel race, background retries or key sharing.
+- One routing call + optional cited web-research call + one generation call.
+  Provider traces retain the three most recent bounded attempts across at most
+  two consented providers. No loop, parallel race, background retries or key sharing.
 - `AI_REQUEST_TIMEOUT_MS` defaults to 30000, allowed range 1000–45000 per call.
   Output limits are 256–8000 tokens per call. These caps are not a financial
   guarantee; enforce billing limits/alerts at both providers too.

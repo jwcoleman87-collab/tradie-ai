@@ -4,18 +4,19 @@ import {
   type AIPreferences,
   type AIProviderName,
 } from '../ai-settings';
-import { OpenAIProvider, type ModelProvider } from './ai';
+import { OpenAIProvider, type ModelProvider, type ModelUsage } from './ai';
 import { ClaudeProvider } from './claude';
 import { env } from './config';
 import { AppError, requireValue } from './errors';
 import type { ModelDiagnostic } from '../ai-diagnostics';
+import type { WebResearch } from './web-research';
 export type ProviderAttempt = Partial<ModelDiagnostic> & {
   provider: AIProviderName;
   model: string;
   status: 'completed' | 'failed';
   errorCode?: string;
   elapsedMs?: number;
-  step?: 'routing' | 'response';
+  step?: 'routing' | 'research' | 'response';
 };
 const fallbackErrors = new Set([
   'AI_QUOTA_EXCEEDED',
@@ -23,6 +24,7 @@ const fallbackErrors = new Set([
   'AI_UNAVAILABLE',
   'AI_TIMEOUT',
   'AI_NETWORK_ERROR',
+  'AI_RESEARCH_UNAVAILABLE',
 ]);
 export class FallbackProvider implements ModelProvider {
   private index = 0;
@@ -42,7 +44,60 @@ export class FallbackProvider implements ModelProvider {
     return this.choices[this.index].model;
   }
   get usage() {
-    return this.choices.flatMap((p) => p.usage || []);
+    const totals = new Map<string, ModelUsage>();
+    for (const item of this.choices.flatMap(
+      (provider) => provider.usage || [],
+    )) {
+      const key = `${item.provider || ''}:${item.model || ''}`;
+      const current = totals.get(key);
+      if (current) {
+        current.inputTokens += item.inputTokens;
+        current.outputTokens += item.outputTokens;
+        current.totalTokens += item.totalTokens;
+        current.webSearches =
+          (current.webSearches || 0) + (item.webSearches || 0);
+      } else totals.set(key, { ...item });
+    }
+    return [...totals.values()];
+  }
+  private record(attempt: ProviderAttempt) {
+    this.attempts.push(attempt);
+    while (this.attempts.length > 3) this.attempts.shift();
+  }
+  async research(query: string, timeZone: string): Promise<WebResearch> {
+    while (true) {
+      const selected = this.choices[this.index];
+      const started = Date.now();
+      const diagnosticCount = selected.diagnostics?.length || 0;
+      try {
+        if (!selected.research)
+          throw new AppError('AI_RESEARCH_UNAVAILABLE', 503);
+        const output = await selected.research(query, timeZone);
+        this.record({
+          provider: selected.name,
+          model: selected.model,
+          status: 'completed',
+          step: 'research',
+          elapsedMs: Date.now() - started,
+          ...selected.diagnostics?.[diagnosticCount],
+        });
+        return output;
+      } catch (error) {
+        const code = error instanceof AppError ? error.code : 'AI_FAILED';
+        this.record({
+          provider: selected.name,
+          model: selected.model,
+          status: 'failed',
+          errorCode: code,
+          step: 'research',
+          elapsedMs: Date.now() - started,
+          ...selected.diagnostics?.[diagnosticCount],
+        });
+        if (!fallbackErrors.has(code) || this.index + 1 >= this.choices.length)
+          throw error;
+        this.index++;
+      }
+    }
   }
   async structured<T>(
     schema: z.ZodType<T>,
@@ -56,7 +111,7 @@ export class FallbackProvider implements ModelProvider {
       const diagnosticCount = selected.diagnostics?.length || 0;
       try {
         const output = await selected.structured(schema, instructions, input);
-        this.attempts.push({
+        this.record({
           provider: selected.name,
           model: selected.model,
           status: 'completed',
@@ -68,7 +123,7 @@ export class FallbackProvider implements ModelProvider {
         return output;
       } catch (error) {
         const code = error instanceof AppError ? error.code : 'AI_FAILED';
-        this.attempts.push({
+        this.record({
           provider: selected.name,
           model: selected.model,
           status: 'failed',

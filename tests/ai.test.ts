@@ -13,6 +13,8 @@ it('routes multiple agents and records real managed skill hashes', async () => {
           ? {
               agents: ['marketing', 'finance', 'marketing'],
               reason: 'ad spend',
+              webSearch: false,
+              searchQuery: null,
             }
           : {
               reply: 'No connected ad spend records are available.',
@@ -39,7 +41,12 @@ it('does not grant an unselected agent a proposal', async () => {
     model: 'test',
     structured: vi
       .fn()
-      .mockResolvedValueOnce({ agents: ['social'], reason: 'post' })
+      .mockResolvedValueOnce({
+        agents: ['social'],
+        reason: 'post',
+        webSearch: false,
+        searchQuery: null,
+      })
       .mockResolvedValueOnce({
         reply: 'draft',
         proposals: [
@@ -72,7 +79,12 @@ it('accepts clear Facebook image permission without a magic phrase', async () =>
       .mockImplementation(async (_schema, systemInstructions) => {
         instructions.push(systemInstructions);
         return instructions.length === 1
-          ? { agents: ['social'], reason: 'facebook photo' }
+          ? {
+              agents: ['social'],
+              reason: 'facebook photo',
+              webSearch: false,
+              searchQuery: null,
+            }
           : { reply: 'Ready for approval', proposals: [], escalation: 'none' };
       }),
   } as ModelProvider;
@@ -105,7 +117,12 @@ it('requests non-stored structured output with no execution tools', async () => 
           content: [
             {
               type: 'output_text',
-              text: JSON.stringify({ agents: ['social'], reason: 'draft' }),
+              text: JSON.stringify({
+                agents: ['social'],
+                reason: 'draft',
+                webSearch: false,
+                searchQuery: null,
+              }),
             },
           ],
         },

@@ -6,6 +6,7 @@ export type ClientConfig = {
   supabaseAnonKey: string;
   aiReady: boolean;
   aiProviders: AIAvailability;
+  webSearchReady: boolean;
   googleReady: boolean;
 };
 let client: SupabaseClient | undefined;

@@ -356,6 +356,18 @@ button {
   background: var(--workbench-white);
 }
 
+.message-copy a {
+  color: #174d76;
+  font-weight: 700;
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, #174d76 42%, transparent);
+  text-underline-offset: 3px;
+}
+
+.message.user .message-copy a {
+  color: var(--workbench-ink);
+}
+
 .composer {
   border-color: #aeb4b8;
   border-radius: 10px;

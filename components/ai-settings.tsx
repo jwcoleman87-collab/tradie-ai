@@ -49,7 +49,9 @@ export function AISettings({
       <p className="auth-hint">
         API billing is separate from ChatGPT, Codex and Claude subscriptions.
         Backup needs its own funded API key. A message may use both providers
-        and incur charges with both.
+        and incur charges with both. When live research is needed, the chosen
+        provider also receives a short public search query and applies its web
+        search charges.
       </p>
       <fieldset disabled={!owner || busy} className="connection-form">
         <legend className="sr-only">
