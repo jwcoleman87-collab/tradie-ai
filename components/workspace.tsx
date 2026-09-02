@@ -41,7 +41,6 @@ import {
   Building2,
   Mic,
   ChevronDown,
-  MessageCircle,
 } from 'lucide-react';
 import { requestApi } from '@/lib/client';
 import { useWorkbenchAuth } from '@/lib/use-workbench-auth';
@@ -523,6 +522,7 @@ export default function Workspace() {
           action.status,
         ),
       ) || [],
+    activeAgents = snapshot?.runs[0]?.agents || [],
     actionHistory =
       snapshot?.actions.filter((action) =>
         ['completed', 'denied', 'expired'].includes(action.status),
@@ -587,151 +587,33 @@ export default function Workspace() {
               variant={mobile === t ? 'default' : 'ghost'}
               onClick={() => setMobile(t)}
             >
-              {t === 'team' ? 'Menu' : t === 'chat' ? 'Magic' : 'Workspace'}
+              {t === 'team' ? 'Crew' : t === 'chat' ? 'Magic' : 'Workspace'}
             </Button>
           ))}
         </nav>
         <aside className="team-panel">
-          {snapshot && (
-            <div className="compact-workspace-switcher">
-              <div className="workspace-switcher-simple-heading">
-                <span className="section-label">WORKSPACE</span>
-                <span className="workspace-kind-badge">
-                  {snapshot.workspace.workspace_type === 'sandbox'
-                    ? 'Sandbox'
-                    : 'Business'}
-                </span>
-              </div>
-              <label className="sr-only" htmlFor="workspace-choice">
-                Switch private workspace
-              </label>
-              <select
-                id="workspace-choice"
-                className="workspace-select"
-                value={workspaceId}
-                disabled={busy}
-                onChange={(e) =>
-                  perform(async () => {
-                    setSelectedFiles([]);
-                    setText('');
-                    await refresh(e.target.value, '');
-                  })
-                }
+          <div className="crew-only-heading">
+            <span className="section-label">YOUR AI CREW</span>
+            <p>Magic brings in the right specialist.</p>
+          </div>
+          <div className="team-list" aria-label="Your AI crew">
+            {team.map(({ id, name, detail, icon: Icon }) => (
+              <button
+                type="button"
+                className={`agent-card ${activeAgents.includes(id as AgentName) ? 'active' : ''}`}
+                key={id}
+                onClick={() => focusMagic(`Ask ${name} to help me with `)}
               >
-                <optgroup label="Active workspaces">
-                  {snapshot.workspaces
-                    .filter((workspace) => workspace.status === 'active')
-                    .map((workspace) => (
-                      <option key={workspace.id} value={workspace.id}>
-                        {workspace.name}
-                        {workspace.workspace_type === 'sandbox'
-                          ? ' · Sandbox'
-                          : ''}
-                      </option>
-                    ))}
-                </optgroup>
-                {snapshot.workspaces.some(
-                  (workspace) => workspace.status === 'archived',
-                ) && (
-                  <optgroup label="Archived workspaces">
-                    {snapshot.workspaces
-                      .filter((workspace) => workspace.status === 'archived')
-                      .map((workspace) => (
-                        <option key={workspace.id} value={workspace.id}>
-                          {workspace.name} · Archived
-                        </option>
-                      ))}
-                  </optgroup>
-                )}
-              </select>
-            </div>
-          )}
-          <nav className="sidebar-menu" aria-label="Workbench navigation">
-            <button
-              type="button"
-              className={mobile === 'chat' ? 'active' : ''}
-              aria-current={mobile === 'chat' ? 'page' : undefined}
-              onClick={() => focusMagic()}
-            >
-              <MessageCircle size={18} />
-              <span>Magic</span>
-            </button>
-            <button
-              type="button"
-              className={
-                view === 'actions' && mobile === 'actions' ? 'active' : ''
-              }
-              aria-current={
-                view === 'actions' && mobile === 'actions' ? 'page' : undefined
-              }
-              onClick={() => chooseView('actions')}
-            >
-              <Check size={18} />
-              <span>Approvals</span>
-              {activeActions.length > 0 && (
-                <strong>{activeActions.length}</strong>
-              )}
-            </button>
-            <button
-              type="button"
-              className={
-                view === 'files' && mobile === 'actions' ? 'active' : ''
-              }
-              aria-current={
-                view === 'files' && mobile === 'actions' ? 'page' : undefined
-              }
-              onClick={() => chooseView('files')}
-            >
-              <FileText size={18} />
-              <span>Files</span>
-              {Boolean(snapshot?.uploads.length) && (
-                <strong>{snapshot?.uploads.length}</strong>
-              )}
-            </button>
-            <button
-              type="button"
-              className={
-                view === 'connections' && mobile === 'actions' ? 'active' : ''
-              }
-              aria-current={
-                view === 'connections' && mobile === 'actions'
-                  ? 'page'
-                  : undefined
-              }
-              onClick={() => chooseView('connections')}
-            >
-              <Globe size={18} />
-              <span>Connections</span>
-            </button>
-            <button
-              type="button"
-              className={
-                view === 'archive' && mobile === 'actions' ? 'active' : ''
-              }
-              aria-current={
-                view === 'archive' && mobile === 'actions' ? 'page' : undefined
-              }
-              onClick={() => chooseView('archive')}
-            >
-              <Archive size={18} />
-              <span>History</span>
-            </button>
-            <button
-              type="button"
-              className={
-                view === 'cases' && mobile === 'actions' ? 'active' : ''
-              }
-              aria-current={
-                view === 'cases' && mobile === 'actions' ? 'page' : undefined
-              }
-              onClick={() => chooseView('cases')}
-            >
-              <LifeBuoy size={18} />
-              <span>Support</span>
-            </button>
-          </nav>
-          <div className="sidebar-minimal-footer">
-            <ShieldCheck size={14} /> Private
+                <span className="agent-icon">
+                  <Icon size={17} />
+                </span>
+                <span className="crew-agent-copy">
+                  <strong>{name}</strong>
+                  <small>{detail}</small>
+                </span>
+                <span className="agent-dot" aria-hidden="true" />
+              </button>
+            ))}
           </div>
         </aside>
         <section className="conversation-panel">
