@@ -155,8 +155,7 @@ export default function Workspace() {
     [error, setError] = useState(''),
     [notice, setNotice] = useState('');
   const [text, setText] = useState(''),
-    [selectedFiles, setSelectedFiles] = useState<string[]>([]),
-    [activeAgents, setActiveAgents] = useState<string[]>([]);
+    [selectedFiles, setSelectedFiles] = useState<string[]>([]);
   const [mobile, setMobile] = useState('chat'),
     [view, setView] = useState('actions'),
     [moreOpen, setMoreOpen] = useState(false),
@@ -277,7 +276,6 @@ export default function Workspace() {
         workspaceId: data.workspace?.id || '',
         conversationId: data.conversationId || '',
       };
-      setActiveAgents(data.runs?.[0]?.agents || []);
       setLoading(false);
     },
     [token],
@@ -430,7 +428,6 @@ export default function Workspace() {
             );
             return;
           }
-          setActiveAgents(result.agents || []);
           setNotice(result.notice || '');
         } finally {
           try {
@@ -590,103 +587,13 @@ export default function Workspace() {
               variant={mobile === t ? 'default' : 'ghost'}
               onClick={() => setMobile(t)}
             >
-              {t === 'team' ? 'Crew' : t === 'chat' ? 'Magic' : 'Workspace'}
+              {t === 'team' ? 'Menu' : t === 'chat' ? 'Magic' : 'Workspace'}
             </Button>
           ))}
         </nav>
         <aside className="team-panel">
-          <div className="sidebar-intro">
-            <div className="section-label">WORKBENCH</div>
-            <h2>Where do you want to go?</h2>
-            <p>Talk to Magic, or jump straight to the work.</p>
-          </div>
-          <nav className="sidebar-primary-nav" aria-label="Workbench shortcuts">
-            <button
-              type="button"
-              className={
-                mobile === 'chat' ? 'sidebar-chat active' : 'sidebar-chat'
-              }
-              aria-current={mobile === 'chat' ? 'page' : undefined}
-              onClick={() => focusMagic()}
-            >
-              <span className="sidebar-nav-icon">
-                <MessageCircle size={19} />
-              </span>
-              <span>
-                <strong>Talk to Magic</strong>
-                <small>Ask anything or start a job</small>
-              </span>
-              <span className="sidebar-nav-arrow" aria-hidden="true">
-                →
-              </span>
-            </button>
-            <div className="sidebar-shortcut-grid">
-              <button
-                type="button"
-                className={
-                  view === 'actions' && mobile === 'actions' ? 'active' : ''
-                }
-                aria-current={
-                  view === 'actions' && mobile === 'actions'
-                    ? 'page'
-                    : undefined
-                }
-                onClick={() => chooseView('actions')}
-              >
-                <Check size={17} />
-                <span>Approvals</span>
-                <strong>{activeActions.length}</strong>
-              </button>
-              <button
-                type="button"
-                className={
-                  view === 'files' && mobile === 'actions' ? 'active' : ''
-                }
-                aria-current={
-                  view === 'files' && mobile === 'actions' ? 'page' : undefined
-                }
-                onClick={() => chooseView('files')}
-              >
-                <FileText size={17} />
-                <span>Files</span>
-                <strong>{snapshot?.uploads.length || 0}</strong>
-              </button>
-              <button
-                type="button"
-                className={
-                  view === 'connections' && mobile === 'actions' ? 'active' : ''
-                }
-                aria-current={
-                  view === 'connections' && mobile === 'actions'
-                    ? 'page'
-                    : undefined
-                }
-                onClick={() => chooseView('connections')}
-              >
-                <Globe size={17} />
-                <span>Connections</span>
-              </button>
-              <button
-                type="button"
-                className={
-                  view === 'archive' && mobile === 'actions' ? 'active' : ''
-                }
-                aria-current={
-                  view === 'archive' && mobile === 'actions'
-                    ? 'page'
-                    : undefined
-                }
-                onClick={() => chooseView('archive')}
-              >
-                <Archive size={17} />
-                <span>History</span>
-              </button>
-            </div>
-          </nav>
           {snapshot && (
-            <div
-              className={`workspace-switcher-card ${snapshot.workspace.workspace_type}`}
-            >
+            <div className="compact-workspace-switcher">
               <div className="workspace-switcher-simple-heading">
                 <span className="section-label">WORKSPACE</span>
                 <span className="workspace-kind-badge">
@@ -737,93 +644,94 @@ export default function Workspace() {
                   </optgroup>
                 )}
               </select>
-              <BrandMentions text={snapshot.workspace.name} />
-              <p className="workspace-scope-note">
-                {snapshot.workspace.workspace_type === 'sandbox'
-                  ? 'Testing only — separate from GreenVac.'
-                  : 'Live business workspace.'}
-              </p>
-              <button
-                type="button"
-                className="workspace-manage-link"
-                onClick={() => chooseView('archive')}
-              >
-                Manage workspaces <span aria-hidden="true">→</span>
-              </button>
             </div>
           )}
-          <section className="crew-picker" aria-labelledby="crew-picker-label">
-            <div className="crew-picker-heading">
-              <span className="section-label" id="crew-picker-label">
-                BRING IN A SPECIALIST
-              </span>
-              <span>
-                {activeAgents.length
-                  ? `${activeAgents.length} working`
-                  : 'Magic routes it'}
-              </span>
-            </div>
-            <div className="team-list">
-              {team.map(({ id, name, detail, icon: Icon }) => (
-                <button
-                  type="button"
-                  className={`agent-card ${activeAgents.includes(id) ? 'active' : ''}`}
-                  key={id}
-                  title={detail}
-                  onClick={() => focusMagic(`Ask ${name} to help me with `)}
-                >
-                  <span className="agent-icon">
-                    <Icon size={16} />
-                  </span>
-                  <span>{name}</span>
-                  <span className="agent-dot" />
-                </button>
-              ))}
-            </div>
-            <p className="crew-picker-note">
-              Pick one to start a focused request, or let Magic choose for you.
-            </p>
-          </section>
-          <div className="sidebar-footer-actions">
-            <div className="sidebar-privacy-line">
-              <ShieldCheck size={17} />
-              <span>
-                <strong>Private by default</strong>
-                <small>Only your workspace can see this work.</small>
-              </span>
-            </div>
-            {snapshot?.workspace.ai_consent_at &&
-              snapshot.workspace.status === 'active' &&
-              owner && (
-                <Button
-                  variant="link"
-                  size="sm"
-                  disabled={busy}
-                  onClick={() =>
-                    perform(async () => {
-                      await requestApi(token, 'consent', 'POST', {
-                        workspaceId,
-                        allowAI: false,
-                        primaryProvider: snapshot.workspace.ai_primary_provider,
-                        allowedProviders:
-                          snapshot.workspace.ai_allowed_providers,
-                        allowFallback: snapshot.workspace.ai_fallback_enabled,
-                      });
-                      await refresh();
-                    })
-                  }
-                >
-                  Pause AI processing
-                </Button>
+          <nav className="sidebar-menu" aria-label="Workbench navigation">
+            <button
+              type="button"
+              className={mobile === 'chat' ? 'active' : ''}
+              aria-current={mobile === 'chat' ? 'page' : undefined}
+              onClick={() => focusMagic()}
+            >
+              <MessageCircle size={18} />
+              <span>Magic</span>
+            </button>
+            <button
+              type="button"
+              className={
+                view === 'actions' && mobile === 'actions' ? 'active' : ''
+              }
+              aria-current={
+                view === 'actions' && mobile === 'actions' ? 'page' : undefined
+              }
+              onClick={() => chooseView('actions')}
+            >
+              <Check size={18} />
+              <span>Approvals</span>
+              {activeActions.length > 0 && (
+                <strong>{activeActions.length}</strong>
               )}
-            <Button
-              variant="ghost"
-              size="sm"
-              className="sidebar-support-link"
+            </button>
+            <button
+              type="button"
+              className={
+                view === 'files' && mobile === 'actions' ? 'active' : ''
+              }
+              aria-current={
+                view === 'files' && mobile === 'actions' ? 'page' : undefined
+              }
+              onClick={() => chooseView('files')}
+            >
+              <FileText size={18} />
+              <span>Files</span>
+              {Boolean(snapshot?.uploads.length) && (
+                <strong>{snapshot?.uploads.length}</strong>
+              )}
+            </button>
+            <button
+              type="button"
+              className={
+                view === 'connections' && mobile === 'actions' ? 'active' : ''
+              }
+              aria-current={
+                view === 'connections' && mobile === 'actions'
+                  ? 'page'
+                  : undefined
+              }
+              onClick={() => chooseView('connections')}
+            >
+              <Globe size={18} />
+              <span>Connections</span>
+            </button>
+            <button
+              type="button"
+              className={
+                view === 'archive' && mobile === 'actions' ? 'active' : ''
+              }
+              aria-current={
+                view === 'archive' && mobile === 'actions' ? 'page' : undefined
+              }
+              onClick={() => chooseView('archive')}
+            >
+              <Archive size={18} />
+              <span>History</span>
+            </button>
+            <button
+              type="button"
+              className={
+                view === 'cases' && mobile === 'actions' ? 'active' : ''
+              }
+              aria-current={
+                view === 'cases' && mobile === 'actions' ? 'page' : undefined
+              }
               onClick={() => chooseView('cases')}
             >
-              <LifeBuoy size={15} /> Help & support
-            </Button>
+              <LifeBuoy size={18} />
+              <span>Support</span>
+            </button>
+          </nav>
+          <div className="sidebar-minimal-footer">
+            <ShieldCheck size={14} /> Private
           </div>
         </aside>
         <section className="conversation-panel">
