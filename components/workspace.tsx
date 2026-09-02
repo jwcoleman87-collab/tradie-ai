@@ -41,6 +41,7 @@ import {
   Building2,
   Mic,
   ChevronDown,
+  MessageCircle,
 } from 'lucide-react';
 import { requestApi } from '@/lib/client';
 import { useWorkbenchAuth } from '@/lib/use-workbench-auth';
@@ -512,6 +513,13 @@ export default function Workspace() {
     setMoreOpen(workspaceMoreSections.some((section) => section.id === next));
     setMobile('actions');
   };
+  const focusMagic = (starter = '') => {
+    if (starter) setText((current) => current || starter);
+    setMobile('chat');
+    window.requestAnimationFrame(() => {
+      document.getElementById('magic-message')?.focus();
+    });
+  };
   const activeActions =
       snapshot?.actions.filter((action) =>
         ['waiting_approval', 'approved', 'executing', 'failed'].includes(
@@ -587,15 +595,94 @@ export default function Workspace() {
           ))}
         </nav>
         <aside className="team-panel">
-          <div className="section-label">YOUR AI CREW</div>
-          <h2>
-            The backend crew
-            <br />
-            every tradie needs.
-          </h2>
-          <p className="muted small">
-            Pick a specialist or just talk to Magic.
-          </p>
+          <div className="sidebar-intro">
+            <div className="section-label">WORKBENCH</div>
+            <h2>Where do you want to go?</h2>
+            <p>Talk to Magic, or jump straight to the work.</p>
+          </div>
+          <nav className="sidebar-primary-nav" aria-label="Workbench shortcuts">
+            <button
+              type="button"
+              className={
+                mobile === 'chat' ? 'sidebar-chat active' : 'sidebar-chat'
+              }
+              aria-current={mobile === 'chat' ? 'page' : undefined}
+              onClick={() => focusMagic()}
+            >
+              <span className="sidebar-nav-icon">
+                <MessageCircle size={19} />
+              </span>
+              <span>
+                <strong>Talk to Magic</strong>
+                <small>Ask anything or start a job</small>
+              </span>
+              <span className="sidebar-nav-arrow" aria-hidden="true">
+                →
+              </span>
+            </button>
+            <div className="sidebar-shortcut-grid">
+              <button
+                type="button"
+                className={
+                  view === 'actions' && mobile === 'actions' ? 'active' : ''
+                }
+                aria-current={
+                  view === 'actions' && mobile === 'actions'
+                    ? 'page'
+                    : undefined
+                }
+                onClick={() => chooseView('actions')}
+              >
+                <Check size={17} />
+                <span>Approvals</span>
+                <strong>{activeActions.length}</strong>
+              </button>
+              <button
+                type="button"
+                className={
+                  view === 'files' && mobile === 'actions' ? 'active' : ''
+                }
+                aria-current={
+                  view === 'files' && mobile === 'actions' ? 'page' : undefined
+                }
+                onClick={() => chooseView('files')}
+              >
+                <FileText size={17} />
+                <span>Files</span>
+                <strong>{snapshot?.uploads.length || 0}</strong>
+              </button>
+              <button
+                type="button"
+                className={
+                  view === 'connections' && mobile === 'actions' ? 'active' : ''
+                }
+                aria-current={
+                  view === 'connections' && mobile === 'actions'
+                    ? 'page'
+                    : undefined
+                }
+                onClick={() => chooseView('connections')}
+              >
+                <Globe size={17} />
+                <span>Connections</span>
+              </button>
+              <button
+                type="button"
+                className={
+                  view === 'archive' && mobile === 'actions' ? 'active' : ''
+                }
+                aria-current={
+                  view === 'archive' && mobile === 'actions'
+                    ? 'page'
+                    : undefined
+                }
+                onClick={() => chooseView('archive')}
+              >
+                <Archive size={17} />
+                <span>History</span>
+              </button>
+            </div>
+          </nav>
           {snapshot && (
             <div
               className={`workspace-switcher-card ${snapshot.workspace.workspace_type}`}
@@ -661,39 +748,50 @@ export default function Workspace() {
                 className="workspace-manage-link"
                 onClick={() => chooseView('archive')}
               >
-                Workspaces & archive <span aria-hidden="true">→</span>
+                Manage workspaces <span aria-hidden="true">→</span>
               </button>
             </div>
           )}
-          <div className="team-list">
-            {team.map(({ id, name, detail, icon: Icon }) => (
-              <div
-                className={`agent-card ${activeAgents.includes(id) ? 'active' : ''}`}
-                key={id}
-              >
-                <span className="agent-icon">
-                  <Icon size={20} />
-                </span>
-                <div>
-                  <h3>{name}</h3>
-                  <p>
-                    {activeAgents.includes(id)
-                      ? 'On this conversation'
-                      : detail}
-                  </p>
-                </div>
-                <span className="agent-dot" />
-              </div>
-            ))}
-          </div>
-          <div className="privacy-note">
-            <ShieldCheck size={22} />
-            <h3>Your business stays yours.</h3>
-            <p>
-              We maintain the AI framework. Other businesses cannot read your
-              conversations or files. Support sees only what you approve
-              sharing.
+          <section className="crew-picker" aria-labelledby="crew-picker-label">
+            <div className="crew-picker-heading">
+              <span className="section-label" id="crew-picker-label">
+                BRING IN A SPECIALIST
+              </span>
+              <span>
+                {activeAgents.length
+                  ? `${activeAgents.length} working`
+                  : 'Magic routes it'}
+              </span>
+            </div>
+            <div className="team-list">
+              {team.map(({ id, name, detail, icon: Icon }) => (
+                <button
+                  type="button"
+                  className={`agent-card ${activeAgents.includes(id) ? 'active' : ''}`}
+                  key={id}
+                  title={detail}
+                  onClick={() => focusMagic(`Ask ${name} to help me with `)}
+                >
+                  <span className="agent-icon">
+                    <Icon size={16} />
+                  </span>
+                  <span>{name}</span>
+                  <span className="agent-dot" />
+                </button>
+              ))}
+            </div>
+            <p className="crew-picker-note">
+              Pick one to start a focused request, or let Magic choose for you.
             </p>
+          </section>
+          <div className="sidebar-footer-actions">
+            <div className="sidebar-privacy-line">
+              <ShieldCheck size={17} />
+              <span>
+                <strong>Private by default</strong>
+                <small>Only your workspace can see this work.</small>
+              </span>
+            </div>
             {snapshot?.workspace.ai_consent_at &&
               snapshot.workspace.status === 'active' &&
               owner && (
@@ -718,18 +816,13 @@ export default function Workspace() {
                   Pause AI processing
                 </Button>
               )}
-          </div>
-          <div className="support-card">
-            <LifeBuoy size={22} />
-            <h3>Need a hand? Ask James.</h3>
-            <p>A helping hand, without sharing your whole conversation.</p>
             <Button
-              variant="outline"
+              variant="ghost"
               size="sm"
-              className="mt-3"
+              className="sidebar-support-link"
               onClick={() => chooseView('cases')}
             >
-              Ask James
+              <LifeBuoy size={15} /> Help & support
             </Button>
           </div>
         </aside>
@@ -1214,6 +1307,7 @@ export default function Workspace() {
           </div>
           <form className="composer" onSubmit={send}>
             <Textarea
+              id="magic-message"
               aria-label="Message Magic"
               placeholder={blockedReason || 'Message Magic…'}
               aria-describedby="composer-help"
