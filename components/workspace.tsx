@@ -585,6 +585,7 @@ export default function Workspace() {
             <Button
               key={t}
               variant={mobile === t ? 'default' : 'ghost'}
+              aria-current={mobile === t ? 'page' : undefined}
               onClick={() => setMobile(t)}
             >
               {t === 'team' ? 'Crew' : t === 'chat' ? 'Magic' : 'Workspace'}

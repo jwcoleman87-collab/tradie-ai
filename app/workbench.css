@@ -850,8 +850,15 @@ output.composer-caption:empty {
     color: var(--workbench-paper);
   }
 
-  .mobile-tabs .bg-primary {
+  .mobile-tabs button[aria-current='page'] {
+    border-color: var(--workbench-yellow);
+    background: var(--workbench-yellow);
     color: var(--workbench-ink);
+  }
+
+  .mobile-tabs button:not([aria-current='page']):hover {
+    background: #0f2233;
+    color: var(--workbench-white);
   }
 
   .team-panel {
