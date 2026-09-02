@@ -71,6 +71,24 @@ export function ConnectionsPanel({
         owner={owner}
         onSaved={onSaved}
       />
+      <article className="action-card">
+        <span className="section-label">LIVE WEB RESEARCH</span>
+        <h3>
+          {config.webSearchReady
+            ? 'Ready when current facts matter'
+            : 'Not enabled'}
+        </h3>
+        <p>
+          {config.webSearchReady
+            ? 'Magic can search current public information through your allowed AI provider and will attach clickable sources. Search pages are treated as untrusted data.'
+            : 'The site operator must enable web research before Magic can verify current public information.'}
+        </p>
+        <p className="auth-hint">
+          Workbench sends only a short public search query. It blocks queries
+          that appear to contain credentials, contact details or private
+          workspace identifiers. Provider search and token charges apply.
+        </p>
+      </article>
       <p className="auth-hint">
         External connections are private to this workspace. Connecting never
         posts, books or changes ad spending.

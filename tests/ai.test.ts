@@ -13,6 +13,8 @@ it('routes multiple agents and records real managed skill hashes', async () => {
           ? {
               agents: ['marketing', 'finance', 'marketing'],
               reason: 'ad spend',
+              webSearch: false,
+              searchQuery: null,
             }
           : {
               reply: 'No connected ad spend records are available.',
@@ -39,7 +41,12 @@ it('does not grant an unselected agent a proposal', async () => {
     model: 'test',
     structured: vi
       .fn()
-      .mockResolvedValueOnce({ agents: ['social'], reason: 'post' })
+      .mockResolvedValueOnce({
+        agents: ['social'],
+        reason: 'post',
+        webSearch: false,
+        searchQuery: null,
+      })
       .mockResolvedValueOnce({
         reply: 'draft',
         proposals: [
@@ -63,6 +70,40 @@ it('does not grant an unselected agent a proposal', async () => {
     }),
   ).rejects.toThrow();
 });
+it('accepts clear Facebook image permission without a magic phrase', async () => {
+  const instructions: string[] = [];
+  const provider = {
+    model: 'test',
+    structured: vi
+      .fn()
+      .mockImplementation(async (_schema, systemInstructions) => {
+        instructions.push(systemInstructions);
+        return instructions.length === 1
+          ? {
+              agents: ['social'],
+              reason: 'facebook photo',
+              webSearch: false,
+              searchQuery: null,
+            }
+          : { reply: 'Ready for approval', proposals: [], escalation: 'none' };
+      }),
+  } as ModelProvider;
+  await runTeam(provider, {
+    history: [
+      {
+        role: 'user',
+        content: 'I own this image and have permission to publish it.',
+      },
+    ],
+    records: [],
+    timeZone: 'Australia/Sydney',
+    calendar: {},
+    attachments: [],
+  });
+  expect(instructions[1]).toContain(
+    'Do not require the owner to repeat a magic phrase or exact wording.',
+  );
+});
 it('requests non-stored structured output with no execution tools', async () => {
   process.env.OPENAI_API_KEY = 'test-not-real';
   const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
@@ -73,7 +114,12 @@ it('requests non-stored structured output with no execution tools', async () => 
           content: [
             {
               type: 'output_text',
-              text: JSON.stringify({ agents: ['social'], reason: 'draft' }),
+              text: JSON.stringify({
+                agents: ['social'],
+                reason: 'draft',
+                webSearch: false,
+                searchQuery: null,
+              }),
             },
           ],
         },

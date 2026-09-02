@@ -21,6 +21,10 @@ export function aiProblem(code?: string | null) {
       return 'The provider took too long to answer. Try a shorter request or allow an available backup in Connections.';
     case 'AI_NETWORK_ERROR':
       return 'The server could not reach the AI provider. Check the connection or try again shortly.';
+    case 'AI_RESEARCH_UNAVAILABLE':
+      return 'The AI provider could not complete live web research with cited sources. Try again or allow an available backup provider.';
+    case 'AI_RESEARCH_QUERY_PRIVATE':
+      return 'Live research was stopped before sending because the search query appeared to contain private information. Rephrase it using public terms only.';
     case 'AI_TRANSPORT_CONFIG_INVALID':
       return 'The hosted server rejected an AI connection setting. The app administrator needs to fix the server configuration; adding credits will not fix this.';
     case 'AI_REDIRECT_BLOCKED':

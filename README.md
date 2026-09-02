@@ -145,6 +145,7 @@ exact app origin. Configure these **server runtime** values:
 | OPENAI_MODEL              | `gpt-5-mini` default; configurable  | Server config |
 | ANTHROPIC_API_KEY         | Anthropic API key with credits      | Server only   |
 | ANTHROPIC_MODEL           | `claude-haiku-4-5-20251001` default | Server config |
+| WEB_SEARCH_ENABLED        | `true` enables cited live research  | Server config |
 | GOOGLE_CLIENT_ID          | Google OAuth web client             | Server config |
 | GOOGLE_CLIENT_SECRET      | Same OAuth client                   | Server only   |
 | TOKEN_ENCRYPTION_KEY      | 32 random bytes, base64 encoded     | Server only   |
@@ -159,6 +160,13 @@ backup, then explicitly allow both providers under **Connections → AI connecti
 Fallback works only on the providers this workspace allows. Provider requests
 may still cost money on a timeout; switching is not free or unlimited usage.
 See [all provider variables and callbacks](docs/CONNECTIONS.md).
+
+When `WEB_SEARCH_ENABLED=true`, Magic decides whether a request needs current
+public information. It creates a short public-only search query, blocks common
+credentials/contact details/private identifiers, and uses the currently
+allowed provider's hosted web-search tool. Research is supplied to the managed
+crew as untrusted context and the saved reply includes clickable HTTPS sources
+and a retrieval timestamp. Stable questions and creative work do not search.
 
 ### Google Calendar
 

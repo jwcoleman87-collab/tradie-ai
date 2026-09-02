@@ -51,6 +51,8 @@ it('records a real adapter switch between routing and generation', async () => {
                 text: JSON.stringify({
                   agents: ['social'],
                   reason: 'post draft',
+                  webSearch: false,
+                  searchQuery: null,
                 }),
               },
             ],
@@ -168,6 +170,36 @@ describe('privacy-first provider selection', () => {
   });
 });
 describe('bounded availability fallback', () => {
+  it('switches providers for research while retaining a bounded audit trace', async () => {
+    const a = {
+        ...make('openai'),
+        research: vi
+          .fn()
+          .mockRejectedValue(new AppError('AI_RESEARCH_UNAVAILABLE', 503)),
+      },
+      b = {
+        ...make('anthropic'),
+        research: vi.fn().mockResolvedValue({
+          summary: 'current notes',
+          sources: [{ title: 'source', url: 'https://example.gov.au/' }],
+          searchedAt: '2026-09-02T00:00:00.000Z',
+          provider: 'anthropic',
+        }),
+      };
+    const provider = new FallbackProvider([a, b]);
+    await provider.structured(schema, 'route', []);
+    await expect(
+      provider.research('current public update', 'Australia/Sydney'),
+    ).resolves.toMatchObject({ provider: 'anthropic' });
+    await provider.structured(schema, 'response', []);
+    expect(provider.attempts).toHaveLength(3);
+    expect(provider.attempts.map((attempt) => attempt.step)).toEqual([
+      'research',
+      'research',
+      'response',
+    ]);
+    expect(provider.model).toBe('anthropic-test');
+  });
   for (const primary of ['openai', 'anthropic'] as const)
     for (const code of [
       'AI_QUOTA_EXCEEDED',
@@ -313,7 +345,12 @@ describe('Claude structured output and files', () => {
         content: [
           {
             type: 'text',
-            text: JSON.stringify({ agents: ['social'], reason: 'draft' }),
+            text: JSON.stringify({
+              agents: ['social'],
+              reason: 'draft',
+              webSearch: false,
+              searchQuery: null,
+            }),
           },
         ],
         usage: {

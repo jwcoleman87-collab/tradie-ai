@@ -14,6 +14,7 @@ const result = {
   encryptionKeyValid: encryption,
   openaiKeyConfigured: present('OPENAI_API_KEY'),
   claudeKeyConfigured: present('ANTHROPIC_API_KEY'),
+  webSearchEnabled: value('WEB_SEARCH_ENABLED') === 'true',
   calendarConfigured:
     ['GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET', 'APP_ORIGIN'].every(present) &&
     encryption,

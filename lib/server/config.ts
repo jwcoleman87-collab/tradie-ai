@@ -40,6 +40,9 @@ export function publicConfig() {
       openai: !!env('OPENAI_API_KEY'),
       anthropic: !!env('ANTHROPIC_API_KEY'),
     },
+    webSearchReady:
+      env('WEB_SEARCH_ENABLED') === 'true' &&
+      !!(env('OPENAI_API_KEY') || env('ANTHROPIC_API_KEY')),
     googleReady: !!(
       env('GOOGLE_CLIENT_ID') &&
       env('GOOGLE_CLIENT_SECRET') &&
