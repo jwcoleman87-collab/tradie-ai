@@ -799,7 +799,7 @@ output.composer-caption:empty {
   }
 }
 
-@media (max-width: 1100px) and (min-width: 761px) {
+@media (max-width: 1100px) and (min-width: 901px) {
   .workspace-grid {
     grid-template-columns: 200px minmax(340px, 1fr) 290px;
   }
@@ -813,7 +813,7 @@ output.composer-caption:empty {
   }
 }
 
-@media (max-width: 760px) {
+@media (max-width: 900px) {
   .app-shell [data-slot='button'] {
     min-height: 40px;
   }
@@ -855,7 +855,29 @@ output.composer-caption:empty {
   }
 
   .team-panel {
+    display: none;
     padding: 20px 16px;
+  }
+
+  .actions-panel {
+    display: none;
+  }
+
+  .workspace-grid[data-mobile='team'] .team-panel {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+  }
+
+  .workspace-grid[data-mobile='actions'] .actions-panel {
+    display: block;
+    flex: 1;
+    min-height: 0;
+  }
+
+  .workspace-grid[data-mobile='team'] .conversation-panel,
+  .workspace-grid[data-mobile='actions'] .conversation-panel {
+    display: none;
   }
 
   .panel-heading {

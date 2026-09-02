@@ -964,7 +964,7 @@
   color: #9584a4;
   line-height: 1.6;
 }
-@media (max-width: 760px) {
+@media (max-width: 900px) {
   .file-grid {
     grid-template-columns: 1fr;
   }
@@ -1165,7 +1165,7 @@
     margin-right: 48px;
   }
 }
-@media (max-width: 1100px) and (min-width: 761px) {
+@media (max-width: 1100px) and (min-width: 901px) {
   .workspace-grid {
     grid-template-columns: 210px minmax(340px, 1fr) 290px;
   }
@@ -1194,7 +1194,7 @@
     font-size: 9px;
   }
 }
-@media (max-width: 760px) {
+@media (max-width: 900px) {
   .topbar {
     height: 62px;
     padding: 0 18px;
