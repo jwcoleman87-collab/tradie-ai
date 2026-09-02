@@ -79,24 +79,24 @@ Do not reintroduce the old blue tile mark or purple/lilac Tradie AI theme.
 
 ## 4. Source map — where to look
 
-| Purpose | Source |
-|---|---|
-| Current root route | `app/page.tsx` |
-| Global metadata/fonts/styles | `app/layout.tsx`, `app/globals.css`, `app/workspace.css`, `app/workbench.css` |
-| Main authenticated product and current sign-in/bootstrap UI | `components/workspace.tsx` |
-| Same-origin API entry | `app/api/[...path]/route.ts` |
-| API orchestration | `lib/server/api.ts` |
-| Authenticated browser client | `lib/client.ts` |
-| Shared runtime contracts | `lib/contracts.ts` |
-| AI routing/generation | `lib/server/ai.ts`, `lib/server/ai-provider.ts`, `lib/server/model-schema.ts` |
-| Managed crew instructions | `skills/*/SKILL.md`, loaded by `lib/server/skills.ts` |
-| Database/RLS/RPC history | `supabase/migrations/*.sql` |
-| Current architecture | `docs/ARCHITECTURE.md` |
-| Connections and provider boundaries | `docs/CONNECTIONS.md` |
-| Workspace archive/governance | `docs/WORKSPACE-GOVERNANCE.md` |
-| Troubleshooting and audit behaviour | `docs/CHAT-TROUBLESHOOTING.md`, `docs/VERIFICATION.md` |
-| Historical continuation notes | `docs/CONTINUATION.md` |
-| Tests | `tests/*.test.ts`; run `npm run check` |
+| Purpose                                                     | Source                                                                        |
+| ----------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| Current root route                                          | `app/page.tsx`                                                                |
+| Global metadata/fonts/styles                                | `app/layout.tsx`, `app/globals.css`, `app/workspace.css`, `app/workbench.css` |
+| Main authenticated product and current sign-in/bootstrap UI | `components/workspace.tsx`                                                    |
+| Same-origin API entry                                       | `app/api/[...path]/route.ts`                                                  |
+| API orchestration                                           | `lib/server/api.ts`                                                           |
+| Authenticated browser client                                | `lib/client.ts`                                                               |
+| Shared runtime contracts                                    | `lib/contracts.ts`                                                            |
+| AI routing/generation                                       | `lib/server/ai.ts`, `lib/server/ai-provider.ts`, `lib/server/model-schema.ts` |
+| Managed crew instructions                                   | `skills/*/SKILL.md`, loaded by `lib/server/skills.ts`                         |
+| Database/RLS/RPC history                                    | `supabase/migrations/*.sql`                                                   |
+| Current architecture                                        | `docs/ARCHITECTURE.md`                                                        |
+| Connections and provider boundaries                         | `docs/CONNECTIONS.md`                                                         |
+| Workspace archive/governance                                | `docs/WORKSPACE-GOVERNANCE.md`                                                |
+| Troubleshooting and audit behaviour                         | `docs/CHAT-TROUBLESHOOTING.md`, `docs/VERIFICATION.md`                        |
+| Historical continuation notes                               | `docs/CONTINUATION.md`                                                        |
+| Tests                                                       | `tests/*.test.ts`; run `npm run check`                                        |
 
 Some older verification paragraphs describe what had not yet been tested at that earlier checkpoint. Treat dated notes as history when later provider receipts or this handover contradict them.
 
@@ -282,7 +282,10 @@ Do not store chain-of-thought. Store concise conclusions, sources, confidence, s
 
 ## 11. AI and discovery architecture
 
-Prefer a bounded onboarding service rather than reusing the normal five-agent routing loop unchanged.
+Use one persistent Magic onboarding assistant rather than the normal five-agent
+routing loop. Magic receives the saved setup conversation on every turn, answers
+the owner's question first, and gradually builds the profile without following a
+fixed questionnaire or stopping after five answers.
 
 Suggested server flow:
 
@@ -296,7 +299,8 @@ Suggested server flow:
    - whether profile review is ready.
 4. Run allowed discovery adapters server-side with strict timeouts and allow-lists.
 5. Normalise evidence into sourced profile facts.
-6. Ask for one follow-up only when necessary, otherwise present the draft profile.
+6. Answer the owner's immediate question, then ask one follow-up only when it is
+   useful; otherwise present the draft profile while keeping the conversation open.
 7. Require owner confirmation before the profile is treated as confirmed.
 
 Do not use five model calls for five crew personas. Optimise for a quick first useful result and stream visible progress where supported.
@@ -379,4 +383,3 @@ These decisions should not prevent the first route/UI/data vertical slice from b
 ## 16. Copy-ready opening instruction for the next Codex chat
 
 > Continue the existing WORKBENCH application from `C:\Users\James Coleman\Documents\Codex\2026-08-31\referenced-chatgpt-conversation-this-is-an\outputs\tradie-ai`. Read `AGENTS.md` and `docs/HANDOVER-LANDING-ONBOARDING.md` completely before acting. Begin implementing the first vertical slice in section 12; do not stop after planning. The current WORKBENCH aesthetic is locked and must not change unless James explicitly asks. Preserve the existing authenticated workspace and its trust/approval architecture. Build onboarding as an intelligent business-discovery conversation: Magic asks no more than roughly five high-information prompts, uses reliable approved sources to answer the remaining profile questions itself, shows sources/confidence, and only asks the owner about genuine gaps or conflicts. Never fabricate research, customer facts, connections or external outcomes. Run the full checks, verify the UI and deploy the completed safe slice to the linked Vercel production project.
-

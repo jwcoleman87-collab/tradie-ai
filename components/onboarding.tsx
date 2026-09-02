@@ -3,7 +3,7 @@
 import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowRight,
   Check,
@@ -16,6 +16,7 @@ import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Textarea } from './ui/textarea';
 import { requestApi } from '@/lib/client';
+import { MessageCopy } from './message-copy';
 import type {
   OnboardingFact,
   OnboardingField,
@@ -62,6 +63,8 @@ export default function Onboarding() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [allowAI, setAllowAI] = useState(false);
+  const chatRef = useRef<HTMLDivElement>(null);
 
   const load = useCallback(async () => {
     if (!session) return;
@@ -97,6 +100,14 @@ export default function Onboarding() {
     );
   }, [state]);
 
+  useEffect(() => {
+    if (!state?.messages.length) return;
+    chatRef.current?.scrollTo({
+      top: chatRef.current.scrollHeight,
+      behavior: 'smooth',
+    });
+  }, [state?.messages.length]);
+
   const conversation = useMemo(() => {
     if (!state) return [];
     if (state.messages.length) return state.messages;
@@ -125,15 +136,24 @@ export default function Onboarding() {
 
   async function sendAnswer() {
     if (!session || !answer.trim()) return;
+    if (state?.aiConsentRequired && !allowAI) {
+      setError('Allow Magic to process your setup answers before continuing.');
+      return;
+    }
     await perform(async () => {
       const next = await requestApi<OnboardingSnapshot>(
         session.access_token,
         'onboarding/turn',
         'POST',
-        { workspaceId: state?.workspaceId || null, answer: answer.trim() },
+        {
+          workspaceId: state?.workspaceId || null,
+          answer: answer.trim(),
+          allowAI: state?.aiConsentRequired ? allowAI : false,
+        },
       );
       setState(next);
       setAnswer('');
+      setAllowAI(false);
     });
   }
 
@@ -236,23 +256,22 @@ export default function Onboarding() {
             <div>
               <span className="section-label">MAGIC</span>
               <h2>
-                {reviewing ? 'What Magic found' : 'G’day. Let’s get started.'}
+                {state.onboardingStatus === 'confirmed'
+                  ? 'Your Workbench is ready.'
+                  : 'G’day. I’m Magic.'}
               </h2>
               <p className="magic-subtitle">
-                {reviewing
-                  ? 'Check the details before opening your workspace.'
-                  : 'Answer naturally. Magic will guide the rest.'}
+                I’ll stay with you while we set things up. Ask me anything.
               </p>
             </div>
           </div>
 
           <div className="onboarding-context-row">
-            <span>
+            <span className="magic-presence-status">
+              <i aria-hidden="true" />
               {reviewing
-                ? 'Ready for your review'
-                : state.promptCount
-                  ? `${state.promptCount} answered · up to 5`
-                  : 'A few simple questions'}
+                ? 'Magic is here · profile ready when you are'
+                : 'Magic is here · conversation saved'}
             </span>
             <details>
               <summary>About this setup</summary>
@@ -263,17 +282,22 @@ export default function Onboarding() {
             </details>
           </div>
 
-          {!reviewing ? (
+          {state.onboardingStatus !== 'confirmed' && (
             <>
-              <div className="onboarding-chat" aria-live="polite">
+              <div className="onboarding-chat" aria-live="polite" ref={chatRef}>
                 {conversation.map((message) => (
                   <div
                     key={message.id}
                     className={`onboarding-message ${message.role}`}
                   >
-                    {message.content}
+                    <MessageCopy text={message.content} />
                   </div>
                 ))}
+                {busy && (
+                  <div className="onboarding-message assistant thinking">
+                    Magic is thinking…
+                  </div>
+                )}
               </div>
               <form
                 className="onboarding-composer"
@@ -283,34 +307,51 @@ export default function Onboarding() {
                 }}
               >
                 <Textarea
-                  aria-label="Your answer to Magic"
-                  placeholder="Tell Magic in your own words…"
+                  aria-label="Message Magic"
+                  placeholder="Ask Magic anything or tell me about your business…"
                   value={answer}
                   maxLength={4000}
                   onChange={(change) => setAnswer(change.target.value)}
                   disabled={busy}
                 />
+                {state.aiConsentRequired && (
+                  <label className="onboarding-ai-consent">
+                    <input
+                      type="checkbox"
+                      checked={allowAI}
+                      onChange={(change) => setAllowAI(change.target.checked)}
+                    />
+                    Allow Magic to process my setup answers using the configured
+                    OpenAI or Anthropic provider. I can pause AI later.
+                  </label>
+                )}
                 <div>
                   <span>
-                    Plain language is perfect. You can correct everything before
-                    confirming.
+                    Magic remembers this setup conversation. Nothing connects or
+                    publishes without your approval.
                   </span>
                   <Button
                     type="submit"
-                    disabled={busy || answer.trim().length < 2}
+                    disabled={
+                      busy ||
+                      answer.trim().length < 2 ||
+                      (state.aiConsentRequired && !allowAI)
+                    }
                   >
-                    Send to Magic <ArrowRight size={16} />
+                    {busy ? 'Magic is thinking…' : 'Send to Magic'}{' '}
+                    <ArrowRight size={16} />
                   </Button>
                 </div>
               </form>
             </>
-          ) : (
+          )}
+          {reviewing && (
             <div className="profile-review">
               <div className="review-intro">
                 <Sparkles size={20} />
                 <p>
-                  This draft uses your answers only. Check anything inferred,
-                  make corrections, then confirm the profile.
+                  Your profile draft is ready below. You can keep talking to
+                  Magic, make corrections, or confirm it when you’re happy.
                 </p>
               </div>
               <div className="fact-grid">

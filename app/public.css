@@ -1600,10 +1600,25 @@
   margin-bottom: 16px;
 }
 .magic-avatar {
+  position: relative;
+  isolation: isolate;
   width: 54px;
   height: 54px;
+  animation: magic-float 4s ease-in-out infinite;
+}
+.magic-avatar::before {
+  position: absolute;
+  z-index: -1;
+  inset: -11px;
+  border: 1px solid #f1b50555;
+  border-radius: 50%;
+  background: radial-gradient(circle, #f1b50522, transparent 68%);
+  content: '';
+  animation: magic-presence 2.8s ease-in-out infinite;
 }
 .magic-avatar img {
+  position: relative;
+  z-index: 1;
   width: 42px;
   height: auto;
   padding: 7px;
@@ -1628,6 +1643,19 @@
   border-bottom: 1px solid #d8dcdf;
   color: #7b858d;
   font-size: 11px;
+}
+.magic-presence-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+.magic-presence-status i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--workbench-success);
+  box-shadow: 0 0 0 4px #2d8a5c18;
+  animation: magic-presence 2.8s ease-in-out infinite;
 }
 .onboarding-context-row details {
   position: relative;
@@ -1661,6 +1689,20 @@
   border-radius: 5px 13px 13px;
   box-shadow: none;
 }
+.onboarding-message .message-copy {
+  white-space: pre-wrap;
+}
+.onboarding-message .message-copy a {
+  color: #174d76;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.onboarding-message.thinking {
+  color: #68747d;
+  font-size: 12px;
+  animation: magic-presence 1.4s ease-in-out infinite;
+}
 .onboarding-message.user {
   border-radius: 13px 5px 13px 13px;
 }
@@ -1671,8 +1713,56 @@
 .onboarding-composer textarea {
   min-height: 72px;
 }
+.onboarding-ai-consent {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  margin: 2px 8px 7px;
+  padding: 10px 11px;
+  border-radius: 7px;
+  background: #f3f4f2;
+  color: #5f6b74;
+  font-size: 10px;
+  line-height: 1.45;
+}
+.onboarding-ai-consent input {
+  flex: 0 0 auto;
+  margin-top: 2px;
+  accent-color: var(--workbench-yellow-strong);
+}
 .profile-review {
   margin-top: 28px;
+}
+
+@keyframes magic-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-4px);
+  }
+}
+
+@keyframes magic-presence {
+  0%,
+  100% {
+    opacity: 0.65;
+    transform: scale(0.96);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.04);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .magic-avatar,
+  .magic-avatar::before,
+  .magic-presence-status i,
+  .onboarding-message.thinking {
+    animation: none;
+  }
 }
 
 @media (max-width: 760px) {

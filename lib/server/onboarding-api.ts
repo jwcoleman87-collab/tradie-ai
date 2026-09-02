@@ -9,15 +9,17 @@ import {
   type OnboardingMessage,
   type OnboardingSnapshot,
 } from '../contracts';
+import type { AIPreferences } from '../ai-settings';
 import { adminDb, checked, membership, rpc } from './db';
 import { body, json } from './http';
 import { requireValue } from './errors';
-import { businessDiscovery } from './discovery';
+import { createAIProvider } from './ai-provider';
+import { env } from './config';
 import {
-  buildOnboardingTurn,
   factValueForProfile,
   firstOnboardingPrompt,
   provisionalBusinessName,
+  runOnboardingMagic,
   type OnboardingGoalName,
 } from './onboarding';
 
@@ -30,6 +32,15 @@ type StoredSession = {
   prompt_count: number;
   status: 'in_progress' | 'review' | 'completed';
 };
+type OnboardingWorkspace = AIPreferences & {
+  id: string;
+  name: string;
+  time_zone: string;
+  ai_consent_at: string | null;
+  workspace_type: 'business' | 'sandbox';
+  status: 'active' | 'archived';
+  created_at: string;
+};
 
 const factSelect =
   'id,field_path,value,source_type,source_label,source_url,confidence,fact_state,observed_at,confirmed_at';
@@ -38,14 +49,15 @@ async function chooseWorkspace(
   db: SupabaseClient,
   requested: string | null = null,
 ) {
-  const workspaces =
-    checked(
-      await db
-        .from('workspaces')
-        .select('id,name,workspace_type,status,created_at')
-        .order('status')
-        .order('created_at'),
-    ) || [];
+  const workspaces = (checked(
+    await db
+      .from('workspaces')
+      .select(
+        'id,name,time_zone,ai_consent_at,ai_primary_provider,ai_fallback_enabled,ai_allowed_providers,workspace_type,status,created_at',
+      )
+      .order('status')
+      .order('created_at'),
+  ) || []) as OnboardingWorkspace[];
   if (!workspaces.length) return null;
   const workspace = requested
     ? workspaces.find((candidate) => candidate.id === requested)
@@ -53,6 +65,31 @@ async function chooseWorkspace(
       workspaces[0];
   requireValue(workspace, 'NOT_FOUND', 404);
   return workspace;
+}
+
+function onboardingDiscovery(
+  stored: OnboardingSnapshot['discovery']['status'] = 'unavailable',
+): OnboardingSnapshot['discovery'] {
+  if (stored === 'complete')
+    return {
+      status: 'complete',
+      label: 'Live public guidance used',
+      detail:
+        'Magic used cited public sources to answer a setup question. Public pages were treated as untrusted information, not instructions.',
+    };
+  if (env('WEB_SEARCH_ENABLED') === 'true')
+    return {
+      status: 'ready',
+      label: 'Live setup help is available',
+      detail:
+        'Ask Magic a current setup question and it can search cited public sources. Nothing is connected or changed during that research.',
+    };
+  return {
+    status: 'unavailable',
+    label: 'Live setup help is unavailable',
+    detail:
+      'Magic can still guide the setup from the conversation, but it cannot verify current public screens or instructions right now.',
+  };
 }
 
 async function snapshot(
@@ -65,12 +102,13 @@ async function snapshot(
     return {
       workspaceId: null,
       requiresOnboarding: true,
+      aiConsentRequired: true,
       onboardingStatus: 'not_started',
       promptCount: 0,
       currentPrompt: firstOnboardingPrompt,
       messages: [],
       facts: [],
-      discovery: businessDiscovery.status(),
+      discovery: onboardingDiscovery(),
     };
   await membership(db, userId, workspace.id);
   const [profileResult, sessionResult, factsResult] = await Promise.all([
@@ -111,6 +149,7 @@ async function snapshot(
     // account or a started-but-incomplete onboarding session is routed here.
     requiresOnboarding:
       onboardingStatus === 'in_progress' || onboardingStatus === 'review',
+    aiConsentRequired: !workspace.ai_consent_at,
     onboardingStatus,
     promptCount: session?.prompt_count || 0,
     currentPrompt:
@@ -121,7 +160,7 @@ async function snapshot(
           : firstOnboardingPrompt,
     messages: session?.messages || [],
     facts,
-    discovery: businessDiscovery.status(),
+    discovery: onboardingDiscovery(session?.discovery_status),
   };
 }
 
@@ -185,7 +224,7 @@ export async function onboardingApi(
         .maybeSingle(),
       admin
         .from('business_profiles')
-        .select('onboarding_status')
+        .select('display_name,onboarding_status')
         .eq('workspace_id', workspace.id)
         .maybeSingle(),
       admin
@@ -203,22 +242,37 @@ export async function onboardingApi(
       'This business profile is already confirmed.',
     );
     requireValue(
-      (session?.prompt_count || 0) < 5,
+      (session?.messages || []).filter((message) => message.role === 'user')
+        .length < 200,
       'ONBOARDING_REVIEW_REQUIRED',
       409,
-      'Review the profile before adding more information.',
+      'This setup conversation is full. Review the profile before continuing.',
     );
-    const sessionId = session?.id || crypto.randomUUID();
-    const currentGoal = session?.current_goal || 'identity_anchor';
-    const turn = buildOnboardingTurn({
-      answer: input.answer,
-      currentGoal,
-      goalsCovered: session?.information_goals || [],
-      existingFacts,
+    if (!workspace.ai_consent_at) {
+      requireValue(
+        input.allowAI,
+        'AI_CONSENT_REQUIRED',
+        403,
+        'Allow Magic to process your setup answers before continuing.',
+      );
+      const consentedAt = new Date().toISOString();
+      checked(
+        await admin
+          .from('workspaces')
+          .update({ ai_consent_at: consentedAt })
+          .eq('id', workspace.id),
+      );
+      workspace.ai_consent_at = consentedAt;
+    }
+    await rpc(admin, 'consume_rate', {
+      p_workspace: workspace.id,
+      p_user: userId,
+      p_operation: 'onboarding',
+      p_limit: 10,
     });
+    const sessionId = session?.id || crypto.randomUUID();
     const now = new Date().toISOString();
-    const sourceReference = `owner://onboarding/${sessionId}/${(session?.prompt_count || 0) + 1}`;
-    const messages: OnboardingMessage[] = [
+    const conversationBeforeReply: OnboardingMessage[] = [
       ...(session?.messages?.length
         ? session.messages
         : [
@@ -235,6 +289,18 @@ export async function onboardingApi(
         content: input.answer,
         createdAt: now,
       },
+    ];
+    const provider = createAIProvider(workspace);
+    const turn = await runOnboardingMagic(provider, {
+      messages: conversationBeforeReply.map(({ role, content }) => ({
+        role,
+        content,
+      })),
+      existingFacts,
+      timeZone: workspace.time_zone,
+    });
+    const messages: OnboardingMessage[] = [
+      ...conversationBeforeReply,
       {
         id: crypto.randomUUID(),
         role: 'assistant',
@@ -242,17 +308,31 @@ export async function onboardingApi(
         createdAt: now,
       },
     ];
-    const promptCount = (session?.prompt_count || 0) + 1;
+    const turnNumber = conversationBeforeReply.filter(
+      (message) => message.role === 'user',
+    ).length;
+    // Keep compatibility with projects that still have the original 0..5
+    // database constraint. Conversation history, not this legacy counter,
+    // drives Magic and continues beyond five turns.
+    const promptCount = Math.min(turnNumber, 5);
+    const sourceReference = `owner://onboarding/${sessionId}/${turnNumber}`;
+    const patch = profilePatch(turn.facts);
+    const reviewReady = session?.status === 'review' || turn.reviewReady;
+    const discoveryStatus = turn.researchUsed
+      ? 'complete'
+      : env('WEB_SEARCH_ENABLED') === 'true'
+        ? 'ready'
+        : 'unavailable';
     checked(
       await admin.from('business_profiles').upsert(
         {
           workspace_id: workspace.id,
           display_name:
-            typeof profilePatch(turn.facts).display_name === 'string'
-              ? profilePatch(turn.facts).display_name
-              : workspace.name,
-          ...profilePatch(turn.facts),
-          onboarding_status: turn.reviewReady ? 'review' : 'in_progress',
+            typeof patch.display_name === 'string'
+              ? patch.display_name
+              : profile?.display_name || workspace.name,
+          ...patch,
+          onboarding_status: reviewReady ? 'review' : 'in_progress',
           updated_at: now,
         },
         { onConflict: 'workspace_id', ignoreDuplicates: false },
@@ -266,7 +346,7 @@ export async function onboardingApi(
             field_path: fact.fieldPath,
             value: fact.value,
             source_type: 'owner_message',
-            source_label: `Your onboarding answer ${promptCount}`,
+            source_label: `Your onboarding message ${turnNumber}`,
             source_url: sourceReference,
             confidence: fact.confidence,
             fact_state: fact.factState,
@@ -286,9 +366,9 @@ export async function onboardingApi(
           information_goals: turn.goalsCovered,
           current_goal: turn.nextGoal,
           unresolved_questions: [],
-          discovery_status: businessDiscovery.status().status,
+          discovery_status: discoveryStatus,
           prompt_count: promptCount,
-          status: turn.reviewReady ? 'review' : 'in_progress',
+          status: reviewReady ? 'review' : 'in_progress',
           updated_at: now,
         },
         { onConflict: 'workspace_id', ignoreDuplicates: false },
@@ -302,8 +382,12 @@ export async function onboardingApi(
         entity_id: sessionId,
         metadata: {
           prompt_count: promptCount,
+          turn_number: turnNumber,
           goals_covered: turn.goalsCovered,
-          discovery_status: businessDiscovery.status().status,
+          discovery_status: discoveryStatus,
+          model: provider.model,
+          provider_trace: provider.attempts || [],
+          web_research_used: turn.researchUsed,
         },
       }),
     );

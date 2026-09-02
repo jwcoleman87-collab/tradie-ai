@@ -177,6 +177,7 @@ export const OnboardingTurnInput = z
   .object({
     workspaceId: Uuid.nullable().default(null),
     answer: z.string().trim().min(2).max(4000),
+    allowAI: z.boolean().default(false),
   })
   .strict();
 export const OnboardingCorrectionInput = z
@@ -223,6 +224,7 @@ export type OnboardingMessage = {
 export type OnboardingSnapshot = {
   workspaceId: string | null;
   requiresOnboarding: boolean;
+  aiConsentRequired: boolean;
   onboardingStatus: 'not_started' | 'in_progress' | 'review' | 'confirmed';
   promptCount: number;
   currentPrompt: string | null;

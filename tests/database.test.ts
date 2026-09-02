@@ -464,6 +464,18 @@ describe('migrations and tenant security on real PostgreSQL', () => {
         [sessionB],
       ),
     ).toEqual([]);
+    await db.query(
+      'update onboarding_sessions set prompt_count=6 where id=$1',
+      [sessionA],
+    );
+    expect(
+      (
+        await db.query<{ prompt_count: number }>(
+          'select prompt_count from onboarding_sessions where id=$1',
+          [sessionA],
+        )
+      ).rows[0].prompt_count,
+    ).toBe(6);
     await expect(
       asUser(
         ownerA,
