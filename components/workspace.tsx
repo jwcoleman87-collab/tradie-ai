@@ -261,12 +261,17 @@ export default function Workspace() {
       if (c) query.set('conversationId', c);
       const data = await requestApi<Snapshot>(token, `state?${query}`);
       if (seq !== loadSequence.current) return;
+      if (data.workspace?.id)
+        window.localStorage.setItem('workbench.workspaceId', data.workspace.id);
       if (
         !data.workspaces.length ||
         data.onboardingStatus === 'in_progress' ||
         data.onboardingStatus === 'review'
       ) {
-        window.location.replace('/onboarding');
+        const onboardingQuery = data.workspace?.id
+          ? `?workspaceId=${encodeURIComponent(data.workspace.id)}`
+          : '';
+        window.location.replace(`/onboarding${onboardingQuery}`);
         return;
       }
       setSnapshot(data.workspaces.length ? data : null);
@@ -282,8 +287,19 @@ export default function Workspace() {
   useEffect(() => {
     if (token) {
       setLoading(true);
-      refresh().catch((e) => {
-        setError(messageOf(e));
+      const rememberedWorkspace = window.localStorage.getItem(
+        'workbench.workspaceId',
+      );
+      void refresh(rememberedWorkspace || '').catch(async (e) => {
+        if (rememberedWorkspace) {
+          window.localStorage.removeItem('workbench.workspaceId');
+          try {
+            await refresh('', '');
+            return;
+          } catch (fallbackError) {
+            setError(messageOf(fallbackError));
+          }
+        } else setError(messageOf(e));
         setLoading(false);
       });
     } else {
@@ -1199,6 +1215,34 @@ export default function Workspace() {
           </p>
         </section>
         <aside className="actions-panel">
+          {snapshot && snapshot.workspaces.length > 1 && (
+            <label className="workspace-switcher">
+              <span>
+                <Building2 size={14} /> Business workspace
+              </span>
+              <select
+                aria-label="Business workspace"
+                value={workspaceId}
+                disabled={busy}
+                onChange={(event) =>
+                  perform(async () => {
+                    setSelectedFiles([]);
+                    setText('');
+                    setNotice('');
+                    await refresh(event.target.value, '');
+                  })
+                }
+              >
+                {snapshot.workspaces.map((workspace) => (
+                  <option key={workspace.id} value={workspace.id}>
+                    {workspace.name}
+                    {workspace.workspace_type === 'sandbox' ? ' · Sandbox' : ''}
+                    {workspace.status === 'archived' ? ' · Archived' : ''}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
           <div className="workspace-panel-intro">
             <div className="section-label">
               {snapshot?.workspace.name || 'YOUR WORKSPACE'}

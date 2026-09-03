@@ -70,6 +70,8 @@ export class OpenAIProvider implements ModelProvider {
               },
             },
           ],
+          tool_choice: 'required',
+          include: ['web_search_call.action.sources'],
           max_output_tokens: 2200,
         }),
         signal: AbortSignal.timeout(modelTimeout()),

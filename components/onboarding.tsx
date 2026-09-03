@@ -66,21 +66,36 @@ export default function Onboarding() {
   const [allowAI, setAllowAI] = useState(false);
   const chatRef = useRef<HTMLDivElement>(null);
 
-  const load = useCallback(async () => {
-    if (!session) return;
-    setLoading(true);
-    try {
-      const next = await requestApi<OnboardingSnapshot>(
-        session.access_token,
-        'onboarding',
-      );
-      setState(next);
-    } catch (caught) {
-      setError(messageOf(caught));
-    } finally {
-      setLoading(false);
-    }
-  }, [session]);
+  const load = useCallback(
+    async (requestedWorkspaceId?: string) => {
+      if (!session) return;
+      setLoading(true);
+      try {
+        const workspaceId =
+          requestedWorkspaceId ||
+          new URLSearchParams(window.location.search).get('workspaceId') ||
+          window.localStorage.getItem('workbench.workspaceId') ||
+          '';
+        const query = new URLSearchParams();
+        if (workspaceId) query.set('workspaceId', workspaceId);
+        const next = await requestApi<OnboardingSnapshot>(
+          session.access_token,
+          `onboarding?${query}`,
+        );
+        if (next.workspaceId)
+          window.localStorage.setItem(
+            'workbench.workspaceId',
+            next.workspaceId,
+          );
+        setState(next);
+      } catch (caught) {
+        setError(messageOf(caught));
+      } finally {
+        setLoading(false);
+      }
+    },
+    [session],
+  );
 
   useEffect(() => {
     if (authLoading) return;
@@ -188,12 +203,30 @@ export default function Onboarding() {
 
   async function confirmProfile() {
     if (!session || !state?.workspaceId) return;
+    const workspaceId = state.workspaceId;
     await perform(async () => {
       await requestApi(session.access_token, 'onboarding/confirm', 'POST', {
-        workspaceId: state.workspaceId,
+        workspaceId,
       });
+      window.localStorage.setItem('workbench.workspaceId', workspaceId);
       router.push('/workspace');
     });
+  }
+
+  async function changeWorkspace(workspaceId: string) {
+    window.localStorage.setItem('workbench.workspaceId', workspaceId);
+    window.history.replaceState(
+      null,
+      '',
+      `/onboarding?workspaceId=${encodeURIComponent(workspaceId)}`,
+    );
+    await load(workspaceId);
+  }
+
+  function openWorkspace() {
+    if (state?.workspaceId)
+      window.localStorage.setItem('workbench.workspaceId', state.workspaceId);
+    router.push('/workspace');
   }
 
   if (authLoading || loading || !state)
@@ -242,7 +275,7 @@ export default function Onboarding() {
       </header>
 
       <div className="onboarding-layout">
-        <section className="onboarding-main">
+        <section className="onboarding-main" data-reviewing={reviewing}>
           <div className="magic-heading">
             <div className="magic-avatar">
               <Image
@@ -265,6 +298,25 @@ export default function Onboarding() {
               </p>
             </div>
           </div>
+
+          {state.workspaces.length > 1 && (
+            <label className="onboarding-workspace-switcher">
+              <span>Business workspace</span>
+              <select
+                aria-label="Business workspace"
+                value={state.workspaceId || ''}
+                disabled={busy}
+                onChange={(change) => void changeWorkspace(change.target.value)}
+              >
+                {state.workspaces.map((workspace) => (
+                  <option key={workspace.id} value={workspace.id}>
+                    {workspace.name}
+                    {workspace.workspace_type === 'sandbox' ? ' · Sandbox' : ''}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
 
           <div className="onboarding-context-row">
             <span className="magic-presence-status">
@@ -395,7 +447,7 @@ export default function Onboarding() {
               {state.onboardingStatus === 'confirmed' ? (
                 <div className="confirmed-panel">
                   <Check size={20} /> Profile confirmed.
-                  <Button onClick={() => router.push('/workspace')}>
+                  <Button onClick={openWorkspace}>
                     Open my workspace <ArrowRight size={16} />
                   </Button>
                 </div>

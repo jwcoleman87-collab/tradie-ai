@@ -15,6 +15,7 @@ import { body, json } from './http';
 import { requireValue } from './errors';
 import { createAIProvider } from './ai-provider';
 import { env } from './config';
+import { preferredWorkspace } from '../workspace-selection';
 import {
   factValueForProfile,
   firstOnboardingPrompt,
@@ -58,13 +59,22 @@ async function chooseWorkspace(
       .order('status')
       .order('created_at'),
   ) || []) as OnboardingWorkspace[];
-  if (!workspaces.length) return null;
-  const workspace = requested
-    ? workspaces.find((candidate) => candidate.id === requested)
-    : workspaces.find((candidate) => candidate.status === 'active') ||
-      workspaces[0];
+  if (!workspaces.length) return { workspace: null, workspaces };
+  const confirmedProfiles = requested
+    ? []
+    : checked(
+        await db
+          .from('business_profiles')
+          .select('workspace_id')
+          .eq('onboarding_status', 'confirmed'),
+      ) || [];
+  const workspace = preferredWorkspace(
+    workspaces,
+    new Set(confirmedProfiles.map((profile) => profile.workspace_id)),
+    requested,
+  );
   requireValue(workspace, 'NOT_FOUND', 404);
-  return workspace;
+  return { workspace, workspaces };
 }
 
 function onboardingDiscovery(
@@ -97,10 +107,11 @@ async function snapshot(
   userId: string,
   requested: string | null = null,
 ): Promise<OnboardingSnapshot> {
-  const workspace = await chooseWorkspace(db, requested);
+  const { workspace, workspaces } = await chooseWorkspace(db, requested);
   if (!workspace)
     return {
       workspaceId: null,
+      workspaces: [],
       requiresOnboarding: true,
       aiConsentRequired: true,
       onboardingStatus: 'not_started',
@@ -145,6 +156,12 @@ async function snapshot(
           : 'not_started';
   return {
     workspaceId: workspace.id,
+    workspaces: workspaces.map(({ id, name, status, workspace_type }) => ({
+      id,
+      name,
+      status,
+      workspace_type,
+    })),
     // A workspace created before onboarding existed remains usable. Only a new
     // account or a started-but-incomplete onboarding session is routed here.
     requiresOnboarding:
@@ -203,12 +220,12 @@ export async function onboardingApi(
   }
   if (path === 'onboarding/turn' && method === 'POST') {
     const input = OnboardingTurnInput.parse(await body(request));
-    let workspace = await chooseWorkspace(db, input.workspaceId);
+    let { workspace } = await chooseWorkspace(db, input.workspaceId);
     if (!workspace) {
       const workspaceId = await rpc<string>(db, 'bootstrap_workspace', {
         p_name: provisionalBusinessName(input.answer),
       });
-      workspace = await chooseWorkspace(db, workspaceId);
+      ({ workspace } = await chooseWorkspace(db, workspaceId));
     }
     requireValue(workspace, 'DATABASE_ERROR', 503);
     await membership(db, userId, workspace.id, true);

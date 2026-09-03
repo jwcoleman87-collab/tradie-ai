@@ -223,6 +223,12 @@ export type OnboardingMessage = {
 };
 export type OnboardingSnapshot = {
   workspaceId: string | null;
+  workspaces: {
+    id: string;
+    name: string;
+    status: 'active' | 'archived';
+    workspace_type: 'business' | 'sandbox';
+  }[];
   requiresOnboarding: boolean;
   aiConsentRequired: boolean;
   onboardingStatus: 'not_started' | 'in_progress' | 'review' | 'confirmed';

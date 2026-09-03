@@ -140,6 +140,7 @@ export class ClaudeProvider implements ModelProvider {
               },
             },
           ],
+          tool_choice: { type: 'tool', name: 'web_search' },
         }),
         signal: AbortSignal.timeout(modelTimeout()),
       },

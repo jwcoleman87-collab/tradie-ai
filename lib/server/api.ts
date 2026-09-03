@@ -16,6 +16,7 @@ import { finishProvider } from './provider-oauth';
 import { AdditionalProviderSchema, connectionList } from './connections';
 import { aiProblem } from '../ai-diagnostics';
 import { onboardingApi } from './onboarding-api';
+import { preferredWorkspace } from '../workspace-selection';
 
 export const api = endpoint(async (request) => {
   const url = new URL(request.url),
@@ -63,14 +64,24 @@ export const api = endpoint(async (request) => {
           .order('created_at'),
       ) || [];
     if (!workspaces.length) return json({ workspaces: [] });
-    const workspaceId = Uuid.parse(
-      url.searchParams.get('workspaceId') ||
-        workspaces.find((workspace) => workspace.status === 'active')?.id ||
-        workspaces[0].id,
+    const requestedWorkspaceId = url.searchParams.get('workspaceId');
+    if (requestedWorkspaceId) Uuid.parse(requestedWorkspaceId);
+    const confirmedProfiles = requestedWorkspaceId
+      ? []
+      : checked(
+          await db
+            .from('business_profiles')
+            .select('workspace_id')
+            .eq('onboarding_status', 'confirmed'),
+        ) || [];
+    const workspace = preferredWorkspace(
+      workspaces,
+      new Set(confirmedProfiles.map((profile) => profile.workspace_id)),
+      requestedWorkspaceId,
     );
-    const role = await membership(db, user.id, workspaceId);
-    const workspace = workspaces.find((w) => w.id === workspaceId);
     requireValue(workspace, 'NOT_FOUND', 404);
+    const workspaceId = Uuid.parse(workspace.id);
+    const role = await membership(db, user.id, workspaceId);
     const conversations =
       checked(
         await db

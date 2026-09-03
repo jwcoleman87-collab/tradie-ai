@@ -1644,6 +1644,27 @@
   color: #7b858d;
   font-size: 11px;
 }
+.onboarding-workspace-switcher {
+  display: flex;
+  width: min(100%, 760px);
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin: 0 auto 12px;
+  color: #596670;
+  font-size: 11px;
+  font-weight: 750;
+}
+.onboarding-workspace-switcher select {
+  min-width: min(260px, 100%);
+  min-height: 38px;
+  padding: 0 10px;
+  border: 1px solid #b8bec2;
+  border-radius: 6px;
+  background: var(--workbench-white);
+  color: var(--workbench-ink);
+  font-weight: 700;
+}
 .magic-presence-status {
   display: inline-flex;
   align-items: center;
@@ -1855,5 +1876,59 @@
   }
   .onboarding-message {
     max-width: 92%;
+  }
+}
+
+@media (max-width: 760px) {
+  .onboarding-main[data-reviewing='false'] {
+    display: flex;
+    height: calc(100dvh - 62px);
+    min-height: 0;
+    flex-direction: column;
+    overflow: hidden;
+    padding: 20px 15px max(10px, env(safe-area-inset-bottom));
+  }
+  .onboarding-main[data-reviewing='false'] .magic-heading,
+  .onboarding-main[data-reviewing='false'] .onboarding-workspace-switcher,
+  .onboarding-main[data-reviewing='false'] .onboarding-context-row,
+  .onboarding-main[data-reviewing='false'] .onboarding-composer {
+    flex: 0 0 auto;
+  }
+  .onboarding-main[data-reviewing='false'] .magic-heading {
+    margin-bottom: 10px;
+  }
+  .onboarding-main[data-reviewing='false'] .onboarding-context-row {
+    padding-bottom: 10px;
+  }
+  .onboarding-main[data-reviewing='false'] .onboarding-chat {
+    min-height: 0;
+    max-height: none;
+    flex: 1 1 auto;
+    padding: 12px 0;
+    overscroll-behavior: contain;
+  }
+  .onboarding-main[data-reviewing='false'] .onboarding-composer textarea {
+    min-height: 52px;
+    max-height: 96px;
+    resize: none;
+  }
+  .onboarding-main[data-reviewing='false'] .onboarding-composer > div {
+    align-items: center;
+    flex-direction: row;
+    gap: 10px;
+  }
+}
+
+@media (max-width: 480px) {
+  .onboarding-workspace-switcher {
+    display: grid;
+    gap: 5px;
+  }
+  .onboarding-workspace-switcher select {
+    width: 100%;
+    min-width: 0;
+  }
+  .onboarding-main[data-reviewing='false'] .onboarding-composer > div > span {
+    display: none;
   }
 }

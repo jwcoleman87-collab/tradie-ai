@@ -579,6 +579,36 @@ output.composer-caption:empty {
   background: #f1f2f0;
 }
 
+.workspace-switcher {
+  display: grid;
+  gap: 6px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--workbench-line);
+  background: #e6e8e6;
+}
+
+.workspace-switcher > span {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--workbench-steel);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.7px;
+  text-transform: uppercase;
+}
+
+.workspace-switcher select {
+  width: 100%;
+  min-height: 38px;
+  padding: 0 10px;
+  border: 1px solid #b7bdc1;
+  border-radius: 6px;
+  background: var(--workbench-white);
+  color: var(--workbench-ink);
+  font-weight: 700;
+}
+
 .workspace-panel-intro {
   border-color: var(--workbench-line);
   background: var(--workbench-white);

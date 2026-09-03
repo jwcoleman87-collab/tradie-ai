@@ -66,6 +66,8 @@ it('uses OpenAI hosted web search and retains provider citations', async () => {
   expect(payload.tools).toEqual([
     expect.objectContaining({ type: 'web_search' }),
   ]);
+  expect(payload.tool_choice).toBe('required');
+  expect(payload.include).toContain('web_search_call.action.sources');
   expect(JSON.stringify(payload)).not.toContain('private-test-key');
   expect(result.sources).toEqual([
     {
@@ -121,6 +123,7 @@ it('uses Claude hosted web search and retains mandatory citations', async () => 
     type: 'web_search_20250305',
     max_uses: 3,
   });
+  expect(payload.tool_choice).toEqual({ type: 'tool', name: 'web_search' });
   expect(payload.output_config).toBeUndefined();
   expect(result.sources).toHaveLength(1);
   expect(provider.usage[0].webSearches).toBe(1);
