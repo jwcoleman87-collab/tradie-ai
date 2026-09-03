@@ -1503,6 +1503,72 @@
   font-size: 18px;
   line-height: 1.45;
 }
+.entry-hero {
+  flex: none;
+}
+.entry-crew {
+  position: relative;
+  z-index: 1;
+  width: min(1180px, calc(100% - 48px));
+  margin: 0 auto;
+  padding: 8px 0 64px;
+  border-top: 1px solid #1c2c3d;
+}
+.entry-crew-eyebrow {
+  color: var(--workbench-yellow);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 2px;
+}
+.entry-crew h2 {
+  max-width: 560px;
+  margin: 14px 0 10px;
+  color: var(--workbench-white);
+  font-size: clamp(24px, 2.6vw, 32px);
+  font-weight: 780;
+  letter-spacing: -0.5px;
+}
+.entry-crew > p {
+  max-width: 560px;
+  margin-bottom: 30px;
+  color: #9aa4ab;
+  font-size: 14px;
+  line-height: 1.6;
+}
+.entry-crew-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 14px;
+}
+.entry-crew-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 18px 16px;
+  border: 1px solid #223345;
+  border-radius: 10px;
+  background: #0c1c2b;
+}
+.entry-crew-icon {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border-radius: 8px;
+  background: #f1b5051a;
+  color: var(--workbench-yellow);
+}
+.entry-crew-name {
+  color: var(--workbench-white);
+  font-family: var(--font-display), Arial, sans-serif;
+  font-size: 15px;
+  font-weight: 750;
+}
+.entry-crew-blurb {
+  color: #8e99a2;
+  font-size: 12.5px;
+  line-height: 1.4;
+}
 .entry-footer {
   min-height: 54px;
   border-top: 1px solid #223345;
@@ -1679,6 +1745,25 @@
   box-shadow: 0 0 0 4px #2d8a5c18;
   animation: magic-presence 2.8s ease-in-out infinite;
 }
+.onboarding-context-trust {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 5px;
+}
+.onboarding-trust-note {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: #68747d;
+  font-size: 11px;
+  line-height: 1.4;
+  text-align: right;
+}
+.onboarding-trust-note svg {
+  flex-shrink: 0;
+  color: var(--workbench-success);
+}
 .onboarding-context-row details {
   position: relative;
   text-align: right;
@@ -1810,6 +1895,9 @@
   .entry-footer span:last-child {
     display: none;
   }
+  .entry-crew-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
   .auth-header img {
     width: 165px;
   }
@@ -1822,6 +1910,12 @@
     gap: 9px;
   }
   .onboarding-context-row details {
+    text-align: left;
+  }
+  .onboarding-context-trust {
+    align-items: flex-start;
+  }
+  .onboarding-trust-note {
     text-align: left;
   }
   .onboarding-chat {

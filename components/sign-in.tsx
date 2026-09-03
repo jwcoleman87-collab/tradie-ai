@@ -31,6 +31,7 @@ export default function SignIn() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmation, setConfirmation] = useState('');
+  const [signupConfirmation, setSignupConfirmation] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
@@ -96,6 +97,8 @@ export default function SignIn() {
   async function signIn(createAccount = false) {
     await perform(async () => {
       if (!client) throw Error('Workbench sign-in is not configured.');
+      if (createAccount && password !== signupConfirmation)
+        throw Error('The two passwords do not match.');
       const result = createAccount
         ? await client.auth.signUp({
             email,
@@ -110,10 +113,12 @@ export default function SignIn() {
         : await client.auth.signInWithPassword({ email, password });
       if (result.error) throw result.error;
       setPassword('');
-      if (createAccount)
+      if (createAccount) {
+        setSignupConfirmation('');
         setNotice(
           'Check your email to confirm your account. The confirmation link will bring you back to Chat onboarding.',
         );
+      }
     });
   }
 
@@ -309,10 +314,27 @@ export default function SignIn() {
                 onChange={(change) => setPassword(change.target.value)}
                 required
               />
+              <label htmlFor="account-password-confirm">Confirm password</label>
+              <Input
+                id="account-password-confirm"
+                type="password"
+                minLength={10}
+                autoComplete="new-password"
+                value={signupConfirmation}
+                onChange={(change) =>
+                  setSignupConfirmation(change.target.value)
+                }
+                required
+              />
               <Button
                 className="auth-primary"
                 type="submit"
-                disabled={busy || password.length < 10 || !email.trim()}
+                disabled={
+                  busy ||
+                  password.length < 10 ||
+                  !email.trim() ||
+                  password !== signupConfirmation
+                }
               >
                 Continue to Chat
               </Button>
