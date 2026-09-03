@@ -44,6 +44,7 @@ import {
 } from 'lucide-react';
 import { requestApi } from '@/lib/client';
 import { useWorkbenchAuth } from '@/lib/use-workbench-auth';
+import { workspaceNeedsOnboarding } from '@/lib/workspace-selection';
 import { supportPayload } from '@/lib/server/privacy';
 import type {
   Snapshot,
@@ -265,8 +266,7 @@ export default function Workspace() {
         window.localStorage.setItem('workbench.workspaceId', data.workspace.id);
       if (
         !data.workspaces.length ||
-        data.onboardingStatus === 'in_progress' ||
-        data.onboardingStatus === 'review'
+        workspaceNeedsOnboarding(data.workspace, data.onboardingStatus)
       ) {
         const onboardingQuery = data.workspace?.id
           ? `?workspaceId=${encodeURIComponent(data.workspace.id)}`

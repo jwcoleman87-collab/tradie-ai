@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { preferredWorkspace } from '../lib/workspace-selection';
+import {
+  preferredWorkspace,
+  workspaceNeedsOnboarding,
+} from '../lib/workspace-selection';
 
 const workspaces = [
   { id: 'old-incomplete', status: 'active' as const },
@@ -24,5 +27,14 @@ describe('preferred workspace selection', () => {
     expect(preferredWorkspace(workspaces, new Set())?.id).toBe(
       'old-incomplete',
     );
+  });
+
+  it('does not trap a testing sandbox in business onboarding', () => {
+    expect(
+      workspaceNeedsOnboarding({ workspace_type: 'sandbox' }, 'in_progress'),
+    ).toBe(false);
+    expect(
+      workspaceNeedsOnboarding({ workspace_type: 'business' }, 'in_progress'),
+    ).toBe(true);
   });
 });

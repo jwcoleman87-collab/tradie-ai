@@ -21,3 +21,13 @@ export function preferredWorkspace<T extends SelectableWorkspace>(
     null
   );
 }
+
+export function workspaceNeedsOnboarding(
+  workspace: { workspace_type: 'business' | 'sandbox' } | null | undefined,
+  onboardingStatus: 'in_progress' | 'review' | 'confirmed' | null | undefined,
+) {
+  return (
+    workspace?.workspace_type === 'business' &&
+    (onboardingStatus === 'in_progress' || onboardingStatus === 'review')
+  );
+}
