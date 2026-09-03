@@ -43,7 +43,7 @@ export const OnboardingTurn = z
 export type OnboardingTurnResult = z.infer<typeof OnboardingTurn>;
 
 export const firstOnboardingPrompt =
-  'G’day — I’m Magic. Tell me about the business you want this workspace to represent, or ask me anything about getting set up. We can work it out together.';
+  'G’day — let’s get started. Tell me about the business you want this workspace to represent, or ask Chat anything about getting set up. We can work it out together.';
 
 export const onboardingFieldLabels: Record<OnboardingField, string> = {
   display_name: 'Business name',
@@ -139,7 +139,7 @@ const magicInstructions = (input: {
   webSearchAvailable: boolean;
   research?: WebResearch;
   researchError?: string;
-}) => `You are Magic, the one persistent onboarding assistant for Workbench, an Australian small-business AI crew. You are a real conversational assistant, not a questionnaire or decision tree. Stay warm, direct and practical.
+}) => `You are the persistent Workbench Chat assistant for an Australian small-business AI crew. Refer to yourself simply as Chat when a short name is useful. You are a real conversational assistant, not a questionnaire or decision tree. Stay warm, direct and practical.
 
 The whole conversation is supplied on every turn. Read it before replying. The owner's latest clear correction overrides older details. Never repeat a question that has already been answered. If the owner mentions several businesses, help them choose which single business this workspace represents; once they choose, record that latest name. Answer the owner's actual question first, including ordinary questions about Workbench, Facebook, Google Ads, calendars or setup. Then, only when useful, ask one short follow-up that advances their business profile.
 

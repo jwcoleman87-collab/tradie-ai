@@ -112,7 +112,7 @@ export default function SignIn() {
       setPassword('');
       if (createAccount)
         setNotice(
-          'Check your email to confirm your account. The confirmation link will bring you back to Magic onboarding.',
+          'Check your email to confirm your account. The confirmation link will bring you back to Chat onboarding.',
         );
     });
   }
@@ -285,10 +285,10 @@ export default function SignIn() {
                 void signIn(true);
               }}
             >
-              <span className="section-label">MEET MAGIC</span>
+              <span className="section-label">WORKBENCH CHAT</span>
               <h2>Create your private Workbench.</h2>
               <p className="muted">
-                One account step, then Magic will guide the setup.
+                One account step, then Chat will guide the setup.
               </p>
               <label htmlFor="account-email">Email</label>
               <Input
@@ -314,7 +314,7 @@ export default function SignIn() {
                 type="submit"
                 disabled={busy || password.length < 10 || !email.trim()}
               >
-                Continue to Magic
+                Continue to Chat
               </Button>
               <button
                 className="auth-mode-switch"
@@ -378,7 +378,7 @@ export default function SignIn() {
                 disabled={busy}
                 onClick={() => setView('sign-up')}
               >
-                New here? Start with Magic
+                New here? Start with Chat
               </button>
             </form>
           )}

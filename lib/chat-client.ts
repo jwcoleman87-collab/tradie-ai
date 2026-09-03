@@ -54,8 +54,8 @@ export function chatBlockedReason(
   availability: AIAvailability | undefined,
   busy: boolean,
 ): string {
-  if (!signedIn) return 'Sign in to message Magic.';
-  if (!workspace) return 'Create your Workbench to message Magic.';
+  if (!signedIn) return 'Sign in to use Chat.';
+  if (!workspace) return 'Create your Workbench to use Chat.';
   if (!workspace.ai_consent_at)
     return 'AI processing is off. Open Connections to choose your providers and enable it.';
   if (!availability || !eligibleAIProviders(workspace, availability).length)

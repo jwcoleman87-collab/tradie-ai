@@ -1,6 +1,6 @@
 # Workbench
 
-An AI crew for trades businesses: Magic Chat, five versioned specialists,
+An AI crew for trades businesses: Workbench Chat, five versioned specialists,
 private customer workspaces, and explicit owner approval before execution.
 
 The approved Workbench visual source, tokens and logo rules are stored in
@@ -40,7 +40,7 @@ Start with [the continuation checkpoint](docs/CONTINUATION.md),
 [connection setup](docs/CONNECTIONS.md) and [verification](docs/VERIFICATION.md).
 
 The current interface follows the owner-approved Workbench styleboard: workshop
-ink/navy, selective Workbench yellow, a dark Crew rail, central Magic Chat and a
+ink/navy, selective Workbench yellow, a dark Crew rail, central Chat and a
 light owner-review Workspace. Shared tokens live in `app/globals.css`; the
 Workbench application layer is in `app/workbench.css` and the working interface
 remains in `components/workspace.tsx`.
@@ -161,7 +161,7 @@ Fallback works only on the providers this workspace allows. Provider requests
 may still cost money on a timeout; switching is not free or unlimited usage.
 See [all provider variables and callbacks](docs/CONNECTIONS.md).
 
-When `WEB_SEARCH_ENABLED=true`, Magic decides whether a request needs current
+When `WEB_SEARCH_ENABLED=true`, Chat decides whether a request needs current
 public information. It creates a short public-only search query, blocks common
 credentials/contact details/private identifiers, and uses the currently
 allowed provider's hosted web-search tool. Research is supplied to the managed

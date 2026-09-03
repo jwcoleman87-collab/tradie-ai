@@ -6,7 +6,7 @@ import { ArrowRight, LockKeyhole } from 'lucide-react';
 export const metadata: Metadata = {
   title: 'Workbench — Your business, made lighter.',
   description:
-    'Meet Magic, the simple AI guide for setting up your private Workbench.',
+    'Meet Workbench Chat, the simple AI guide for setting up your private Workbench.',
   alternates: { canonical: '/' },
   openGraph: {
     title: 'Workbench — Your business, made lighter.',
@@ -44,18 +44,18 @@ export default function Home() {
         <div className="entry-copy">
           <span className="eyebrow">YOUR BUSINESS. MADE LIGHTER.</span>
           <h1>
-            Meet Magic.
+            Meet your Chat.
             <span>Your business starts with a conversation.</span>
           </h1>
           <p>
-            Tell Magic about the work behind your work. It will guide the setup,
+            Tell Chat about the work behind your work. It will guide the setup,
             one useful question at a time.
           </p>
           <Link
             className="entry-primary"
             href="/sign-in?view=signup&next=/onboarding"
           >
-            Start with Magic <ArrowRight size={18} />
+            Start chatting <ArrowRight size={18} />
           </Link>
           <span className="entry-private-note">
             <LockKeyhole size={13} /> Private setup. You stay in control.
@@ -73,7 +73,7 @@ export default function Home() {
             />
           </div>
           <div className="entry-message">
-            <span>MAGIC</span>
+            <span>CHAT</span>
             <p>G’day. Let’s get your Workbench ready.</p>
           </div>
         </div>

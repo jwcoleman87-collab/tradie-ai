@@ -19,7 +19,7 @@ practical outcomes and owner control. Technology remains secondary.
 | Display type     | Work Sans      |
 | Body type        | Inter          |
 
-The application uses the product model **Crew → Magic Chat → Workspace**.
+The application uses the product model **Crew → Chat → Workspace**.
 Yellow is reserved for active states, important actions and signals. Dark navy
 surfaces carry the shell and Crew navigation; work content stays light and
 high-contrast.
@@ -37,8 +37,8 @@ surfaces with strong contrast.
 ## Product language
 
 - Product: **Workbench**
-- Central conversation: **Magic Chat**
-- Assistant: **Magic**
+- Central conversation: **Chat**
+- Assistant: **Chat**
 - Specialists: **Your crew**
 - Positioning: **Your business. Your crew. One place.**
 

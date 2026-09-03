@@ -41,14 +41,14 @@ customer blockers.
 
 The existing Next.js/Vercel application has separate `/`, `/sign-in`,
 `/onboarding` and `/workspace` routes. The public route is deliberately a
-single-screen branded entry point: one promise, one primary **Start with Magic**
+single-screen branded entry point: one promise, one primary **Start chatting**
 action and a quiet existing-owner sign-in link. It does not expose the crew,
 feature catalogue or product internals. Sign-up is one small account step before
-Magic takes over as the guide. Existing workspace visuals remain intact behind
+Chat takes over as the guide. Existing workspace visuals remain intact behind
 `/workspace`; signed-out workspace visits go to the dedicated sign-in route.
 
-Onboarding is a focused, single-column Magic conversation with at most five
-adaptive prompts, followed by a **What Magic found** review. Secondary setup
+Onboarding is a focused, single-column Chat conversation with at most five
+adaptive prompts, followed by a **What Chat found** review. Secondary setup
 details are collapsed so the first screen contains only the guide, current
 question and answer composer. Facts retain their source and confidence,
 corrections remain owner-supplied, and confirmation is required before entering
@@ -76,7 +76,7 @@ Source commit `97f6236` was pushed and deployed to Vercel production as
 `https://tradie-ai-nine.vercel.app` alias points to it. Production browser checks
 passed for the one-screen landing, focused sign-up path, both signed-out redirects,
 the existing authenticated workspace and the read-only first onboarding screen.
-The initial Magic screen fits without document scroll in the authenticated browser.
+The initial Chat screen fits without document scroll in the authenticated browser.
 No onboarding response or external action was submitted. Its post-deployment log
 window contained no application errors or HTTP 500 responses.
 
@@ -142,7 +142,7 @@ test inside local workerd. No claim of live Calendar execution is made.
 
 On 2 September 2026 the owner approved the Workbench identity. The primary
 source is `docs/brand/workbench-styleboard.png`; implementation tokens and logo
-rules are in `docs/brand/README.md`. The product language is **Crew → Magic Chat
+rules are in `docs/brand/README.md`. The product language is **Crew → Chat
 → Workspace**, using the joined owner-and-crew mark, Workbench yellow, workshop
 ink/navy, Work Sans headings and Inter body copy. Do not restore the former blue
 tile logo or purple/lilac Tradie AI theme. Preserve legacy `tradie-ai` cloud,

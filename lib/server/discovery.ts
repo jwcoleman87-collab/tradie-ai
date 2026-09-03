@@ -30,7 +30,7 @@ export class UnavailableBusinessDiscoveryAdapter implements BusinessDiscoveryAda
       status: 'unavailable',
       label: 'Public-source research not connected',
       detail:
-        'Magic has only used information you supplied. No website, registry or business-profile search ran.',
+        'Chat has only used information you supplied. No website, registry or business-profile search ran.',
     };
   }
 

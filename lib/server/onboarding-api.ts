@@ -85,20 +85,20 @@ function onboardingDiscovery(
       status: 'complete',
       label: 'Live public guidance used',
       detail:
-        'Magic used cited public sources to answer a setup question. Public pages were treated as untrusted information, not instructions.',
+        'Chat used cited public sources to answer a setup question. Public pages were treated as untrusted information, not instructions.',
     };
   if (env('WEB_SEARCH_ENABLED') === 'true')
     return {
       status: 'ready',
       label: 'Live setup help is available',
       detail:
-        'Ask Magic a current setup question and it can search cited public sources. Nothing is connected or changed during that research.',
+        'Ask Chat a current setup question and it can search cited public sources. Nothing is connected or changed during that research.',
     };
   return {
     status: 'unavailable',
     label: 'Live setup help is unavailable',
     detail:
-      'Magic can still guide the setup from the conversation, but it cannot verify current public screens or instructions right now.',
+      'Chat can still guide the setup from the conversation, but it cannot verify current public screens or instructions right now.',
   };
 }
 
@@ -270,7 +270,7 @@ export async function onboardingApi(
         input.allowAI,
         'AI_CONSENT_REQUIRED',
         403,
-        'Allow Magic to process your setup answers before continuing.',
+        'Allow Chat to process your setup answers before continuing.',
       );
       const consentedAt = new Date().toISOString();
       checked(
@@ -330,7 +330,7 @@ export async function onboardingApi(
     ).length;
     // Keep compatibility with projects that still have the original 0..5
     // database constraint. Conversation history, not this legacy counter,
-    // drives Magic and continues beyond five turns.
+    // drives Chat and continues beyond five turns.
     const promptCount = Math.min(turnNumber, 5);
     const sourceReference = `owner://onboarding/${sessionId}/${turnNumber}`;
     const patch = profilePatch(turn.facts);

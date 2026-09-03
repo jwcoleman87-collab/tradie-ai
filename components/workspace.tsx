@@ -604,7 +604,7 @@ export default function Workspace() {
               aria-current={mobile === t ? 'page' : undefined}
               onClick={() => setMobile(t)}
             >
-              {t === 'team' ? 'Crew' : t === 'chat' ? 'Magic' : 'Workspace'}
+              {t === 'team' ? 'Crew' : t === 'chat' ? 'Chat' : 'Workspace'}
             </Button>
           ))}
         </nav>
@@ -636,7 +636,7 @@ export default function Workspace() {
         <section className="conversation-panel">
           <div className="panel-heading">
             <div>
-              <span className="section-label">MAGIC CHAT</span>
+              <span className="section-label">CHAT</span>
               <h1>G’day. What can I get done?</h1>
             </div>
             <span className="status-pill">
@@ -825,7 +825,7 @@ export default function Workspace() {
                         unoptimized
                       />
                     </div>
-                    <h2>Magic is ready.</h2>
+                    <h2>Chat is ready.</h2>
                     <p className="muted">
                       Tell Workbench what needs doing. Your crew will sort out
                       who should handle it.
@@ -895,10 +895,10 @@ export default function Workspace() {
                   )}
                 {config?.configured && !session && authView === 'sign-in' && (
                   <form className="auth-form" onSubmit={(e) => signIn(e)}>
-                    <span className="section-label">MAGIC CHAT SETUP</span>
+                    <span className="section-label">CHAT SETUP</span>
                     <h2>G’day. Let’s open your Workbench.</h2>
                     <p className="muted">
-                      Sign in, or create an account and tell Magic about your
+                      Sign in, or create an account and tell Chat about your
                       business.
                     </p>
                     <label htmlFor="account-email">
@@ -970,10 +970,10 @@ export default function Workspace() {
                     }}
                   >
                     <span className="section-label">YOUR BUSINESS</span>
-                    <h2>Tell Magic what you call the business.</h2>
+                    <h2>Tell Chat what you call the business.</h2>
                     <p className="muted">
                       Start with the name. The rest can be gathered naturally in
-                      Magic Chat.
+                      Chat.
                     </p>
                     <label htmlFor="business-name">
                       Your business name
@@ -1064,7 +1064,7 @@ export default function Workspace() {
                       return (
                         <article className={`message ${m.role}`} key={m.id}>
                           <span className="meta">
-                            {m.role === 'user' ? 'You' : 'Magic + your crew'} ·{' '}
+                            {m.role === 'user' ? 'You' : 'Chat + your crew'} ·{' '}
                             {new Date(m.created_at).toLocaleTimeString([], {
                               hour: '2-digit',
                               minute: '2-digit',
@@ -1115,8 +1115,8 @@ export default function Workspace() {
           <form className="composer" onSubmit={send}>
             <Textarea
               id="magic-message"
-              aria-label="Message Magic"
-              placeholder={blockedReason || 'Message Magic…'}
+              aria-label="Message Chat"
+              placeholder={blockedReason || 'Message Chat…'}
               aria-describedby="composer-help"
               value={text}
               maxLength={12000}

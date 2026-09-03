@@ -30,7 +30,7 @@ WORKBENCH is an AI crew for Australian trades and small service businesses. It h
 The product language is:
 
 1. **Crew** — Finance, Marketing, Social, Maintenance and Website specialists.
-2. **Magic Chat** — the simple conversational front door. The owner tells Magic what needs doing and the right crew members are routed behind the scenes.
+2. **Chat** — the simple conversational front door. The owner explains what needs doing and the right crew members are routed behind the scenes.
 3. **Workspace** — private files, records, connections, approvals, receipts, audit and work still needing the owner's attention.
 
 The trust model is fundamental:
@@ -116,13 +116,13 @@ Some older verification paragraphs describe what had not yet been tested at that
 
 ## 6. Immediate build objective
 
-Create an industry-standard landing and first-run onboarding experience that explains WORKBENCH quickly and begins learning a new customer's business through Magic.
+Create an industry-standard landing and first-run onboarding experience that explains WORKBENCH quickly and begins learning a new customer's business through Chat.
 
 This must not be a conventional multi-page form, and it must not be a form disguised as a chatbot.
 
 The core product principle is:
 
-> **Magic asks a small number of high-information questions to locate reliable evidence. It then researches and completes the business profile itself, shows what it found and where it came from, and only asks the owner about genuine gaps or conflicts.**
+> **Chat asks a small number of high-information questions to locate reliable evidence. It then researches and completes the business profile itself, shows what it found and where it came from, and only asks the owner about genuine gaps or conflicts.**
 
 The owner should feel that WORKBENCH is doing the onboarding work with them, not transferring admin work into a chat window.
 
@@ -132,7 +132,7 @@ Introduce clear route boundaries without breaking the existing app:
 
 - `/` — public WORKBENCH landing page.
 - `/sign-in` — sign-in, account confirmation, password recovery and controlled account creation.
-- `/onboarding` — authenticated first-run Magic business discovery.
+- `/onboarding` — authenticated first-run Chat business discovery.
 - `/workspace` — the existing three-panel WORKBENCH product.
 
 The current `/` directly renders `components/workspace.tsx`, and auth/bootstrap is embedded inside that large client component. Extract deliberately; do not duplicate authentication logic across pages.
@@ -156,8 +156,8 @@ The landing page should make the outcome clear in under 60 seconds using the loc
 
 - WORKBENCH lockup and the approved line: **Your business. Your crew. One place.**
 - Outcome-led hero based on the approved brand idea: **You build it. We handle the business.**
-- A plain explanation of Magic: tell it what needs doing; the right crew handles the business work; the owner stays in control.
-- Three-step explanation: **Talk to Magic → Your crew prepares the work → You review the result.**
+- A plain explanation of Chat: tell it what needs doing; the right crew handles the business work; the owner stays in control.
+- Three-step explanation: **Use Chat → Your crew prepares the work → You review the result.**
 - A concise view of the crew framed as outcomes, not AI personas.
 - Trust section covering private workspaces, approval before external change and clear receipts. Do not make unverified absolute security claims.
 - A preview of intelligent onboarding: five simple prompts can become a sourced business profile instead of a long setup form.
@@ -184,7 +184,7 @@ An effective opening can group related information naturally, for example:
 
 > “What is the business called, where are you based, and what sort of work keeps you busiest? If you know your website or business profile, include it—but you do not have to go looking for it.”
 
-From that answer, Magic should decide what evidence to look for. Subsequent prompts should cover only information that materially changes the search or recommended setup, such as:
+From that answer, Chat should decide what evidence to look for. Subsequent prompts should cover only information that materially changes the search or recommended setup, such as:
 
 1. The business identity and location/service-area anchor.
 2. The work the owner wants more of—not a complete service catalogue.
@@ -192,11 +192,11 @@ From that answer, Magic should decide what evidence to look for. Subsequent prom
 4. The single biggest business/admin bottleneck to solve first.
 5. Confirmation/correction of the sourced profile and the first recommended outcome.
 
-These are information goals, not five mandatory chat messages. Magic may combine goals, skip what is already known, or ask one focused clarification when sources conflict.
+These are information goals, not five mandatory chat messages. Chat may combine goals, skip what is already known, or ask one focused clarification when sources conflict.
 
-### What Magic should do itself
+### What Chat should do itself
 
-Using owner-approved and legitimately accessible sources, Magic should try to locate and extract:
+Using owner-approved and legitimately accessible sources, Chat should try to locate and extract:
 
 - Trading and legal identity, where reliably available.
 - Website and public business profiles.
@@ -222,7 +222,7 @@ Every populated profile fact should carry:
 - State: discovered, owner-supplied, inferred, confirmed or needs confirmation.
 - Last checked time.
 
-The review screen should say **What Magic found** and make corrections easy. Ask the owner only about low-confidence, conflicting or high-impact facts.
+The review screen should say **What Chat found** and make corrections easy. Ask the owner only about low-confidence, conflicting or high-impact facts.
 
 Never silently infer or publish private financial information, pricing, licences, insurance, staff identities, legal status or safety-critical capabilities.
 
@@ -282,8 +282,8 @@ Do not store chain-of-thought. Store concise conclusions, sources, confidence, s
 
 ## 11. AI and discovery architecture
 
-Use one persistent Magic onboarding assistant rather than the normal five-agent
-routing loop. Magic receives the saved setup conversation on every turn, answers
+Use one persistent Chat onboarding assistant rather than the normal five-agent
+routing loop. Chat receives the saved setup conversation on every turn, answers
 the owner's question first, and gradually builds the profile without following a
 fixed questionnaire or stopping after five answers.
 
@@ -313,10 +313,10 @@ The next Codex chat should begin implementation, not just write another plan. A 
 
 1. Extract the current app to a stable `/workspace` route without changing its appearance or behaviour.
 2. Build the locked-brand `/` landing page and working navigation to sign-in/onboarding.
-3. Introduce an authenticated `/onboarding` shell using Magic's visual language.
+3. Introduce an authenticated `/onboarding` shell using Chat's visual language.
 4. Persist a resumable onboarding session and the owner's first high-information answer.
 5. Produce a schema-validated draft business profile from owner-supplied information.
-6. Show a **What Magic found** review with fact status and sources.
+6. Show a **What Chat found** review with fact status and sources.
 7. Add the real discovery-adapter boundary; do not fabricate public research if the provider is not connected in this slice.
 8. Route confirmed onboarding into the existing workspace.
 
@@ -382,4 +382,4 @@ These decisions should not prevent the first route/UI/data vertical slice from b
 
 ## 16. Copy-ready opening instruction for the next Codex chat
 
-> Continue the existing WORKBENCH application from `C:\Users\James Coleman\Documents\Codex\2026-08-31\referenced-chatgpt-conversation-this-is-an\outputs\tradie-ai`. Read `AGENTS.md` and `docs/HANDOVER-LANDING-ONBOARDING.md` completely before acting. Begin implementing the first vertical slice in section 12; do not stop after planning. The current WORKBENCH aesthetic is locked and must not change unless James explicitly asks. Preserve the existing authenticated workspace and its trust/approval architecture. Build onboarding as an intelligent business-discovery conversation: Magic asks no more than roughly five high-information prompts, uses reliable approved sources to answer the remaining profile questions itself, shows sources/confidence, and only asks the owner about genuine gaps or conflicts. Never fabricate research, customer facts, connections or external outcomes. Run the full checks, verify the UI and deploy the completed safe slice to the linked Vercel production project.
+> Continue the existing WORKBENCH application from `C:\Users\James Coleman\Documents\Codex\2026-08-31\referenced-chatgpt-conversation-this-is-an\outputs\tradie-ai`. Read `AGENTS.md` and `docs/HANDOVER-LANDING-ONBOARDING.md` completely before acting. Begin implementing the first vertical slice in section 12; do not stop after planning. The current WORKBENCH aesthetic is locked and must not change unless James explicitly asks. Preserve the existing authenticated workspace and its trust/approval architecture. Build onboarding as an intelligent business-discovery conversation: Chat asks no more than roughly five high-information prompts, uses reliable approved sources to answer the remaining profile questions itself, shows sources/confidence, and only asks the owner about genuine gaps or conflicts. Never fabricate research, customer facts, connections or external outcomes. Run the full checks, verify the UI and deploy the completed safe slice to the linked Vercel production project.

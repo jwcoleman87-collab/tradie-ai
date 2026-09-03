@@ -152,7 +152,7 @@ export default function Onboarding() {
   async function sendAnswer() {
     if (!session || !answer.trim()) return;
     if (state?.aiConsentRequired && !allowAI) {
-      setError('Allow Magic to process your setup answers before continuing.');
+      setError('Allow Chat to process your setup answers before continuing.');
       return;
     }
     await perform(async () => {
@@ -239,7 +239,7 @@ export default function Onboarding() {
           height={49}
           unoptimized
         />
-        <h1>Magic is opening your setup…</h1>
+        <h1>Chat is opening your setup…</h1>
         {(error || authError) && (
           <div className="form-alert">{error || authError}</div>
         )}
@@ -287,11 +287,11 @@ export default function Onboarding() {
               />
             </div>
             <div>
-              <span className="section-label">MAGIC</span>
+              <span className="section-label">CHAT</span>
               <h2>
                 {state.onboardingStatus === 'confirmed'
                   ? 'Your Workbench is ready.'
-                  : 'G’day. I’m Magic.'}
+                  : 'G’day. Let’s get started.'}
               </h2>
               <p className="magic-subtitle">
                 I’ll stay with you while we set things up. Ask me anything.
@@ -322,8 +322,8 @@ export default function Onboarding() {
             <span className="magic-presence-status">
               <i aria-hidden="true" />
               {reviewing
-                ? 'Magic is here · profile ready when you are'
-                : 'Magic is here · conversation saved'}
+                ? 'Chat is ready · profile ready when you are'
+                : 'Chat is ready · conversation saved'}
             </span>
             <details>
               <summary>About this setup</summary>
@@ -347,7 +347,7 @@ export default function Onboarding() {
                 ))}
                 {busy && (
                   <div className="onboarding-message assistant thinking">
-                    Magic is thinking…
+                    Chat is thinking…
                   </div>
                 )}
               </div>
@@ -359,8 +359,8 @@ export default function Onboarding() {
                 }}
               >
                 <Textarea
-                  aria-label="Message Magic"
-                  placeholder="Ask Magic anything or tell me about your business…"
+                  aria-label="Message Chat"
+                  placeholder="Ask Chat anything or tell me about your business…"
                   value={answer}
                   maxLength={4000}
                   onChange={(change) => setAnswer(change.target.value)}
@@ -373,13 +373,13 @@ export default function Onboarding() {
                       checked={allowAI}
                       onChange={(change) => setAllowAI(change.target.checked)}
                     />
-                    Allow Magic to process my setup answers using the configured
+                    Allow Chat to process my setup answers using the configured
                     OpenAI or Anthropic provider. I can pause AI later.
                   </label>
                 )}
                 <div>
                   <span>
-                    Magic remembers this setup conversation. Nothing connects or
+                    Chat remembers this setup conversation. Nothing connects or
                     publishes without your approval.
                   </span>
                   <Button
@@ -390,7 +390,7 @@ export default function Onboarding() {
                       (state.aiConsentRequired && !allowAI)
                     }
                   >
-                    {busy ? 'Magic is thinking…' : 'Send to Magic'}{' '}
+                    {busy ? 'Chat is thinking…' : 'Send to Chat'}{' '}
                     <ArrowRight size={16} />
                   </Button>
                 </div>
@@ -403,7 +403,7 @@ export default function Onboarding() {
                 <Sparkles size={20} />
                 <p>
                   Your profile draft is ready below. You can keep talking to
-                  Magic, make corrections, or confirm it when you’re happy.
+                  Chat, make corrections, or confirm it when you’re happy.
                 </p>
               </div>
               <div className="fact-grid">
