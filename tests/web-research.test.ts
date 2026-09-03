@@ -4,6 +4,7 @@ import { ClaudeProvider } from '../lib/server/claude';
 import {
   appendWebSources,
   publicSearchQuery,
+  webSources,
 } from '../lib/server/web-research';
 import { parseResearchMessage } from '../components/message-copy';
 
@@ -43,6 +44,21 @@ it('turns appended research into one clean visual source set', () => {
       hostname: 'example.gov.au',
     },
   ]);
+});
+
+it('uses the source hostname when a provider returns a generic title', () => {
+  expect(
+    webSources([
+      { title: 'Web source', url: 'https://www.ato.gov.au/business/gst' },
+    ]),
+  ).toEqual([
+    { title: 'ato.gov.au', url: 'https://www.ato.gov.au/business/gst' },
+  ]);
+  expect(
+    parseResearchMessage(
+      'Checked.\n\nSources — live web research (2026-09-02T00:00:00.000Z):\n- [Web source](https://www.ato.gov.au/business/gst)',
+    ).sources[0].title,
+  ).toBe('ato.gov.au');
 });
 
 it('uses OpenAI hosted web search and retains provider citations', async () => {

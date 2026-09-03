@@ -119,7 +119,7 @@ export const api = endpoint(async (request) => {
       conversationId
         ? db
             .from('messages')
-            .select('id,role,content,created_at,attachment_ids')
+            .select('id,run_id,role,content,created_at,attachment_ids')
             .eq('conversation_id', conversationId)
             .order('created_at', { ascending: false })
             .limit(200)

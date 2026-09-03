@@ -24,10 +24,11 @@ function sourceOf(line: string): DisplaySource | null {
   if (!match) return null;
   const url = safeLink(match[2]);
   if (!url) return null;
+  const hostname = new URL(url).hostname.replace(/^www\./, '');
   return {
-    title: match[1],
+    title: /^web source$/i.test(match[1].trim()) ? hostname : match[1],
     url,
-    hostname: new URL(url).hostname.replace(/^www\./, ''),
+    hostname,
   };
 }
 

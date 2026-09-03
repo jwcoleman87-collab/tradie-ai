@@ -252,12 +252,7 @@ export async function onboardingApi(
     const session = checked(sessionResult) as StoredSession | null;
     const profile = checked(profileResult);
     const existingFacts = (checked(factsResult) || []) as OnboardingFact[];
-    requireValue(
-      profile?.onboarding_status !== 'confirmed',
-      'ONBOARDING_COMPLETE',
-      409,
-      'This business profile is already confirmed.',
-    );
+    const profileWasConfirmed = profile?.onboarding_status === 'confirmed';
     requireValue(
       (session?.messages || []).filter((message) => message.role === 'user')
         .length < 200,
@@ -371,7 +366,11 @@ export async function onboardingApi(
               ? patch.display_name
               : profile?.display_name || workspace.name,
           ...patch,
-          onboarding_status: reviewReady ? 'review' : 'in_progress',
+          onboarding_status: profileWasConfirmed
+            ? 'confirmed'
+            : reviewReady
+              ? 'review'
+              : 'in_progress',
           updated_at: now,
         },
         { onConflict: 'workspace_id', ignoreDuplicates: false },
@@ -407,7 +406,11 @@ export async function onboardingApi(
           unresolved_questions: [],
           discovery_status: discoveryStatus,
           prompt_count: promptCount,
-          status: reviewReady ? 'review' : 'in_progress',
+          status: profileWasConfirmed
+            ? 'completed'
+            : reviewReady
+              ? 'review'
+              : 'in_progress',
           updated_at: now,
         },
         { onConflict: 'workspace_id', ignoreDuplicates: false },
@@ -446,12 +449,6 @@ export async function onboardingApi(
         .maybeSingle(),
     );
     requireValue(profile, 'NOT_FOUND', 404);
-    requireValue(
-      profile.onboarding_status !== 'confirmed',
-      'ONBOARDING_COMPLETE',
-      409,
-      'This business profile is already confirmed.',
-    );
     checked(
       await admin
         .from('business_profiles')

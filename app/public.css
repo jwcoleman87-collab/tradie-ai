@@ -1935,6 +1935,13 @@
 }
 
 /* Visual information cards shared by onboarding and the main Chat. */
+.agent-card.participated:not(.active) .agent-dot {
+  background: var(--workbench-success);
+  box-shadow: 0 0 0 3px #2d8a561c;
+}
+.agent-card[aria-pressed='true'] {
+  border-color: var(--workbench-yellow);
+}
 .message-copy {
   min-width: 0;
   white-space: normal;
@@ -2253,6 +2260,34 @@
   box-shadow: 0 12px 32px #030d1820;
   backdrop-filter: blur(10px);
 }
+.confirmed-panel > span,
+.confirmed-actions {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+.confirmed-actions {
+  margin-left: auto;
+}
+.action-connection-error {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid #e2bd54;
+  border-radius: 10px;
+  background: #fff6d4;
+  color: #604b0e;
+  font-size: 11px;
+  line-height: 1.5;
+}
+.action-connection-error [data-slot='button'] {
+  width: fit-content;
+  background: var(--workbench-white);
+}
+.message-history {
+  scrollbar-gutter: stable;
+}
 
 @media (max-width: 620px) {
   .profile-review-heading {
@@ -2280,6 +2315,33 @@
   }
   .review-actions {
     bottom: 4px;
+  }
+  .confirmed-panel,
+  .confirmed-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .confirmed-actions {
+    width: 100%;
+    margin-left: 0;
+  }
+  .confirmed-actions [data-slot='button'] {
+    width: 100%;
+  }
+  .conversation-toolbar {
+    flex-wrap: wrap;
+    overflow-x: visible;
+    padding-right: 12px;
+    padding-left: 12px;
+  }
+  .conversation-toolbar .workspace-select {
+    width: 100% !important;
+    max-width: 100% !important;
+    flex: 1 0 100%;
+  }
+  .conversation-toolbar [data-slot='button'] {
+    min-width: 0;
+    flex: 1;
   }
   .research-sources {
     border-radius: 11px;

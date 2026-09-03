@@ -373,69 +373,67 @@ export default function Onboarding() {
             </details>
           </div>
 
-          {state.onboardingStatus !== 'confirmed' && (
-            <>
-              <div className="onboarding-chat" aria-live="polite" ref={chatRef}>
-                {conversation.map((message) => (
-                  <div
-                    key={message.id}
-                    className={`onboarding-message ${message.role}`}
-                  >
-                    <MessageCopy text={message.content} />
-                  </div>
-                ))}
-                {busy && (
-                  <div className="onboarding-message assistant thinking">
-                    Chat is thinking…
-                  </div>
-                )}
-              </div>
-              <form
-                className="onboarding-composer"
-                onSubmit={(submitEvent) => {
-                  submitEvent.preventDefault();
-                  void sendAnswer();
-                }}
-              >
-                <Textarea
-                  aria-label="Message Chat"
-                  placeholder="Ask Chat anything or tell me about your business…"
-                  value={answer}
-                  maxLength={4000}
-                  onChange={(change) => setAnswer(change.target.value)}
-                  disabled={busy}
-                />
-                {state.aiConsentRequired && (
-                  <label className="onboarding-ai-consent">
-                    <input
-                      type="checkbox"
-                      checked={allowAI}
-                      onChange={(change) => setAllowAI(change.target.checked)}
-                    />
-                    Allow Chat to process my setup answers using the configured
-                    OpenAI or Anthropic provider. I can pause AI later.
-                  </label>
-                )}
-                <div>
-                  <span>
-                    Chat remembers this setup conversation. Nothing connects or
-                    publishes without your approval.
-                  </span>
-                  <Button
-                    type="submit"
-                    disabled={
-                      busy ||
-                      answer.trim().length < 2 ||
-                      (state.aiConsentRequired && !allowAI)
-                    }
-                  >
-                    {busy ? 'Chat is thinking…' : 'Send to Chat'}{' '}
-                    <ArrowRight size={16} />
-                  </Button>
+          <>
+            <div className="onboarding-chat" aria-live="polite" ref={chatRef}>
+              {conversation.map((message) => (
+                <div
+                  key={message.id}
+                  className={`onboarding-message ${message.role}`}
+                >
+                  <MessageCopy text={message.content} />
                 </div>
-              </form>
-            </>
-          )}
+              ))}
+              {busy && (
+                <div className="onboarding-message assistant thinking">
+                  Chat is thinking…
+                </div>
+              )}
+            </div>
+            <form
+              className="onboarding-composer"
+              onSubmit={(submitEvent) => {
+                submitEvent.preventDefault();
+                void sendAnswer();
+              }}
+            >
+              <Textarea
+                aria-label="Message Chat"
+                placeholder="Ask Chat anything or tell me about your business…"
+                value={answer}
+                maxLength={4000}
+                onChange={(change) => setAnswer(change.target.value)}
+                disabled={busy}
+              />
+              {state.aiConsentRequired && (
+                <label className="onboarding-ai-consent">
+                  <input
+                    type="checkbox"
+                    checked={allowAI}
+                    onChange={(change) => setAllowAI(change.target.checked)}
+                  />
+                  Allow Chat to process my setup answers using the configured
+                  OpenAI or Anthropic provider. I can pause AI later.
+                </label>
+              )}
+              <div>
+                <span>
+                  Chat remembers this setup conversation. Nothing connects or
+                  publishes without your approval.
+                </span>
+                <Button
+                  type="submit"
+                  disabled={
+                    busy ||
+                    answer.trim().length < 2 ||
+                    (state.aiConsentRequired && !allowAI)
+                  }
+                >
+                  {busy ? 'Chat is thinking…' : 'Send to Chat'}{' '}
+                  <ArrowRight size={16} />
+                </Button>
+              </div>
+            </form>
+          </>
           {reviewing && (
             <div className="profile-review">
               <div className="profile-review-heading">
@@ -479,28 +477,22 @@ export default function Onboarding() {
                             </p>
                           )}
                         </div>
-                        {state.onboardingStatus !== 'confirmed' && (
-                          <button
-                            type="button"
-                            className="fact-edit-button"
-                            aria-expanded={editing}
-                            onClick={() =>
-                              setEditingFacts((current) => {
-                                const next = new Set(current);
-                                if (next.has(fact.id)) next.delete(fact.id);
-                                else next.add(fact.id);
-                                return next;
-                              })
-                            }
-                          >
-                            {editing ? (
-                              <Check size={14} />
-                            ) : (
-                              <Pencil size={14} />
-                            )}
-                            {editing ? 'Done' : 'Edit'}
-                          </button>
-                        )}
+                        <button
+                          type="button"
+                          className="fact-edit-button"
+                          aria-expanded={editing}
+                          onClick={() =>
+                            setEditingFacts((current) => {
+                              const next = new Set(current);
+                              if (next.has(fact.id)) next.delete(fact.id);
+                              else next.add(fact.id);
+                              return next;
+                            })
+                          }
+                        >
+                          {editing ? <Check size={14} /> : <Pencil size={14} />}
+                          {editing ? 'Done' : 'Edit'}
+                        </button>
                       </div>
                       {editing && (
                         <Input
@@ -542,10 +534,24 @@ export default function Onboarding() {
               </div>
               {state.onboardingStatus === 'confirmed' ? (
                 <div className="confirmed-panel">
-                  <Check size={20} /> Profile confirmed.
-                  <Button onClick={openWorkspace}>
-                    Open my workspace <ArrowRight size={16} />
-                  </Button>
+                  <span>
+                    <Check size={20} /> Profile saved. You can keep chatting or
+                    update a card.
+                  </span>
+                  <div className="confirmed-actions">
+                    <Button
+                      variant="outline"
+                      disabled={busy || changedFactCount === 0}
+                      onClick={() => void saveCorrections()}
+                    >
+                      {changedFactCount
+                        ? `Save ${changedFactCount} change${changedFactCount === 1 ? '' : 's'}`
+                        : 'No changes to save'}
+                    </Button>
+                    <Button onClick={openWorkspace}>
+                      Open my workspace <ArrowRight size={16} />
+                    </Button>
+                  </div>
                 </div>
               ) : (
                 <div className="review-actions">

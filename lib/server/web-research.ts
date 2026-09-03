@@ -36,16 +36,19 @@ export function webSources(values: WebSource[]) {
       )
         continue;
       seen.add(url.href);
+      const cleanedTitle = value.title
+        .replaceAll('[', ' ')
+        .replaceAll(']', ' ')
+        .replaceAll('(', ' ')
+        .replaceAll(')', ' ')
+        .replace(/[\r\n]+/g, ' ')
+        .trim()
+        .slice(0, 200);
       safe.push({
         title:
-          value.title
-            .replaceAll('[', ' ')
-            .replaceAll(']', ' ')
-            .replaceAll('(', ' ')
-            .replaceAll(')', ' ')
-            .replace(/[\r\n]+/g, ' ')
-            .trim()
-            .slice(0, 200) || url.hostname,
+          !cleanedTitle || /^web source$/i.test(cleanedTitle)
+            ? url.hostname.replace(/^www\./, '')
+            : cleanedTitle,
         url: url.href,
       });
       if (safe.length === 8) break;

@@ -267,6 +267,7 @@ export type Action = {
 };
 export type ChatMessage = {
   id: string;
+  run_id: string | null;
   role: 'user' | 'assistant';
   content: string;
   created_at: string;

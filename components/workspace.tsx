@@ -39,7 +39,6 @@ import {
   Archive,
   RotateCcw,
   Building2,
-  Mic,
   ChevronDown,
 } from 'lucide-react';
 import { requestApi } from '@/lib/client';
@@ -156,6 +155,7 @@ export default function Workspace() {
     [notice, setNotice] = useState('');
   const [text, setText] = useState(''),
     [selectedFiles, setSelectedFiles] = useState<string[]>([]);
+  const [focusedAgent, setFocusedAgent] = useState<AgentName | null>(null);
   const [mobile, setMobile] = useState('chat'),
     [view, setView] = useState('actions'),
     [moreOpen, setMoreOpen] = useState(false),
@@ -429,6 +429,7 @@ export default function Workspace() {
             () => {
               setText('');
               setSelectedFiles([]);
+              setFocusedAgent(null);
               sendRequest.current = null;
             },
           );
@@ -515,6 +516,8 @@ export default function Workspace() {
           setNotice(
             'This proposal expired. Ask your team to prepare a new one.',
           );
+        else if (result.status === 'denied')
+          setNotice('Draft denied. Nothing was posted, sent or changed.');
       } finally {
         await refresh();
       }
@@ -526,7 +529,14 @@ export default function Workspace() {
     setMobile('actions');
   };
   const focusMagic = (starter = '') => {
-    if (starter) setText((current) => current || starter);
+    if (starter)
+      setText((current) => {
+        const request = current.replace(
+          /^Ask (?:Finance|Marketing|Social|Maintenance|Website) to help me with\s*/,
+          '',
+        );
+        return `${starter}${request}`;
+      });
     setMobile('chat');
     window.requestAnimationFrame(() => {
       document.getElementById('magic-message')?.focus();
@@ -538,7 +548,7 @@ export default function Workspace() {
           action.status,
         ),
       ) || [],
-    activeAgents = snapshot?.runs[0]?.agents || [],
+    recentAgents = snapshot?.runs[0]?.agents || [],
     actionHistory =
       snapshot?.actions.filter((action) =>
         ['completed', 'denied', 'expired'].includes(action.status),
@@ -617,9 +627,18 @@ export default function Workspace() {
             {team.map(({ id, name, detail, icon: Icon }) => (
               <button
                 type="button"
-                className={`agent-card ${activeAgents.includes(id as AgentName) ? 'active' : ''}`}
+                className={`agent-card ${focusedAgent === id ? 'active' : ''} ${recentAgents.includes(id as AgentName) ? 'participated' : ''}`}
                 key={id}
-                onClick={() => focusMagic(`Ask ${name} to help me with `)}
+                aria-pressed={focusedAgent === id}
+                title={
+                  recentAgents.includes(id as AgentName)
+                    ? `${name} contributed to the latest reply`
+                    : `Ask ${name} for focused help`
+                }
+                onClick={() => {
+                  setFocusedAgent(id as AgentName);
+                  focusMagic(`Ask ${name} to help me with `);
+                }}
               >
                 <span className="agent-icon">
                   <Icon size={17} />
@@ -642,13 +661,15 @@ export default function Workspace() {
             <span className="status-pill">
               {busy
                 ? 'Crew working…'
-                : authView === 'password-recovery'
-                  ? 'Password recovery'
-                  : snapshot
-                    ? snapshot.workspace.workspace_type === 'sandbox'
-                      ? 'Sandbox · testing'
-                      : `${snapshot.workspace.name} · Business`
-                    : 'Setup & sign in'}
+                : focusedAgent
+                  ? `${team.find((agent) => agent.id === focusedAgent)?.name} focus`
+                  : authView === 'password-recovery'
+                    ? 'Password recovery'
+                    : snapshot
+                      ? snapshot.workspace.workspace_type === 'sandbox'
+                        ? 'Sandbox · testing'
+                        : `${snapshot.workspace.name} · Business`
+                      : 'Setup & sign in'}
             </span>
           </div>
           {snapshot && authView !== 'password-recovery' && (
@@ -662,6 +683,7 @@ export default function Workspace() {
                   perform(async () => {
                     setSelectedFiles([]);
                     setText('');
+                    setFocusedAgent(null);
                     await refresh(workspaceId, e.target.value);
                   })
                 }
@@ -702,6 +724,7 @@ export default function Workspace() {
                     );
                     setSelectedFiles([]);
                     setText('');
+                    setFocusedAgent(null);
                     await refresh(workspaceId, c.id);
                   })
                 }
@@ -1061,10 +1084,23 @@ export default function Workspace() {
                           snapshot.uploads.find((file) => file.id === id),
                         )
                         .filter((file): file is Upload => Boolean(file));
+                      const answeringAgents = m.run_id
+                        ? snapshot.runs.find((run) => run.id === m.run_id)
+                            ?.agents || []
+                        : [];
+                      const answerLabel = answeringAgents.length
+                        ? answeringAgents
+                            .map(
+                              (agent) =>
+                                team.find((member) => member.id === agent)
+                                  ?.name || agent,
+                            )
+                            .join(' + ')
+                        : 'Chat + your crew';
                       return (
                         <article className={`message ${m.role}`} key={m.id}>
                           <span className="meta">
-                            {m.role === 'user' ? 'You' : 'Chat + your crew'} ·{' '}
+                            {m.role === 'user' ? 'You' : answerLabel} ·{' '}
                             {new Date(m.created_at).toLocaleTimeString([], {
                               hour: '2-digit',
                               minute: '2-digit',
@@ -1168,17 +1204,6 @@ export default function Workspace() {
                 onClick={() => fileInput.current?.click()}
               >
                 <Plus />
-              </Button>
-              <Button
-                type="button"
-                size="icon"
-                variant="ghost"
-                className="voice-button"
-                aria-label="Voice input is coming soon"
-                title="Voice input is coming soon"
-                disabled
-              >
-                <Mic />
               </Button>
               <span>You stay in control.</span>
               <Button
@@ -1412,6 +1437,7 @@ export default function Workspace() {
                         }
                       })
                     }
+                    onReconnect={() => chooseView('connections')}
                   />
                 ))}
               </>
@@ -2042,6 +2068,7 @@ function ActionCard({
   disabled,
   onDecision,
   onRetry,
+  onReconnect,
 }: {
   action: Action;
   token: string;
@@ -2049,6 +2076,7 @@ function ActionCard({
   disabled: boolean;
   onDecision: (d: 'accept' | 'deny') => void;
   onRetry: () => void;
+  onReconnect: () => void;
 }) {
   const storageKey = `workbench:action-card:${a.id}:open`;
   const [open, setOpen] = useState(false);
@@ -2063,7 +2091,16 @@ function ActionCard({
 
   const calendar = a.action_type === 'calendar.create',
     facebook = a.action_type === 'facebook.publish',
-    expired = Date.parse(a.expires_at) <= Date.now();
+    expired = Date.parse(a.expires_at) <= Date.now(),
+    imageFileId =
+      typeof a.payload.imageFileId === 'string' ? a.payload.imageFileId : null,
+    expiryLabel = new Intl.DateTimeFormat('en-AU', {
+      weekday: 'long',
+      hour: 'numeric',
+      minute: '2-digit',
+    })
+      .format(new Date(a.expires_at))
+      .replace(',', ' at');
   const brandText = [
     calendar ? 'Google Calendar' : facebook ? 'Facebook' : '',
     a.summary,
@@ -2134,33 +2171,35 @@ function ActionCard({
                     <dd className="break-all">{a.payload.link}</dd>
                   </>
                 )}
-                {typeof a.payload.imageFileId === 'string' && (
+                {imageFileId && (
                   <>
                     <dt>Selected photo</dt>
                     <dd>{imageFile?.filename || 'Private workspace image'}</dd>
                   </>
                 )}
               </dl>
-              {typeof a.payload.imageFileId === 'string' && imageFile && (
-                <FacebookImagePreview file={imageFile} token={token} />
+              {imageFileId && (
+                <ActionImagePreview
+                  fileId={imageFileId}
+                  file={imageFile}
+                  token={token}
+                />
               )}
               <p className="auth-hint">
                 Accept publishes this exact caption
-                {typeof a.payload.imageFileId === 'string'
-                  ? ' and selected photo'
-                  : '/link'}{' '}
-                immediately to the selected Page. It is not a private draft.
+                {imageFileId ? ' and selected photo' : '/link'} immediately to
+                the selected Page. It is not a private draft.
               </p>
             </>
           ) : (
             <>
               <strong>{String(a.payload.title)}</strong>
               <p>{String(a.payload.body)}</p>
-              {typeof a.payload.imageFileId === 'string' && imageFile && (
-                <PrivateImagePreview
+              {imageFileId && (
+                <ActionImagePreview
+                  fileId={imageFileId}
                   file={imageFile}
                   token={token}
-                  variant="feature"
                 />
               )}
               <span className="auth-hint">
@@ -2176,7 +2215,7 @@ function ActionCard({
             <p className="auth-hint">
               {expired
                 ? 'This proposal has expired.'
-                : `Approval expires ${new Date(a.expires_at).toLocaleString()}.`}
+                : `Expires ${expiryLabel}.`}
             </p>
             <div className="action-buttons">
               <Button
@@ -2205,14 +2244,26 @@ function ActionCard({
                 : 'Saved privately.'}
           </p>
         )}
-        {a.error_code && (
+        {a.error_code && a.error_code !== 'PUBLISHING_DISABLED' && (
           <output className="block">
             {a.error_code === 'PUBLICATION_UNCERTAIN'
               ? 'Facebook may already have published this post. Automatic retry is blocked. Check the Page and Ask James before creating a replacement.'
               : `Action not completed (${a.error_code}). Check the connection before retrying.`}
           </output>
         )}
+        {a.error_code === 'PUBLISHING_DISABLED' && (
+          <div className="action-connection-error">
+            <p>
+              Facebook publishing is not available for this workspace. Check the
+              Facebook connection, then this approved post can be retried.
+            </p>
+            <Button variant="outline" disabled={disabled} onClick={onReconnect}>
+              Reconnect Facebook
+            </Button>
+          </div>
+        )}
         {a.error_code !== 'PUBLICATION_UNCERTAIN' &&
+          a.error_code !== 'PUBLISHING_DISABLED' &&
           ['approved', 'failed', 'executing'].includes(a.status) && (
             <Button variant="outline" disabled={disabled} onClick={onRetry}>
               {a.status === 'executing'
@@ -2238,14 +2289,83 @@ function ActionCard({
   );
 }
 
-function FacebookImagePreview({
+function ActionImagePreview({
+  fileId,
   file,
   token,
 }: {
-  file: Upload;
+  fileId: string;
+  file?: Upload;
   token: string;
 }) {
-  return <PrivateImagePreview file={file} token={token} variant="feature" />;
+  if (file)
+    return <PrivateImagePreview file={file} token={token} variant="feature" />;
+  return <PrivateActionImagePreview fileId={fileId} token={token} />;
+}
+
+function PrivateActionImagePreview({
+  fileId,
+  token,
+}: {
+  fileId: string;
+  token: string;
+}) {
+  const [url, setUrl] = useState('');
+  const [error, setError] = useState('');
+  const loadPreview = useCallback(async () => {
+    try {
+      const result = await requestApi<{ signedUrl: string }>(
+        token,
+        `uploads/${fileId}/url?preview=1`,
+      );
+      setUrl(result.signedUrl);
+      setError('');
+    } catch (reason) {
+      setError(messageOf(reason));
+    }
+  }, [fileId, token]);
+
+  useEffect(() => {
+    void loadPreview();
+  }, [loadPreview]);
+
+  if (error)
+    return (
+      <div className="private-image-fallback feature" role="alert">
+        <Camera size={20} />
+        <span>Private image preview unavailable</span>
+      </div>
+    );
+  if (!url)
+    return <div className="private-image-loading feature">Loading image…</div>;
+
+  return (
+    <Dialog onOpenChange={(open) => open && void loadPreview()}>
+      <DialogTrigger
+        className="private-image-trigger feature"
+        aria-label="Open a larger preview of the selected image"
+      >
+        {/* Private storage URLs are short-lived and cannot be configured as stable image hosts. */}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={url} alt="Selected content for this proposed action" />
+        <span>View larger</span>
+      </DialogTrigger>
+      <DialogContent className="private-image-dialog">
+        <DialogHeader>
+          <DialogTitle>Selected image</DialogTitle>
+          <DialogDescription>
+            Private image attached to this proposed action
+          </DialogDescription>
+        </DialogHeader>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          className="private-image-full"
+          src={url}
+          alt="Large preview of the selected content"
+        />
+      </DialogContent>
+    </Dialog>
+  );
 }
 
 function isImageUpload(file: Upload) {
