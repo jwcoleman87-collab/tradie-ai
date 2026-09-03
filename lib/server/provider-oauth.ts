@@ -20,8 +20,7 @@ import {
 import { ExternalId, graphRead } from './provider-http';
 import { credentialContext, type CandidateSecrets } from './connections';
 import { discoverAdsAccounts, readAdsAccount } from './google-ads';
-const callback = (p: AdditionalProvider) =>
-  appOrigin() + '/api/integrations/' + p + '/callback';
+import { providerCallback } from './provider-callbacks';
 const cookieName = (p: AdditionalProvider) => 'tradie_oauth_' + p;
 function cookie(p: AdditionalProvider, value: string, age: number) {
   return (
@@ -53,7 +52,7 @@ export async function startProvider(
     await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier)),
   ).toString('base64url');
   const params = new URLSearchParams({
-    redirect_uri: callback(provider),
+    redirect_uri: providerCallback(provider),
     response_type: 'code',
     state,
   });
@@ -68,7 +67,7 @@ export async function startProvider(
     params.set('client_id', googleAdsClient().id);
     params.set('scope', adsScope);
     params.set('access_type', 'offline');
-    params.set('prompt', 'consent');
+    params.set('prompt', 'consent select_account');
     params.set('code_challenge', challenge);
     params.set('code_challenge_method', 'S256');
   }
@@ -99,7 +98,7 @@ async function facebookCandidate(code: string): Promise<CandidateSecrets> {
       new URLSearchParams({
         client_id: required('META_APP_ID'),
         client_secret: required('META_APP_SECRET'),
-        redirect_uri: callback('facebook'),
+        redirect_uri: providerCallback('facebook'),
         code,
       }),
     { redirect: 'manual' },
@@ -230,7 +229,7 @@ export async function finishProvider(
         code,
         client_id: client.id,
         client_secret: client.secret,
-        redirect_uri: callback(provider),
+        redirect_uri: providerCallback(provider),
         code_verifier: stored.verifier,
       }),
       redirect: 'manual',

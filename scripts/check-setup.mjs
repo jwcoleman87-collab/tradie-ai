@@ -5,6 +5,19 @@ const value = (name) => process.env[name]?.trim() || '';
 const present = (name) => !!value(name);
 const encryption =
   Buffer.from(value('TOKEN_ENCRYPTION_KEY'), 'base64').length === 32;
+let appOrigin = '';
+try {
+  const candidate = new URL(value('APP_ORIGIN'));
+  if (
+    candidate.origin === value('APP_ORIGIN') &&
+    (candidate.protocol === 'https:' ||
+      (candidate.protocol === 'http:' &&
+        ['localhost', '127.0.0.1'].includes(candidate.hostname)))
+  )
+    appOrigin = candidate.origin;
+} catch {
+  /* reported as false below */
+}
 const result = {
   supabaseConfigured: [
     'SUPABASE_URL',
@@ -32,6 +45,14 @@ const result = {
     !!(value('GOOGLE_ADS_CLIENT_ID') || value('GOOGLE_CLIENT_ID')) &&
     !!(value('GOOGLE_ADS_CLIENT_SECRET') || value('GOOGLE_CLIENT_SECRET')) &&
     encryption,
+  appOriginValid: !!appOrigin,
+  oauthCallbacks: appOrigin
+    ? {
+        googleCalendar: appOrigin + '/api/google/callback',
+        facebook: appOrigin + '/api/integrations/facebook/callback',
+        googleAds: appOrigin + '/api/integrations/google_ads/callback',
+      }
+    : null,
 };
 result.backupKeysConfigured =
   result.openaiKeyConfigured && result.claudeKeyConfigured;
@@ -55,6 +76,8 @@ if (process.argv.includes('--remote') && result.supabaseConfigured) {
     runTrace: 'agent_runs?select=usage,provider_trace&limit=0',
     multiProviderCredentials:
       'integration_credentials?select=provider,credential_kind,external_id&limit=0',
+    connectionHealth:
+      'integration_credentials?select=status,verified_at,last_error_code,last_error_at&limit=0',
     publicationReceipts: 'external_publish_attempts?select=action_id&limit=0',
     intelligentOnboarding:
       'business_profile_facts?select=workspace_id,field_path,confidence,fact_state&limit=0',
@@ -79,4 +102,4 @@ if (process.argv.includes('--remote') && result.supabaseConfigured) {
     process.exitCode = 1;
 }
 console.log(JSON.stringify(result, null, 2));
-if (!result.supabaseConfigured || !encryption) process.exitCode = 1;
+if (!result.supabaseConfigured || !encryption || !appOrigin) process.exitCode = 1;

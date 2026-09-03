@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { FacebookPayload } from '../contracts';
 import {
+  markConnectionReconnectRequired,
   providerCredentials,
   recordConnectionVerification,
 } from './connections';
@@ -16,6 +17,52 @@ export type FacebookImage = {
   filename: string;
   mimeType: 'image/jpeg' | 'image/png';
 };
+
+export async function verifyFacebookConnection(
+  workspaceId: string,
+  connectionId: string,
+) {
+  try {
+    const connection = await providerCredentials(
+      workspaceId,
+      'facebook',
+      connectionId,
+    );
+    const page = z
+      .object({ id: z.string(), name: z.string().min(1) })
+      .parse(
+        await graphRead(connection.resource.id, connection.token, {
+          fields: 'id,name',
+        }),
+      );
+    requireValue(page.id === connection.resource.id, 'CONNECTION_CHANGED', 409);
+    await recordConnectionVerification(
+      workspaceId,
+      'facebook',
+      connectionId,
+      { displayName: page.name },
+    );
+    return page;
+  } catch (error) {
+    if (
+      error instanceof AppError &&
+      ['FACEBOOK_ACCESS_FAILED', 'RECONNECT_REQUIRED'].includes(error.code)
+    ) {
+      await markConnectionReconnectRequired(
+        workspaceId,
+        'facebook',
+        connectionId,
+        'FACEBOOK_ACCESS_REVOKED',
+      );
+      throw new AppError(
+        'RECONNECT_REQUIRED',
+        409,
+        'Reconnect Facebook to restore Page access.',
+      );
+    }
+    throw error;
+  }
+}
 
 async function loadFacebookImage(
   workspaceId: string,
@@ -172,9 +219,27 @@ export async function publishFacebook(
       connectionId,
     );
   requireValue(connection.resource.id === p.pageId, 'CONNECTION_CHANGED', 409);
-  const access = z
-    .object({ id: z.string() })
-    .parse(await graphRead(p.pageId, connection.token, { fields: 'id' }));
+  let access: { id: string };
+  try {
+    access = z
+      .object({ id: z.string() })
+      .parse(await graphRead(p.pageId, connection.token, { fields: 'id' }));
+  } catch (error) {
+    if (error instanceof AppError && error.code === 'FACEBOOK_ACCESS_FAILED') {
+      await markConnectionReconnectRequired(
+        workspaceId,
+        'facebook',
+        connectionId,
+        'FACEBOOK_ACCESS_REVOKED',
+      );
+      throw new AppError(
+        'RECONNECT_REQUIRED',
+        409,
+        'Reconnect Facebook to restore Page access.',
+      );
+    }
+    throw error;
+  }
   requireValue(access.id === p.pageId, 'CONNECTION_CHANGED', 409);
   await recordConnectionVerification(workspaceId, 'facebook', connectionId);
   const image = p.imageFileId

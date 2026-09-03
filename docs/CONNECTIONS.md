@@ -93,16 +93,18 @@ Testing. The sole test user and support/contact address is
 `j.w.coleman87@gmail.com`. No billing was enabled and unrelated projects were not
 modified. Reuse this project and the existing **Tradie AI Calendar — Web** client.
 
-The web client has both exact callbacks below, no JavaScript origins, and only
+The web client must have both exact callbacks below, no JavaScript origins, and only
 `calendar.events` is declared under Data Access. Google automatically registered
 `j-w-coleman87.chatgpt.site` as an authorized domain. The app home page is saved.
 Client ID/secret are in ignored local `.env` and hosted runtime configuration;
 the hosted secret is protected. Version 6 was redeployed with environment revision
 4 and `/api/config` now reports `googleReady: true`. Do not ask for the keys again.
 
-**Next: step 5 below.** Configuration readiness is not an account connection.
-No account refresh token has been obtained and no Calendar event has been created.
-The owner must complete Google consent inside Tradie AI before a live event test.
+Configuration readiness is not the same as a working account connection. On
+2026-09-04 Google returned `redirect_uri_mismatch` during a Calendar reconnect.
+Before another consent attempt, confirm that the production `GOOGLE_CLIENT_ID`
+belongs to the client being edited and that both exact callbacks below are still
+registered. No Calendar event was created during that failed attempt.
 Google's console still flags incomplete branding for publication: privacy-policy
 and terms links, verified/public branding and any required verification remain
 production-release work. Do not publish the Google OAuth app or broaden test users
@@ -130,6 +132,29 @@ Scope: `https://www.googleapis.com/auth/calendar.events`. Busy times for the nex
 notification emails are requested. Reconnection changes identity, invalidating
 old proposals. In-app disconnect removes local credentials; provider-side access
 can be revoked separately in [Google account connections](https://myaccount.google.com/connections).
+
+### Connect once, check quietly
+
+Workbench keeps provider refresh tokens encrypted on the server. Ordinary
+short-lived access-token expiry is handled automatically and does not send the
+owner through consent again. Every explicit Google Connect or Switch account
+flow asks the owner to choose the intended Google account, which prevents a
+browser signed into several Gmail accounts from silently choosing the wrong one.
+
+Opening Connections performs a harmless, rate-limited check when a saved
+connection has never been verified or its last successful check is over 24 hours
+old. A transient network/provider failure leaves the saved connection in place.
+Only an explicit authorization rejection changes the state to
+`reconnect_required`. Connected cards show the resource name and last successful
+check; normal connected cards offer **Check connection** and **Manage**, not a
+prominent Reconnect button.
+
+Google Auth Platform projects left in External / Testing can issue refresh tokens
+that expire after seven days for Calendar or Ads scopes. Production launch
+therefore requires accurate public branding, privacy and terms pages, an owned
+verified domain, the minimum declared scopes and the appropriate Google
+verification/publishing status. Do not work around that limitation with repeated
+customer consent.
 
 ## 4. Facebook Pages
 

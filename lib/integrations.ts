@@ -18,6 +18,8 @@ export type ConnectionInfo = {
   externalId: string | null;
   displayName: string | null;
   verifiedAt: string | null;
+  lastErrorCode: string | null;
+  lastErrorAt: string | null;
   capabilities: string[];
 };
 export type ResourceChoice = {

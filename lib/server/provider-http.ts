@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { requireValue, timedFetch } from './errors';
+import { AppError, requireValue, timedFetch } from './errors';
 import { required } from './config';
 import { adsVersion, graphVersion } from './provider-config';
 export const ExternalId = z.string().regex(/^\d{1,30}$/);
@@ -34,12 +34,16 @@ export async function graphRead(
     'https://graph.facebook.com/' + graphVersion() + '/' + path + '?' + query,
     { headers: { Authorization: 'Bearer ' + token }, redirect: 'manual' },
   );
-  requireValue(
-    response.ok,
-    'FACEBOOK_ACCESS_FAILED',
-    409,
-    'Facebook access could not be verified. Check permissions or reconnect.',
-  );
+  if (!response.ok)
+    throw new AppError(
+      [400, 401, 403].includes(response.status)
+        ? 'FACEBOOK_ACCESS_FAILED'
+        : 'UPSTREAM_UNAVAILABLE',
+      [400, 401, 403].includes(response.status) ? 409 : 503,
+      [400, 401, 403].includes(response.status)
+        ? 'Facebook access could not be verified. Check permissions or reconnect.'
+        : 'Facebook could not be checked right now. Your saved connection was not removed.',
+    );
   return response.json();
 }
 export async function adsRead(
@@ -75,11 +79,15 @@ export async function adsRead(
       redirect: 'manual',
     },
   );
-  requireValue(
-    response.ok,
-    'GOOGLE_ADS_ACCESS_FAILED',
-    409,
-    'Google Ads access could not be verified. Check the account, OAuth permissions and developer-token access level.',
-  );
+  if (!response.ok)
+    throw new AppError(
+      response.status === 401
+        ? 'GOOGLE_ADS_ACCESS_FAILED'
+        : 'UPSTREAM_UNAVAILABLE',
+      response.status === 401 ? 409 : 503,
+      response.status === 401
+        ? 'Google Ads access could not be verified. Reconnect the selected Google account.'
+        : 'Google Ads could not be checked right now. Your saved connection was not removed.',
+    );
   return response.json();
 }

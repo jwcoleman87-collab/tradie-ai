@@ -1,5 +1,5 @@
 'use client';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Button } from './ui/button';
 import { AISettings } from './ai-settings';
 import { BrandMark } from './brand';
@@ -8,6 +8,7 @@ import type { Snapshot } from '@/lib/contracts';
 import { integrationBrands } from '@/lib/brands';
 import {
   providerNames,
+  type Provider,
   type ConnectionInfo,
   type PendingConnection,
   type AdsReport,
@@ -27,7 +28,13 @@ export function ConnectionsPanel({
   const [state, setState] = useState<State | null>(null),
     [error, setError] = useState(''),
     [busy, setBusy] = useState(false),
-    [report, setReport] = useState<AdsReport | null>(null);
+    [report, setReport] = useState<AdsReport | null>(null),
+    [checking, setChecking] = useState<Set<Provider>>(new Set()),
+    [temporaryErrors, setTemporaryErrors] = useState<
+      Partial<Record<Provider, string>>
+    >({}),
+    [managedProvider, setManagedProvider] = useState<Provider | null>(null);
+  const autoChecked = useRef(new Set<string>());
   const workspaceId = snapshot.workspace.id,
     owner = snapshot.role === 'owner';
   const load = useCallback(async () => {
@@ -50,6 +57,72 @@ export function ConnectionsPanel({
       alive = false;
     };
   }, [token, workspaceId]);
+  useEffect(() => {
+    if (!owner || !state) return;
+    const stale = state.connections.filter(
+      (connection) =>
+        connection.connectionId &&
+        connection.status === 'connected' &&
+        (!connection.verifiedAt ||
+          Date.now() - Date.parse(connection.verifiedAt) > 24 * 60 * 60 * 1000) &&
+        !autoChecked.current.has(connection.connectionId),
+    );
+    if (!stale.length) return;
+    stale.forEach((connection) =>
+      autoChecked.current.add(connection.connectionId!),
+    );
+    setChecking((current) =>
+      new Set([...current, ...stale.map((connection) => connection.provider)]),
+    );
+    void Promise.all(
+      stale.map(async (connection) => {
+        try {
+          const result = await requestApi<{ connection: ConnectionInfo }>(
+            token,
+            'integrations/check',
+            'POST',
+            {
+              workspaceId,
+              provider: connection.provider,
+              connectionId: connection.connectionId,
+            },
+          );
+          return result.connection;
+        } catch {
+          setTemporaryErrors((current) => ({
+            ...current,
+            [connection.provider]:
+              'Could not check right now. Your saved connection was not removed.',
+          }));
+          return null;
+        }
+      }),
+    )
+      .then((results) => {
+        const updates = results.filter(Boolean) as ConnectionInfo[];
+        if (updates.length)
+          setState((current) =>
+            current
+              ? {
+                  ...current,
+                  connections: current.connections.map(
+                    (connection) =>
+                      updates.find(
+                        (update) => update.provider === connection.provider,
+                      ) || connection,
+                  ),
+                }
+              : current,
+          );
+      })
+      .finally(() =>
+        setChecking((current) => {
+          const next = new Set(current);
+          stale.forEach((connection) => next.delete(connection.provider));
+          return next;
+        }),
+      );
+  }, [owner, state, token, workspaceId]);
   async function act(fn: () => Promise<void>) {
     setBusy(true);
     setError('');
@@ -59,6 +132,77 @@ export function ConnectionsPanel({
       setError(e instanceof Error ? e.message : 'Connection request failed.');
     } finally {
       setBusy(false);
+    }
+  }
+  async function startConnection(connection: ConnectionInfo) {
+    const route =
+      connection.provider === 'google_calendar'
+        ? 'google/start'
+        : `integrations/${connection.provider}/start`;
+    const result = await requestApi<{ url: string }>(
+      token,
+      route,
+      'POST',
+      { workspaceId },
+    );
+    const target = new URL(result.url);
+    const host =
+      connection.provider === 'facebook'
+        ? 'www.facebook.com'
+        : 'accounts.google.com';
+    if (
+      target.protocol !== 'https:' ||
+      target.hostname !== host ||
+      target.username ||
+      target.password
+    )
+      throw new Error('Invalid connection redirect.');
+    window.location.assign(target.href);
+  }
+  async function checkConnection(connection: ConnectionInfo) {
+    if (!connection.connectionId) return;
+    setChecking((current) => new Set(current).add(connection.provider));
+    setTemporaryErrors((current) => ({
+      ...current,
+      [connection.provider]: undefined,
+    }));
+    try {
+      const result = await requestApi<{ connection: ConnectionInfo }>(
+        token,
+        'integrations/check',
+        'POST',
+        {
+          workspaceId,
+          provider: connection.provider,
+          connectionId: connection.connectionId,
+        },
+      );
+      setState((current) =>
+        current
+          ? {
+              ...current,
+              connections: current.connections.map((item) =>
+                item.provider === result.connection.provider
+                  ? result.connection
+                  : item,
+              ),
+            }
+          : current,
+      );
+    } catch (cause) {
+      setTemporaryErrors((current) => ({
+        ...current,
+        [connection.provider]:
+          cause instanceof Error
+            ? cause.message
+            : 'Could not check this connection right now.',
+      }));
+    } finally {
+      setChecking((current) => {
+        const next = new Set(current);
+        next.delete(connection.provider);
+        return next;
+      });
     }
   }
   return (
@@ -99,128 +243,180 @@ export function ConnectionsPanel({
       </p>
       {error && <p role="alert">{error}</p>}
       {!state && <output className="block">Loading connections…</output>}
-      {state?.connections.map((c) => (
-        <article key={c.provider} className="action-card">
-          <div className="brand-heading">
-            <BrandMark brand={integrationBrands[c.provider]} />
-            <h3>{providerNames[c.provider]}</h3>
-          </div>
-          <p>{c.status.replaceAll('_', ' ')}</p>
-          {c.displayName && (
-            <p>
-              {c.displayName}
-              <small className="block">{c.externalId}</small>
-            </p>
-          )}
-          {c.verifiedAt && (
-            <p className="auth-hint">
-              Last checked {new Date(c.verifiedAt).toLocaleString()}
-            </p>
-          )}
-          <p>
-            {c.provider === 'google_calendar'
-              ? 'Create bookings after you approve the exact details.'
-              : c.provider === 'facebook'
-                ? c.capabilities.includes('facebook.publish')
-                  ? 'Publishing enabled: immediate text, HTTPS link or one JPEG/PNG photo under 4 MB. Every post needs your explicit approval; scheduling and Instagram are not connected.'
-                  : 'Connect and select a Facebook Page. Publishing remains unavailable until the operator enables it.'
-                : 'Read-only campaign reporting. This app cannot create ads, change budgets or spend money.'}
-          </p>
-          {c.provider === 'facebook' &&
+      {state?.connections.map((c) => {
+        const isChecking = checking.has(c.provider),
+          checkDelayed = !!temporaryErrors[c.provider],
+          isReady =
+            c.configured &&
             c.status === 'connected' &&
-            !c.capabilities.includes('facebook.publish') && (
+            !!c.verifiedAt &&
+            !checkDelayed,
+          needsCheck = c.status === 'connected' && !c.verifiedAt,
+          needsReconnect = c.status === 'reconnect_required',
+          stateLabel = !c.configured
+            ? 'Setup needed'
+            : isChecking
+              ? 'Checking connection…'
+              : checkDelayed
+                ? 'Connection check delayed'
+                : isReady
+                ? 'Connected and ready'
+                : needsCheck
+                  ? 'Saved connection — check needed'
+                  : needsReconnect
+                    ? 'Needs attention'
+                    : 'Not connected';
+        return (
+          <article
+            key={c.provider}
+            className={`action-card provider-connection provider-${
+              isReady ? 'ready' : needsReconnect ? 'attention' : 'idle'
+            }`}
+          >
+            <div className="provider-connection-heading">
+              <div className="brand-heading">
+                <BrandMark brand={integrationBrands[c.provider]} />
+                <h3>{providerNames[c.provider]}</h3>
+              </div>
+              <output className="connection-state">
+                <span aria-hidden="true" className="connection-state-dot" />
+                {stateLabel}
+              </output>
+            </div>
+            {c.displayName && (
+              <div className="connected-resource">
+                <span>Connected account</span>
+                <strong>{c.displayName}</strong>
+                {c.externalId && c.externalId !== 'primary' && (
+                  <small>{c.externalId}</small>
+                )}
+              </div>
+            )}
+            {c.verifiedAt && (
               <p className="auth-hint">
-                Publishing is disabled until the app’s permissions and test
-                process are completed.
+                Last checked {friendlyCheckedAt(c.verifiedAt)}
               </p>
             )}
-          {!c.configured && (
-            <p className="auth-hint">
-              The site operator still needs to configure this service’s
-              credentials.
+            {temporaryErrors[c.provider] && (
+              <output className="connection-temporary-note">
+                {temporaryErrors[c.provider]}
+              </output>
+            )}
+            <p>
+              {c.provider === 'google_calendar'
+                ? 'Create bookings only after you approve the exact event details.'
+                : c.provider === 'facebook'
+                  ? c.capabilities.includes('facebook.publish')
+                    ? 'Ready to publish approved text, links or one photo to this Page.'
+                    : 'The Page is paired. Publishing will unlock after the operator completes Meta approval.'
+                  : 'Read-only campaign reporting. Workbench cannot create ads, change budgets or spend money.'}
             </p>
-          )}
-          <div className="button-row mt-3">
-            {owner && (
-              <Button
-                size="sm"
-                disabled={busy || !c.configured}
-                onClick={() =>
-                  act(async () => {
-                    const route =
-                      c.provider === 'google_calendar'
-                        ? 'google/start'
-                        : `integrations/${c.provider}/start`;
-                    const result = await requestApi<{ url: string }>(
-                      token,
-                      route,
-                      'POST',
-                      { workspaceId },
-                    );
-                    const target = new URL(result.url);
-                    const host =
-                      c.provider === 'facebook'
-                        ? 'www.facebook.com'
-                        : 'accounts.google.com';
-                    if (
-                      target.protocol !== 'https:' ||
-                      target.hostname !== host ||
-                      target.username ||
-                      target.password
+            {!c.configured && (
+              <p className="auth-hint">
+                The site operator still needs to configure this service.
+              </p>
+            )}
+            <div className="button-row mt-3">
+              {owner && (!c.connectionId || needsReconnect) && (
+                <Button
+                  size="sm"
+                  disabled={busy || !c.configured}
+                  onClick={() => act(() => startConnection(c))}
+                >
+                  {needsReconnect ? 'Reconnect' : 'Connect'}
+                </Button>
+              )}
+              {owner && c.connectionId && c.status === 'connected' && (
+                <Button
+                  size="sm"
+                  disabled={busy || isChecking}
+                  onClick={() => checkConnection(c)}
+                >
+                  {isChecking ? 'Checking…' : 'Check connection'}
+                </Button>
+              )}
+              {owner && c.connectionId && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  aria-expanded={managedProvider === c.provider}
+                  onClick={() =>
+                    setManagedProvider((current) =>
+                      current === c.provider ? null : c.provider,
                     )
-                      throw new Error('Invalid connection redirect.');
-                    window.location.assign(target.href);
-                  })
-                }
-              >
-                {c.connectionId ? 'Reconnect' : 'Connect'}
-              </Button>
+                  }
+                >
+                  Manage
+                </Button>
+              )}
+              {c.provider === 'google_ads' && isReady && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={busy || isChecking}
+                  onClick={() =>
+                    act(async () => {
+                      setReport(null);
+                      setReport(
+                        await requestApi<AdsReport>(
+                          token,
+                          `integrations/google_ads/report?workspaceId=${workspaceId}`,
+                        ),
+                      );
+                      await load();
+                    })
+                  }
+                >
+                  View campaign report
+                </Button>
+              )}
+            </div>
+            {managedProvider === c.provider && c.connectionId && (
+              <div className="connection-manage-panel">
+                <p>
+                  Switching accounts keeps this connection in place unless the
+                  new connection completes successfully.
+                </p>
+                <div className="button-row">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={busy || !c.configured}
+                    onClick={() => act(() => startConnection(c))}
+                  >
+                    Switch account
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={busy}
+                    onClick={() =>
+                      act(async () => {
+                        await requestApi(
+                          token,
+                          'integrations/disconnect',
+                          'POST',
+                          {
+                            workspaceId,
+                            provider: c.provider,
+                            connectionId: c.connectionId,
+                          },
+                        );
+                        setManagedProvider(null);
+                        setReport(null);
+                        await load();
+                        await onSaved();
+                      })
+                    }
+                  >
+                    Disconnect
+                  </Button>
+                </div>
+              </div>
             )}
-            {owner && c.connectionId && (
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={busy}
-                onClick={() =>
-                  act(async () => {
-                    await requestApi(token, 'integrations/disconnect', 'POST', {
-                      workspaceId,
-                      provider: c.provider,
-                      connectionId: c.connectionId,
-                    });
-                    setReport(null);
-                    await load();
-                    await onSaved();
-                  })
-                }
-              >
-                Disconnect
-              </Button>
-            )}
-            {c.provider === 'google_ads' && c.status === 'connected' && (
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={busy}
-                onClick={() =>
-                  act(async () => {
-                    setReport(null);
-                    setReport(
-                      await requestApi<AdsReport>(
-                        token,
-                        `integrations/google_ads/report?workspaceId=${workspaceId}`,
-                      ),
-                    );
-                    await load();
-                  })
-                }
-              >
-                Load campaign report
-              </Button>
-            )}
-          </div>
-        </article>
-      ))}
+          </article>
+        );
+      })}
       {owner &&
         state?.pending.map((candidate) => (
           <ResourcePicker
@@ -337,4 +533,16 @@ function formatCost(micros: string, currency?: string) {
   } catch {
     return `${n / 1000000} ${currency}`;
   }
+}
+
+function friendlyCheckedAt(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'recently';
+  return date.toLocaleString(undefined, {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
 }

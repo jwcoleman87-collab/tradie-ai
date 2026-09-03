@@ -14,6 +14,8 @@ import {
   selectProviderResource,
 } from './provider-oauth';
 import { googleAdsReport } from './google-ads';
+import { verifyProviderConnection } from './connection-health';
+import { AppError, requireValue } from './errors';
 export async function integrationApi(
   request: Request,
   path: string,
@@ -68,6 +70,38 @@ export async function integrationApi(
       input.resourceId,
     );
     return json({ ok: true });
+  }
+  if (path === 'integrations/check' && method === 'POST') {
+    const input = z
+      .object({
+        workspaceId: Uuid,
+        provider: ProviderSchema,
+        connectionId: Uuid,
+      })
+      .strict()
+      .parse(await body(request));
+    await membership(db, userId, input.workspaceId, true);
+    await rpc(adminDb(), 'consume_rate', {
+      p_workspace: input.workspaceId,
+      p_user: userId,
+      p_operation: 'connection.check',
+      p_limit: 15,
+    });
+    try {
+      await verifyProviderConnection(
+        input.workspaceId,
+        input.provider,
+        input.connectionId,
+      );
+    } catch (error) {
+      if (!(error instanceof AppError && error.code === 'RECONNECT_REQUIRED'))
+        throw error;
+    }
+    const connection = (await connectionList(input.workspaceId)).find(
+      (item) => item.provider === input.provider,
+    );
+    requireValue(connection, 'NOT_FOUND', 404);
+    return json({ connection });
   }
   if (path === 'integrations/disconnect' && method === 'POST') {
     const input = z

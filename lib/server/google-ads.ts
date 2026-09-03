@@ -3,10 +3,11 @@ import type { AdsReport, ResourceChoice } from '../integrations';
 import { adsRead } from './provider-http';
 import {
   googleAdsAccess,
+  markConnectionReconnectRequired,
   providerCredentials,
   recordConnectionVerification,
 } from './connections';
-import { requireValue } from './errors';
+import { AppError, requireValue } from './errors';
 const Customer = z.object({
   id: z.string().regex(/^\d{10}$/),
   descriptiveName: z.string().optional(),
@@ -146,23 +147,87 @@ export function parseAdsReport(
 }
 export async function googleAdsReport(workspaceId: string) {
   const credentials = await providerCredentials(workspaceId, 'google_ads');
-  const token = await googleAdsAccess(credentials.token);
-  const account = await readAdsAccount(
-    token,
-    credentials.resource.id,
-    credentials.resource.loginCustomerId,
-  );
-  const data = await adsRead(
-    token,
-    'customers/' + account.id + '/googleAds:search',
-    "SELECT campaign.id, campaign.name, campaign.status, metrics.impressions, metrics.clicks, metrics.cost_micros, metrics.conversions FROM campaign WHERE segments.date DURING LAST_30_DAYS AND campaign.status != 'REMOVED' ORDER BY campaign.id LIMIT 100",
-    account.loginCustomerId,
-  );
-  const report = parseAdsReport(data, account);
-  await recordConnectionVerification(
-    workspaceId,
-    'google_ads',
-    credentials.connectionId,
-  );
-  return report;
+  try {
+    const token = await googleAdsAccess(credentials.token);
+    const account = await readAdsAccount(
+      token,
+      credentials.resource.id,
+      credentials.resource.loginCustomerId,
+    );
+    const data = await adsRead(
+      token,
+      'customers/' + account.id + '/googleAds:search',
+      "SELECT campaign.id, campaign.name, campaign.status, metrics.impressions, metrics.clicks, metrics.cost_micros, metrics.conversions FROM campaign WHERE segments.date DURING LAST_30_DAYS AND campaign.status != 'REMOVED' ORDER BY campaign.id LIMIT 100",
+      account.loginCustomerId,
+    );
+    const report = parseAdsReport(data, account);
+    await recordConnectionVerification(
+      workspaceId,
+      'google_ads',
+      credentials.connectionId,
+    );
+    return report;
+  } catch (error) {
+    if (
+      error instanceof AppError &&
+      ['GOOGLE_ADS_ACCESS_FAILED', 'RECONNECT_REQUIRED'].includes(error.code)
+    )
+      await markConnectionReconnectRequired(
+        workspaceId,
+        'google_ads',
+        credentials.connectionId,
+        'GOOGLE_ADS_ACCESS_REVOKED',
+      );
+    throw error;
+  }
+}
+
+export async function verifyGoogleAdsConnection(
+  workspaceId: string,
+  connectionId: string,
+) {
+  try {
+    const connection = await providerCredentials(
+      workspaceId,
+      'google_ads',
+      connectionId,
+    );
+    const account = await readAdsAccount(
+      await googleAdsAccess(connection.token),
+      connection.resource.id,
+      connection.resource.loginCustomerId,
+    );
+    await recordConnectionVerification(
+      workspaceId,
+      'google_ads',
+      connectionId,
+      {
+        displayName: account.name,
+        metadata: {
+          currency: account.currency || null,
+          timeZone: account.timeZone || null,
+          loginCustomerId: account.loginCustomerId || null,
+        },
+      },
+    );
+    return account;
+  } catch (error) {
+    if (
+      error instanceof AppError &&
+      ['GOOGLE_ADS_ACCESS_FAILED', 'RECONNECT_REQUIRED'].includes(error.code)
+    ) {
+      await markConnectionReconnectRequired(
+        workspaceId,
+        'google_ads',
+        connectionId,
+        'GOOGLE_ADS_ACCESS_REVOKED',
+      );
+      throw new AppError(
+        'RECONNECT_REQUIRED',
+        409,
+        'Reconnect Google Ads to restore reporting access.',
+      );
+    }
+    throw error;
+  }
 }

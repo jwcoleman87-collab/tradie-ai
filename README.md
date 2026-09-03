@@ -25,7 +25,7 @@ to `redirect: 'error'`, which the Worker engine rejects before contacting either
 provider. Manual redirect handling fixes that without forwarding credentials.
 OpenAI passed real routing/generation inside the Worker engine; the latest Claude
 test reports `AI_QUOTA_EXCEEDED` (HTTP 400), so its API credits/usage limit needs
-attention despite earlier success. All 131 automated tests pass. Each workspace
+attention despite earlier success. The automated test suite passes. Each workspace
 must explicitly allow its chosen providers before AI processing.
 
 Google Calendar API and the testing-only OAuth client are configured, with
@@ -71,6 +71,10 @@ remains in `components/workspace.tsx`.
   processing is explained beside the composer, with a settings shortcut.
 - Independent Calendar, Facebook Page and Google Ads connections per workspace.
   Encrypted, expiring resource selection; no provider token reaches the browser.
+- Provider health is checked without changing external data. Short-lived Google
+  access tokens refresh silently; only an actual authorization rejection asks the
+  owner to reconnect. Connected cards identify the resource and last successful
+  check instead of treating a stored token as proof that it still works.
 - Separate business and sandbox workspaces with reversible conversation and
   record archives. Completed actions and resolved cases move out of active work;
   archive and restore events retain immutable audit evidence.

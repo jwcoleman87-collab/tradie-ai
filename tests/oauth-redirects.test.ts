@@ -60,6 +60,7 @@ describe('OAuth start routes', () => {
     expect(target.searchParams.get('redirect_uri')).toBe(
       `${origin}/api/google/callback`,
     );
+    expect(target.searchParams.get('prompt')).toBe('consent select_account');
     expect(response.headers.get('set-cookie')).toContain(
       'Path=/api/google/callback',
     );
@@ -74,6 +75,10 @@ describe('OAuth start routes', () => {
       expect(target.searchParams.get('redirect_uri')).toBe(
         `${origin}/api/integrations/${provider}/callback`,
       );
+      if (provider === 'google_ads')
+        expect(target.searchParams.get('prompt')).toBe(
+          'consent select_account',
+        );
       expect(response.headers.get('set-cookie')).toContain(
         `Path=/api/integrations/${provider}/callback`,
       );
@@ -110,12 +115,20 @@ describe('OAuth callback routes', () => {
       verifier: 'verifier',
       provider: 'google_calendar',
     });
-    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-      Response.json({
-        refresh_token: 'refresh-token',
-        scope: 'https://www.googleapis.com/auth/calendar.events',
-      }),
-    );
+    vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(
+        Response.json({
+          access_token: 'access-token',
+          refresh_token: 'refresh-token',
+          scope: 'https://www.googleapis.com/auth/calendar.events',
+        }),
+      )
+      .mockResolvedValueOnce(
+        Response.json({
+          summary: 'greenvac@gmail.com',
+          timeZone: 'Australia/Sydney',
+        }),
+      );
     const response = await finishGoogle(
       new Request(`${origin}/api/google/callback?state=state&code=code`, {
         headers: { cookie: 'tradie_oauth=nonce' },
@@ -127,6 +140,12 @@ describe('OAuth callback routes', () => {
       `${origin}/workspace?calendar=connected`,
     );
     expect(mocks.upsert).toHaveBeenCalledOnce();
+    expect(mocks.upsert.mock.calls[0][0]).toMatchObject({
+      display_name: 'greenvac@gmail.com',
+      verified_at: expect.any(String),
+      last_error_code: null,
+      metadata: { timeZone: 'Australia/Sydney' },
+    });
   });
 
   it.each(['facebook', 'google_ads'] as const)(

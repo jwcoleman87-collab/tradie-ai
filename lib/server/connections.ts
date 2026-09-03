@@ -10,7 +10,7 @@ import { adminDb, checked } from './db';
 import { decrypt } from './crypto';
 import { env } from './config';
 import { providerReady, googleAdsClient } from './provider-config';
-import { requireValue, timedFetch } from './errors';
+import { AppError, requireValue, timedFetch } from './errors';
 export const ProviderSchema = z.enum(providers);
 export const AdditionalProviderSchema = z.enum(['facebook', 'google_ads']);
 export const StoredCredentials = z
@@ -39,7 +39,7 @@ export async function connectionList(
       await adminDb()
         .from('integration_credentials')
         .select(
-          'provider,connection_id,external_id,display_name,status,verified_at',
+          'provider,connection_id,external_id,display_name,status,verified_at,last_error_code,last_error_at',
         )
         .eq('workspace_id', workspaceId),
     ) || [];
@@ -62,6 +62,8 @@ export async function connectionList(
       externalId: row?.external_id || null,
       displayName: row?.display_name || null,
       verifiedAt: row?.verified_at || null,
+      lastErrorCode: row?.last_error_code || null,
+      lastErrorAt: row?.last_error_at || null,
       capabilities:
         row?.status === 'connected' && configured
           ? provider === 'facebook'
@@ -124,12 +126,16 @@ export async function googleAdsAccess(refreshToken: string) {
     }),
     redirect: 'manual',
   });
-  requireValue(
-    response.ok,
-    'RECONNECT_REQUIRED',
-    409,
-    'Reconnect Google Ads to restore reporting access.',
-  );
+  if (!response.ok)
+    throw new AppError(
+      [400, 401].includes(response.status)
+        ? 'RECONNECT_REQUIRED'
+        : 'UPSTREAM_UNAVAILABLE',
+      [400, 401].includes(response.status) ? 409 : 503,
+      [400, 401].includes(response.status)
+        ? 'Reconnect Google Ads to restore reporting access.'
+        : 'Google Ads could not be checked right now. Your saved connection was not removed.',
+    );
   return z
     .object({ access_token: z.string().min(1) })
     .parse(await response.json()).access_token;
@@ -138,11 +144,40 @@ export async function recordConnectionVerification(
   workspaceId: string,
   provider: Provider,
   connectionId: string,
+  details: { displayName?: string; metadata?: Record<string, unknown> } = {},
+) {
+  const update: Record<string, unknown> = {
+    status: 'connected',
+    verified_at: new Date().toISOString(),
+    last_error_code: null,
+    last_error_at: null,
+  };
+  if (details.displayName) update.display_name = details.displayName;
+  if (details.metadata) update.metadata = details.metadata;
+  checked(
+    await adminDb()
+      .from('integration_credentials')
+      .update(update)
+      .eq('workspace_id', workspaceId)
+      .eq('provider', provider)
+      .eq('connection_id', connectionId),
+  );
+}
+
+export async function markConnectionReconnectRequired(
+  workspaceId: string,
+  provider: Provider,
+  connectionId: string,
+  errorCode: string,
 ) {
   checked(
     await adminDb()
       .from('integration_credentials')
-      .update({ verified_at: new Date().toISOString() })
+      .update({
+        status: 'reconnect_required',
+        last_error_code: errorCode,
+        last_error_at: new Date().toISOString(),
+      })
       .eq('workspace_id', workspaceId)
       .eq('provider', provider)
       .eq('connection_id', connectionId),

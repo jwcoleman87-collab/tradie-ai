@@ -4,6 +4,8 @@ import { encrypt, randomSecret, sha256 } from './crypto';
 import { requireValue, timedFetch } from './errors';
 import { noStore } from './http';
 import { calendarReturnUrl } from './oauth-return';
+import { providerCallback } from './provider-callbacks';
+import { readPrimaryCalendar } from './calendar';
 const scope = 'https://www.googleapis.com/auth/calendar.events';
 const cookieName = 'tradie_oauth';
 function cookie(value: string, maxAge: number) {
@@ -30,11 +32,11 @@ export async function startGoogle(workspaceId: string, userId: string) {
   );
   const params = new URLSearchParams({
     client_id: required('GOOGLE_CLIENT_ID'),
-    redirect_uri: `${appOrigin()}/api/google/callback`,
+    redirect_uri: providerCallback('google_calendar'),
     response_type: 'code',
     scope,
     access_type: 'offline',
-    prompt: 'consent',
+    prompt: 'consent select_account',
     state,
     code_challenge: challenge,
     code_challenge_method: 'S256',
@@ -92,7 +94,7 @@ export async function finishGoogle(request: Request) {
       code,
       client_id: required('GOOGLE_CLIENT_ID'),
       client_secret: required('GOOGLE_CLIENT_SECRET'),
-      redirect_uri: `${appOrigin()}/api/google/callback`,
+      redirect_uri: providerCallback('google_calendar'),
       code_verifier: stored.verifier,
     }),
   });
@@ -103,6 +105,7 @@ export async function finishGoogle(request: Request) {
     'Google did not complete the connection. Please try again.',
   );
   const tokens = (await response.json()) as {
+    access_token?: string;
     refresh_token?: string;
     scope?: string;
   };
@@ -112,6 +115,8 @@ export async function finishGoogle(request: Request) {
     403,
     'Calendar access was not granted. Please reconnect and allow Calendar access.',
   );
+  requireValue(tokens.access_token, 'OAUTH_EXCHANGE_FAILED', 502);
+  const calendar = await readPrimaryCalendar(tokens.access_token);
   checked(
     await db.from('integration_credentials').upsert(
       {
@@ -124,10 +129,14 @@ export async function finishGoogle(request: Request) {
         ),
         connected_by: stored.user_id,
         external_id: 'primary',
-        display_name: 'Primary Google Calendar',
+        display_name: calendar.summary,
         credential_kind: 'calendar_refresh_v1',
         status: 'connected',
+        verified_at: new Date().toISOString(),
+        last_error_code: null,
+        last_error_at: null,
         scopes: [scope],
+        metadata: { timeZone: calendar.timeZone || null },
       },
       { onConflict: 'workspace_id,provider' },
     ),
