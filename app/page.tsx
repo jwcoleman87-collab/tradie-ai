@@ -6,6 +6,7 @@ export const metadata: Metadata = {
   description:
     'Meet Workbench Chat, the simple AI guide for setting up your private Workbench.',
   alternates: { canonical: '/' },
+  robots: { index: true, follow: true },
   openGraph: {
     title: 'Workbench — Your business, made lighter.',
     description: 'Your business. Your crew. One place.',
