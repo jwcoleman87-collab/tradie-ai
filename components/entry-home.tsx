@@ -2,8 +2,24 @@
 
 import Image from 'next/image';
 import Link from 'next/link';
-import { ArrowRight, LockKeyhole } from 'lucide-react';
+import {
+  ArrowRight,
+  Globe2,
+  LockKeyhole,
+  Megaphone,
+  Share2,
+  Wallet,
+  Wrench,
+} from 'lucide-react';
 import { useWorkbenchAuth } from '@/lib/use-workbench-auth';
+
+const crew = [
+  { icon: Megaphone, name: 'Marketing', blurb: 'Drive more leads' },
+  { icon: Share2, name: 'Social', blurb: 'Grow your presence' },
+  { icon: Globe2, name: 'Website', blurb: 'Look professional' },
+  { icon: Wallet, name: 'Finance', blurb: 'Keep cash flowing' },
+  { icon: Wrench, name: 'Maintenance', blurb: 'Keep everything running' },
+];
 
 export function EntryHome() {
   const { session, loading } = useWorkbenchAuth();
@@ -67,6 +83,27 @@ export function EntryHome() {
             <span>CHAT</span>
             <p>G’day. Let’s get your Workbench ready.</p>
           </div>
+        </div>
+      </section>
+
+      <section className="entry-crew">
+        <span className="entry-crew-eyebrow">YOUR AI CREW</span>
+        <h2>One crew, working behind the scenes.</h2>
+        <p>
+          Chat brings in a specialist the moment a job needs one — you never
+          manage them directly, and nothing they prepare goes out without your
+          say-so.
+        </p>
+        <div className="entry-crew-grid">
+          {crew.map(({ icon: Icon, name, blurb }) => (
+            <div className="entry-crew-card" key={name}>
+              <span className="entry-crew-icon" aria-hidden="true">
+                <Icon size={18} />
+              </span>
+              <span className="entry-crew-name">{name}</span>
+              <span className="entry-crew-blurb">{blurb}</span>
+            </div>
+          ))}
         </div>
       </section>
 
