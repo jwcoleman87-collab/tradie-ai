@@ -36,6 +36,26 @@ describe('continuous Magic onboarding', () => {
     );
   });
 
+  it('does not guess the first business when an owner lists several', () => {
+    const mixed = extractIdentityFacts(
+      'I own Werka (www.werka.com.au), GreenVac (www.greenvac.com.au) and Paddockme.',
+    );
+    expect(mixed.find((fact) => fact.fieldPath === 'display_name')).toBeFalsy();
+    expect(
+      mixed.find((fact) => fact.fieldPath === 'brand_summary'),
+    ).toBeFalsy();
+
+    const correction = extractIdentityFacts(
+      'The business name is called GreenVac.',
+    );
+    expect(correction).toContainEqual(
+      expect.objectContaining({
+        fieldPath: 'display_name',
+        value: 'GreenVac',
+      }),
+    );
+  });
+
   it('gives the model the whole conversation and honours the latest correction', async () => {
     vi.stubEnv('WEB_SEARCH_ENABLED', 'false');
     const calls: unknown[][] = [];
@@ -87,6 +107,52 @@ describe('continuous Magic onboarding', () => {
     expect(result.facts).toEqual([
       expect.objectContaining({ fieldPath: 'display_name', value: 'GreenVac' }),
     ]);
+    expect(result.identityChanged).toBe(false);
+  });
+
+  it('overrides a stale business identity and recovers its matching website', async () => {
+    vi.stubEnv('WEB_SEARCH_ENABLED', 'false');
+    const provider = {
+      model: 'test-model',
+      structured: vi.fn().mockResolvedValue({
+        reply: 'I still need the business name.',
+        facts: [],
+        goalsCovered: [],
+        nextGoal: 'identity_anchor',
+        reviewReady: true,
+        webSearch: false,
+        searchQuery: null,
+      }),
+    } as ModelProvider;
+    const result = await runOnboardingMagic(provider, {
+      messages: [
+        {
+          role: 'user',
+          content:
+            'I own Werka (www.werka.com.au) and GreenVac hydro excavation (www.greenvac.com.au).',
+        },
+        { role: 'user', content: 'The business name is called GreenVac.' },
+      ],
+      existingFacts: [
+        { field_path: 'display_name', value: 'Werka' },
+        { field_path: 'brand_summary', value: 'Old Werka information' },
+      ],
+      timeZone: 'Australia/Sydney',
+    });
+    expect(result.facts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          fieldPath: 'display_name',
+          value: 'GreenVac',
+        }),
+        expect.objectContaining({
+          fieldPath: 'website_url',
+          value: 'https://www.greenvac.com.au',
+        }),
+      ]),
+    );
+    expect(result.identityChanged).toBe(true);
+    expect(result.reviewReady).toBe(false);
   });
 
   it('uses cited live research for a current connection question', async () => {

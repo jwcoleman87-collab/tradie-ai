@@ -334,16 +334,38 @@ export async function onboardingApi(
     const promptCount = Math.min(turnNumber, 5);
     const sourceReference = `owner://onboarding/${sessionId}/${turnNumber}`;
     const patch = profilePatch(turn.facts);
-    const reviewReady = session?.status === 'review' || turn.reviewReady;
+    const reviewReady = turn.identityChanged
+      ? turn.reviewReady
+      : session?.status === 'review' || turn.reviewReady;
     const discoveryStatus = turn.researchUsed
       ? 'complete'
       : env('WEB_SEARCH_ENABLED') === 'true'
         ? 'ready'
         : 'unavailable';
+    if (turn.identityChanged)
+      checked(
+        await admin
+          .from('business_profile_facts')
+          .delete()
+          .eq('workspace_id', workspace.id),
+      );
     checked(
       await admin.from('business_profiles').upsert(
         {
           workspace_id: workspace.id,
+          ...(turn.identityChanged
+            ? {
+                website_url: null,
+                base_location: null,
+                service_areas: [],
+                services: [],
+                preferred_job_types: [],
+                enquiry_channels: [],
+                primary_goal: null,
+                admin_bottleneck: null,
+                brand_summary: null,
+              }
+            : {}),
           display_name:
             typeof patch.display_name === 'string'
               ? patch.display_name
@@ -405,6 +427,7 @@ export async function onboardingApi(
           model: provider.model,
           provider_trace: provider.attempts || [],
           web_research_used: turn.researchUsed,
+          identity_changed: turn.identityChanged,
         },
       }),
     );
