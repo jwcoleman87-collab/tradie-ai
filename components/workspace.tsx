@@ -595,7 +595,7 @@ export default function Workspace() {
         <aside className="team-panel">
           <div className="crew-only-heading">
             <span className="section-label">YOUR AI CREW</span>
-            <p>Magic brings in the right specialist.</p>
+            <p>Pick a specialist for a focused request.</p>
           </div>
           <div className="team-list" aria-label="Your AI crew">
             {team.map(({ id, name, detail, icon: Icon }) => (

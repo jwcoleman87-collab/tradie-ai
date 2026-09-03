@@ -80,8 +80,8 @@ export function ConnectionsPanel({
         </h3>
         <p>
           {config.webSearchReady
-            ? 'Magic can search current public information through your allowed AI provider and will attach clickable sources. Search pages are treated as untrusted data.'
-            : 'The site operator must enable web research before Magic can verify current public information.'}
+            ? 'The central chat can search current public information through your allowed AI provider and will attach clickable sources. Search pages are treated as untrusted data.'
+            : 'The site operator must enable web research before the central chat can verify current public information.'}
         </p>
         <p className="auth-hint">
           Workbench sends only a short public search query. It blocks queries
