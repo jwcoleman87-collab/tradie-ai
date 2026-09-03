@@ -6,12 +6,24 @@ import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowRight,
+  BriefcaseBusiness,
+  Building2,
   Check,
+  CheckCircle2,
+  ClipboardList,
   ExternalLink,
+  Globe2,
   LogOut,
+  Map,
+  MapPin,
+  MessageCircle,
+  Pencil,
   ShieldCheck,
   Sparkles,
+  Target,
+  Wrench,
 } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Textarea } from './ui/textarea';
@@ -42,6 +54,21 @@ const arrayFields = new Set<OnboardingField>([
   'preferred_job_types',
   'enquiry_channels',
 ]);
+const factVisuals: Record<
+  OnboardingField,
+  { icon: LucideIcon; tone: 'yellow' | 'navy' | 'green' | 'orange' }
+> = {
+  display_name: { icon: Building2, tone: 'yellow' },
+  website_url: { icon: Globe2, tone: 'navy' },
+  base_location: { icon: MapPin, tone: 'green' },
+  service_areas: { icon: Map, tone: 'green' },
+  services: { icon: Wrench, tone: 'orange' },
+  preferred_job_types: { icon: BriefcaseBusiness, tone: 'orange' },
+  enquiry_channels: { icon: MessageCircle, tone: 'navy' },
+  primary_goal: { icon: Target, tone: 'yellow' },
+  admin_bottleneck: { icon: ClipboardList, tone: 'orange' },
+  brand_summary: { icon: Sparkles, tone: 'navy' },
+};
 const messageOf = (error: unknown) =>
   error instanceof Error
     ? error.message
@@ -64,6 +91,7 @@ export default function Onboarding() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [allowAI, setAllowAI] = useState(false);
+  const [editingFacts, setEditingFacts] = useState<Set<string>>(new Set());
   const chatRef = useRef<HTMLDivElement>(null);
 
   const load = useCallback(
@@ -113,6 +141,7 @@ export default function Onboarding() {
         state.facts.map((fact) => [fact.field_path, displayValue(fact)]),
       ),
     );
+    setEditingFacts(new Set());
   }, [state]);
 
   useEffect(() => {
@@ -136,6 +165,16 @@ export default function Onboarding() {
       },
     ];
   }, [state]);
+
+  const changedFactCount = useMemo(
+    () =>
+      state?.facts.filter(
+        (fact) =>
+          (edits[fact.field_path] || '').trim() &&
+          edits[fact.field_path].trim() !== displayValue(fact),
+      ).length || 0,
+    [edits, state?.facts],
+  );
 
   async function perform(task: () => Promise<void>) {
     setError('');
@@ -399,50 +438,107 @@ export default function Onboarding() {
           )}
           {reviewing && (
             <div className="profile-review">
-              <div className="review-intro">
-                <Sparkles size={20} />
-                <p>
-                  Your profile draft is ready below. You can keep talking to
-                  Chat, make corrections, or confirm it when you’re happy.
-                </p>
+              <div className="profile-review-heading">
+                <span className="profile-review-mark" aria-hidden="true">
+                  <Sparkles size={22} />
+                </span>
+                <div>
+                  <span className="section-label">YOUR BUSINESS SNAPSHOT</span>
+                  <h3>Check what Chat learned.</h3>
+                  <p>Tap Edit on anything that needs changing.</p>
+                </div>
+                <span className="profile-ready-count">
+                  <CheckCircle2 size={15} /> {state.facts.length} details ready
+                </span>
               </div>
               <div className="fact-grid">
-                {state.facts.map((fact) => (
-                  <article className="fact-card" key={fact.id}>
-                    <div className="fact-card-heading">
-                      <label htmlFor={`fact-${fact.field_path}`}>
-                        {labels[fact.field_path]}
-                      </label>
-                      <span className={`fact-state ${fact.fact_state}`}>
-                        {fact.fact_state.replaceAll('_', ' ')}
-                      </span>
-                    </div>
-                    <Input
-                      id={`fact-${fact.field_path}`}
-                      value={edits[fact.field_path] || ''}
-                      disabled={busy || state.onboardingStatus === 'confirmed'}
-                      onChange={(change) =>
-                        setEdits((current) => ({
-                          ...current,
-                          [fact.field_path]: change.target.value,
-                        }))
-                      }
-                    />
-                    <div className="fact-evidence">
-                      <span>{fact.confidence} confidence</span>
-                      <span>Source: {fact.source_label}</span>
-                      {fact.source_url?.startsWith('http') && (
-                        <a
-                          href={fact.source_url}
-                          target="_blank"
-                          rel="noreferrer"
-                        >
-                          View source <ExternalLink size={12} />
-                        </a>
+                {state.facts.map((fact) => {
+                  const visual = factVisuals[fact.field_path];
+                  const Icon = visual.icon;
+                  const editing = editingFacts.has(fact.id);
+                  const ownerSupplied =
+                    fact.source_type === 'owner_message' ||
+                    fact.source_type === 'owner_correction';
+                  return (
+                    <article
+                      className="fact-card"
+                      data-tone={visual.tone}
+                      key={fact.id}
+                    >
+                      <div className="fact-card-heading">
+                        <span className="fact-card-icon" aria-hidden="true">
+                          <Icon size={20} />
+                        </span>
+                        <div className="fact-card-copy">
+                          <span className="fact-card-label">
+                            {labels[fact.field_path]}
+                          </span>
+                          {!editing && (
+                            <p className="fact-card-value">
+                              {edits[fact.field_path] || displayValue(fact)}
+                            </p>
+                          )}
+                        </div>
+                        {state.onboardingStatus !== 'confirmed' && (
+                          <button
+                            type="button"
+                            className="fact-edit-button"
+                            aria-expanded={editing}
+                            onClick={() =>
+                              setEditingFacts((current) => {
+                                const next = new Set(current);
+                                if (next.has(fact.id)) next.delete(fact.id);
+                                else next.add(fact.id);
+                                return next;
+                              })
+                            }
+                          >
+                            {editing ? (
+                              <Check size={14} />
+                            ) : (
+                              <Pencil size={14} />
+                            )}
+                            {editing ? 'Done' : 'Edit'}
+                          </button>
+                        )}
+                      </div>
+                      {editing && (
+                        <Input
+                          id={`fact-${fact.field_path}`}
+                          aria-label={labels[fact.field_path]}
+                          value={edits[fact.field_path] || ''}
+                          disabled={busy}
+                          onChange={(change) =>
+                            setEdits((current) => ({
+                              ...current,
+                              [fact.field_path]: change.target.value,
+                            }))
+                          }
+                        />
                       )}
-                    </div>
-                  </article>
-                ))}
+                      <div className="fact-evidence">
+                        <span className={`fact-state ${fact.fact_state}`}>
+                          <CheckCircle2 size={12} />
+                          {ownerSupplied
+                            ? 'You supplied this'
+                            : fact.fact_state === 'needs_confirmation'
+                              ? 'Needs a check'
+                              : 'Chat found this'}
+                        </span>
+                        {fact.source_url?.startsWith('http') && (
+                          <a
+                            href={fact.source_url}
+                            target="_blank"
+                            rel="noreferrer"
+                            title={fact.source_label}
+                          >
+                            Open source <ExternalLink size={12} />
+                          </a>
+                        )}
+                      </div>
+                    </article>
+                  );
+                })}
               </div>
               {state.onboardingStatus === 'confirmed' ? (
                 <div className="confirmed-panel">
@@ -455,10 +551,12 @@ export default function Onboarding() {
                 <div className="review-actions">
                   <Button
                     variant="outline"
-                    disabled={busy}
+                    disabled={busy || changedFactCount === 0}
                     onClick={() => void saveCorrections()}
                   >
-                    Save corrections
+                    {changedFactCount
+                      ? `Save ${changedFactCount} change${changedFactCount === 1 ? '' : 's'}`
+                      : 'No changes to save'}
                   </Button>
                   <Button
                     disabled={busy || !state.facts.length}

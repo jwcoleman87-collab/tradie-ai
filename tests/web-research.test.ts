@@ -5,6 +5,7 @@ import {
   appendWebSources,
   publicSearchQuery,
 } from '../lib/server/web-research';
+import { parseResearchMessage } from '../components/message-copy';
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -27,6 +28,21 @@ it('blocks private-looking search queries and emits only safe source links', () 
       sources: [{ title: 'NSW regulator', url: 'https://www.nsw.gov.au/' }],
     }),
   ).toContain('[NSW regulator](https://www.nsw.gov.au/)');
+});
+
+it('turns appended research into one clean visual source set', () => {
+  const parsed = parseResearchMessage(
+    'Current finding.\n\nSources:\n- Duplicate: https://example.gov.au/current\n\nNo action was taken.\n\nSources — live web research (2026-09-02T00:00:00.000Z):\n- [Official source](https://example.gov.au/current)',
+  );
+  expect(parsed.body).toBe('Current finding.\n\nNo action was taken.');
+  expect(parsed.searchedAt).toBe('2026-09-02T00:00:00.000Z');
+  expect(parsed.sources).toEqual([
+    {
+      title: 'Official source',
+      url: 'https://example.gov.au/current',
+      hostname: 'example.gov.au',
+    },
+  ]);
 });
 
 it('uses OpenAI hosted web search and retains provider citations', async () => {
