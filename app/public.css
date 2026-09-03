@@ -1679,6 +1679,25 @@
   box-shadow: 0 0 0 4px #2d8a5c18;
   animation: magic-presence 2.8s ease-in-out infinite;
 }
+.onboarding-context-trust {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 5px;
+}
+.onboarding-trust-note {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: #68747d;
+  font-size: 11px;
+  line-height: 1.4;
+  text-align: right;
+}
+.onboarding-trust-note svg {
+  flex-shrink: 0;
+  color: var(--workbench-success);
+}
 .onboarding-context-row details {
   position: relative;
   text-align: right;
@@ -1822,6 +1841,12 @@
     gap: 9px;
   }
   .onboarding-context-row details {
+    text-align: left;
+  }
+  .onboarding-context-trust {
+    align-items: flex-start;
+  }
+  .onboarding-trust-note {
     text-align: left;
   }
   .onboarding-chat {

@@ -364,13 +364,16 @@ export default function Onboarding() {
                 ? 'Chat is ready · profile ready when you are'
                 : 'Chat is ready · conversation saved'}
             </span>
-            <details>
-              <summary>About this setup</summary>
-              <p>{state.discovery.detail}</p>
-              <p>
-                Nothing is connected, sent, booked or published during setup.
-              </p>
-            </details>
+            <div className="onboarding-context-trust">
+              <span className="onboarding-trust-note">
+                <ShieldCheck size={12} aria-hidden="true" /> Nothing is
+                connected, sent, booked or published during setup.
+              </span>
+              <details>
+                <summary>About this setup</summary>
+                <p>{state.discovery.detail}</p>
+              </details>
+            </div>
           </div>
 
           <>
