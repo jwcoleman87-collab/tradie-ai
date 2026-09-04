@@ -7,14 +7,11 @@ it('routes with a small context before retrieving optional workspace or Calendar
   const route = new Promise((resolve) => {
     routed = resolve;
   });
-  const structured = vi
-    .fn()
-    .mockReturnValueOnce(route)
-    .mockResolvedValueOnce({
-      reply: 'Caption ready',
-      proposals: [],
-      escalation: 'none',
-    });
+  const structured = vi.fn().mockReturnValueOnce(route).mockResolvedValueOnce({
+    reply: 'Caption ready',
+    proposals: [],
+    escalation: 'none',
+  });
   const loadCalendar = vi.fn();
   const loadRecords = vi.fn().mockResolvedValue([]);
   const loadAttachments = vi.fn().mockResolvedValue([]);
@@ -41,7 +38,8 @@ it('routes with a small context before retrieving optional workspace or Calendar
       (message: { content: string }) => message.content.length <= 2000,
     ),
   ).toBe(true);
-  expect(routingCall[3].maxOutputTokens).toBe(768);
+  expect(routingCall[3].maxOutputTokens).toBe(2048);
+  expect(routingCall[3].purpose).toBe('routing');
   routed({
     agents: ['social'],
     reason: 'caption',

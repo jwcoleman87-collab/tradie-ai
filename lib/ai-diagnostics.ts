@@ -4,6 +4,11 @@ export type ModelDiagnostic = {
   providerRequestId?: string;
   httpStatus?: number;
   transport?: 'timeout' | 'network' | 'configuration';
+  incompleteReason?: 'max_output_tokens' | 'content_filter';
+  outputTokens?: number;
+  reasoningTokens?: number;
+  maxOutputTokens?: number;
+  reasoningEffort?: 'minimal';
 };
 
 export function aiProblem(code?: string | null) {

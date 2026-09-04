@@ -12,6 +12,7 @@ export const CHAT_STAGE_MS = {
   response: 45_000,
 } as const;
 export type ModelCallOptions = {
+  purpose?: 'routing';
   signal?: AbortSignal;
   deadlineAt?: number;
   maxOutputTokens?: number;

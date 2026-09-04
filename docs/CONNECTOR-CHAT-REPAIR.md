@@ -132,9 +132,9 @@ Authenticated Supabase administration was subsequently available in Chrome. The
 verified project is **Tradie Ai**, `gjrhukwqagaawdklnvxd`, in organization
 `fxmmlbekdpofrrkyvmqp`; the current Vercel public configuration points to this
 same project. Preflight found all expected baseline migrations except
-`202609020008_continuous_magic_onboarding.sql`: the live onboarding constraint
-still limits prompts to five. Both this missing migration and the new lifecycle
-migration must be applied. All five checked function definitions and server-only
+`202609020008_continuous_magic_onboarding.sql`: the onboarding constraint
+still limited prompts to five. Both this missing migration and the new lifecycle
+migration have now been applied. All five checked baseline function definitions and server-only
 grants exactly matched the audited baseline. There were no working Chat runs or
 live OAuth states/candidates; aggregate counts were 90 messages, 22 proposals,
 three workspaces and two saved credentials.
@@ -146,20 +146,31 @@ also preserves the replaced function definitions/grants and constraints in a
 postgres-only schema, copying no customer content or credentials. This schema
 restore record is a rollback aid, not a disaster-recovery backup.
 
-The exact wrapper is staged in the authenticated SQL editor. **Automatic approval
-review blocked execution because no full backup exists; explicit owner approval
-is pending. Neither migration has been run.** The earlier attempt to pull all
-production environment values was also rejected before execution, and no secrets
-were downloaded. The remote setup CLI check was replaced by direct metadata,
-function-definition and permission checks through authenticated administration.
+The owner explicitly approved proceeding without a full backup. After adding
+explicit RLS and privilege revocation to the transaction's temporary staging
+table, both success and forced-rollback tests passed again. The reviewed wrapper
+then executed successfully through authenticated Supabase administration.
+Independent postflight reads confirm both migration ledger entries, all 13
+affected functions restricted to the server role, the onboarding limit of 200,
+and unchanged aggregate counts of 90 messages, 22 proposals, three workspaces
+and two credentials. The private restore record contains five function
+definitions, three constraints and aggregate counts only.
+
+No production secrets were downloaded. The remote setup CLI check was replaced
+by direct metadata, function-definition and permission checks through
+authenticated administration.
 
 Production build `dpl_121HmyhF156ALXmNo6GN5Gnz2NuB` is Ready at
-`https://tradie-o184xxnqt-jwcoleman87-collabs-projects.vercel.app`, staged with
-production configuration using `--skip-domain`. Its actual API function timeout
-is 150 seconds and Fluid Compute is enabled. The canonical `tradie-ai-efuf`
-alias still serves the original audited deployment
-`dpl_3ZTBqPgdnCjpKKw6SWcQom6gNKi7`; it has not been promoted. After approved
-migration execution and postflight checks, promote the exact staged deployment.
+`https://tradie-o184xxnqt-jwcoleman87-collabs-projects.vercel.app`. It was staged
+with production configuration using `--skip-domain`, then promoted after
+database verification. The canonical `tradie-ai-efuf` alias now resolves to this
+exact deployment, built from commit
+`1825c388f3dd297c7305f34558444fee52636bc4`. Its actual API function timeout is
+150 seconds, Node.js 24 runs in `iad1`, and Fluid Compute is enabled.
+Post-promotion checks passed: the homepage returns 200, health and public
+configuration report ready against the correct Supabase project, unauthenticated
+Chat/status requests return 401, and an untrusted Origin returns 403. The bounded
+deployment-log check contained only these expected authentication probes.
 The current Google OAuth client already lists both required `efuf` Calendar/Ads
 callbacks; no provider configuration was changed. Authenticated app sign-in and
 the owner's test workspace selection are pending. Production connection results

@@ -180,6 +180,16 @@ export class OpenAIProvider implements ModelProvider {
       Number(env('OPENAI_MAX_OUTPUT_TOKENS') || 5000);
     if (!Number.isInteger(maxOutput) || maxOutput < 256 || maxOutput > 8000)
       throw new AppError('AI_LIMIT_CONFIG_INVALID', 503);
+    // Original GPT-5 models default to medium reasoning. Its hidden reasoning
+    // consumes max_output_tokens too, which can exhaust a small router budget
+    // before any JSON is emitted. Only these documented models accept minimal;
+    // leave unrelated/configured model families' parameters unchanged.
+    const routingReasoning =
+      options.purpose === 'routing' &&
+      /^gpt-5(?:-mini|-nano)?(?:-\d{4}-\d{2}-\d{2})?$/.test(this.model)
+        ? { effort: 'minimal' as const }
+        : undefined;
+    const diagnosticIndex = this.diagnostics.length;
     let response: Response;
     try {
       response = await modelFetch(
@@ -196,6 +206,7 @@ export class OpenAIProvider implements ModelProvider {
             instructions,
             input,
             max_output_tokens: maxOutput,
+            ...(routingReasoning ? { reasoning: routingReasoning } : {}),
             text: {
               format: {
                 type: 'json_schema',
@@ -216,17 +227,47 @@ export class OpenAIProvider implements ModelProvider {
         503,
         'Your team could not connect. Your message is saved; please try again.',
       );
+    } finally {
+      const diagnostic = this.diagnostics[diagnosticIndex];
+      if (diagnostic) {
+        diagnostic.maxOutputTokens = maxOutput;
+        if (routingReasoning)
+          diagnostic.reasoningEffort = routingReasoning.effort;
+      }
     }
     if (!response.ok) throw await modelHttpError(this.name, response);
     const data = (await boundedModelJson(response)) as {
       status?: string;
+      incomplete_details?: { reason?: string };
       output?: { content?: { type: string; text?: string }[] }[];
       usage?: {
         input_tokens: number;
         output_tokens: number;
         total_tokens: number;
+        output_tokens_details?: { reasoning_tokens?: number };
       };
     };
+    const diagnostic = this.diagnostics[diagnosticIndex];
+    if (diagnostic) {
+      const reason = data.incomplete_details?.reason;
+      if (
+        data.status === 'incomplete' &&
+        (reason === 'max_output_tokens' || reason === 'content_filter')
+      )
+        diagnostic.incompleteReason = reason;
+      const outputTokens = data.usage?.output_tokens;
+      const reasoningTokens =
+        data.usage?.output_tokens_details?.reasoning_tokens;
+      if (Number.isSafeInteger(outputTokens) && outputTokens! >= 0) {
+        diagnostic.outputTokens = outputTokens;
+        if (
+          Number.isSafeInteger(reasoningTokens) &&
+          reasoningTokens! >= 0 &&
+          reasoningTokens! <= outputTokens!
+        )
+          diagnostic.reasoningTokens = reasoningTokens;
+      }
+    }
     if (
       data.usage &&
       [
@@ -312,7 +353,7 @@ export async function runTeam(
         context.history
           .slice(-6)
           .map((m) => ({ role: m.role, content: m.content.slice(-2000) })),
-        { ...routingOptions, maxOutputTokens: 768 },
+        { ...routingOptions, purpose: 'routing', maxOutputTokens: 2048 },
       ),
       callSignal(routingOptions, CHAT_STAGE_MS.routing),
     ),
