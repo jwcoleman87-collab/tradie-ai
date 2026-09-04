@@ -9,6 +9,11 @@ existing Tradie AI identifiers until they can be migrated safely.
 
 ## Delivery status
 
+The 5 September connector and Chat audit repairs are documented in
+[the repair report](docs/CONNECTOR-CHAT-REPAIR.md). This source update requires
+the new lifecycle migration before deployment; that report distinguishes local
+verification from the historical hosted checkpoints below.
+
 Supabase Auth/Postgres/Storage and all five migrations are live. The private
 hosted app includes the approved Workbench identity, OpenAI + Claude backup,
 Facebook Page connections, approved single-photo publishing and read-only Google

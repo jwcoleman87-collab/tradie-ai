@@ -1,11 +1,12 @@
 import { z } from 'zod';
 import type { AdsReport, ResourceChoice } from '../integrations';
-import { adsRead } from './provider-http';
+import { adsRead, ProviderReadError } from './provider-http';
 import {
   googleAdsAccess,
   markConnectionReconnectRequired,
   providerCredentials,
   recordConnectionVerification,
+  recordConnectionIssue,
 } from './connections';
 import { AppError, requireValue } from './errors';
 const Customer = z.object({
@@ -56,7 +57,15 @@ export async function discoverAdsAccounts(token: string) {
     .parse(await adsRead(token, 'customers:listAccessibleCustomers'));
   const choices: ResourceChoice[] = [];
   let limited = data.resourceNames.length > 20;
-  for (const resource of data.resourceNames.slice(0, 20)) {
+  const roots = [...new Set(data.resourceNames)].slice(0, 20);
+  const results = Array.from(
+    { length: roots.length },
+    () => [] as ResourceChoice[],
+  );
+  const failures: ProviderReadError[] = [];
+  let next = 0;
+  let fatal: unknown;
+  const readRoot = async (resource: string): Promise<ResourceChoice[]> => {
     const root = resource.split('/')[1];
     // Manager hierarchy read uses the authorized root as login-customer-id.
     const response = await adsRead(
@@ -83,19 +92,40 @@ export async function discoverAdsAccounts(token: string) {
       })
       .parse(response).results;
     if (rows.length === 100) limited = true;
-    for (const { customerClient: c } of rows)
-      if (!c.manager && !choices.some((x) => x.id === c.id))
-        choices.push({
-          id: c.id,
-          name: c.descriptiveName || 'Google Ads ' + c.id,
-          currency: c.currencyCode,
-          timeZone: c.timeZone,
-          ...(root !== c.id ? { loginCustomerId: root } : {}),
-        });
-  }
+    return rows
+      .filter(({ customerClient: c }) => !c.manager)
+      .map(({ customerClient: c }) => ({
+        id: c.id,
+        name: c.descriptiveName || 'Google Ads ' + c.id,
+        currency: c.currencyCode,
+        timeZone: c.timeZone,
+        ...(root !== c.id ? { loginCustomerId: root } : {}),
+      }));
+  };
+  await Promise.all(
+    Array.from({ length: Math.min(4, roots.length) }, async () => {
+      while (next < roots.length && fatal === undefined) {
+        const index = next++;
+        try {
+          results[index] = await readRoot(roots[index]);
+        } catch (error) {
+          if (error instanceof ProviderReadError && error.scope === 'account')
+            failures.push(error);
+          else fatal = error;
+        }
+      }
+    }),
+  );
+  if (fatal !== undefined) throw fatal;
+  for (const resources of results)
+    for (const resource of resources || [])
+      if (!choices.some((choice) => choice.id === resource.id))
+        choices.push(resource);
+  if (!choices.length && failures.length) throw failures[0];
   return {
     resources: choices.slice(0, 100),
     limited: limited || choices.length > 100,
+    incomplete: failures.length > 0,
   };
 }
 const Counts = z
@@ -178,6 +208,13 @@ export async function googleAdsReport(workspaceId: string) {
         credentials.connectionId,
         'GOOGLE_ADS_ACCESS_REVOKED',
       );
+    else if (error instanceof AppError && adsConnectionIssue(error.code))
+      await recordConnectionIssue(
+        workspaceId,
+        'google_ads',
+        credentials.connectionId,
+        error.code,
+      );
     throw error;
   }
 }
@@ -186,12 +223,13 @@ export async function verifyGoogleAdsConnection(
   workspaceId: string,
   connectionId: string,
 ) {
+  const connection = await providerCredentials(
+    workspaceId,
+    'google_ads',
+    connectionId,
+    { allowReadOnlyRecheck: true },
+  );
   try {
-    const connection = await providerCredentials(
-      workspaceId,
-      'google_ads',
-      connectionId,
-    );
     const account = await readAdsAccount(
       await googleAdsAccess(connection.token),
       connection.resource.id,
@@ -228,6 +266,22 @@ export async function verifyGoogleAdsConnection(
         'Reconnect Google Ads to restore reporting access.',
       );
     }
+    if (error instanceof AppError && adsConnectionIssue(error.code))
+      await recordConnectionIssue(
+        workspaceId,
+        'google_ads',
+        connectionId,
+        error.code,
+      );
     throw error;
   }
+}
+
+function adsConnectionIssue(code: string) {
+  return [
+    'GOOGLE_ADS_ACCOUNT_ACCESS_REQUIRED',
+    'GOOGLE_ADS_ACCOUNT_DISABLED',
+    'GOOGLE_ADS_CONFIGURATION_REQUIRED',
+    'GOOGLE_ADS_CHECK_FAILED',
+  ].includes(code);
 }

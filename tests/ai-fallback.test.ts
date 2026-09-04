@@ -52,6 +52,7 @@ it('records a real adapter switch between routing and generation', async () => {
                   agents: ['social'],
                   reason: 'post draft',
                   webSearch: false,
+                  calendarContext: false,
                   searchQuery: null,
                 }),
               },
@@ -170,6 +171,44 @@ describe('privacy-first provider selection', () => {
   });
 });
 describe('bounded availability fallback', () => {
+  it('propagates a shared stage deadline and does not start a backup after it expires', async () => {
+    const a = make('openai'),
+      b = make('anthropic');
+    a.structured.mockImplementation(
+      (_schema, _instructions, _input, options) =>
+        new Promise((_resolve, reject) => {
+          options.signal.addEventListener(
+            'abort',
+            () => reject(new AppError('AI_TIMEOUT', 503)),
+            { once: true },
+          );
+        }),
+    );
+    const provider = new FallbackProvider([a, b]);
+    await expect(
+      provider.structured(schema, '', [], { deadlineAt: Date.now() + 15 }),
+    ).rejects.toMatchObject({ code: 'AI_TIMEOUT' });
+    expect(b.structured).not.toHaveBeenCalled();
+    expect(provider.attempts).toHaveLength(1);
+    expect(provider.attempts[0]).toMatchObject({
+      status: 'failed',
+      step: 'routing',
+      errorCode: 'AI_TIMEOUT',
+    });
+  });
+  it('does not send any request when the run has already been cancelled', async () => {
+    const a = make('openai'),
+      b = make('anthropic');
+    const cancellation = new AbortController();
+    cancellation.abort();
+    await expect(
+      new FallbackProvider([a, b]).structured(schema, '', [], {
+        signal: cancellation.signal,
+      }),
+    ).rejects.toMatchObject({ code: 'AI_TIMEOUT' });
+    expect(a.structured).not.toHaveBeenCalled();
+    expect(b.structured).not.toHaveBeenCalled();
+  });
   it('switches providers for research while retaining a bounded audit trace', async () => {
     const a = {
         ...make('openai'),
@@ -192,8 +231,9 @@ describe('bounded availability fallback', () => {
       provider.research('current public update', 'Australia/Sydney'),
     ).resolves.toMatchObject({ provider: 'anthropic' });
     await provider.structured(schema, 'response', []);
-    expect(provider.attempts).toHaveLength(3);
+    expect(provider.attempts).toHaveLength(4);
     expect(provider.attempts.map((attempt) => attempt.step)).toEqual([
+      'routing',
       'research',
       'research',
       'response',
@@ -349,6 +389,7 @@ describe('Claude structured output and files', () => {
               agents: ['social'],
               reason: 'draft',
               webSearch: false,
+              calendarContext: false,
               searchQuery: null,
             }),
           },

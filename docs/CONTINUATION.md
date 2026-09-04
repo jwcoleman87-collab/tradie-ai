@@ -1,5 +1,10 @@
 # Workbench — continuation checkpoint for Claude or another engineer
 
+> **Connector and Chat repair, 5 September 2026:** See
+> [CONNECTOR-CHAT-REPAIR.md](CONNECTOR-CHAT-REPAIR.md) for the repaired source,
+> lease/deadline policy, required migration, verification and pending rollout.
+> Older deployment statements below are historical, not verification of this repair.
+
 > **Current next-build handover (2 September 2026):** Read
 > [`HANDOVER-LANDING-ONBOARDING.md`](./HANDOVER-LANDING-ONBOARDING.md) before
 > starting new work. It contains James's locked-aesthetic direction and the

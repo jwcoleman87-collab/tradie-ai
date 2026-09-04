@@ -10,6 +10,8 @@ import { env } from './config';
 import { AppError, requireValue } from './errors';
 import type { ModelDiagnostic } from '../ai-diagnostics';
 import type { WebResearch } from './web-research';
+import { callSignal, withinBudget, type ModelCallOptions } from './chat-budget';
+import { modelTimeout } from './model-http';
 export type ProviderAttempt = Partial<ModelDiagnostic> & {
   provider: AIProviderName;
   model: string;
@@ -62,9 +64,12 @@ export class FallbackProvider implements ModelProvider {
   }
   private record(attempt: ProviderAttempt) {
     this.attempts.push(attempt);
-    while (this.attempts.length > 3) this.attempts.shift();
   }
-  async research(query: string, timeZone: string): Promise<WebResearch> {
+  async research(
+    query: string,
+    timeZone: string,
+    options: ModelCallOptions = {},
+  ): Promise<WebResearch> {
     while (true) {
       const selected = this.choices[this.index];
       const started = Date.now();
@@ -72,7 +77,11 @@ export class FallbackProvider implements ModelProvider {
       try {
         if (!selected.research)
           throw new AppError('AI_RESEARCH_UNAVAILABLE', 503);
-        const output = await selected.research(query, timeZone);
+        const signal = callSignal(options, modelTimeout());
+        const output = await withinBudget(
+          selected.research(query, timeZone, { ...options, signal }),
+          signal,
+        );
         this.record({
           provider: selected.name,
           model: selected.model,
@@ -93,7 +102,12 @@ export class FallbackProvider implements ModelProvider {
           elapsedMs: Date.now() - started,
           ...selected.diagnostics?.[diagnosticCount],
         });
-        if (!fallbackErrors.has(code) || this.index + 1 >= this.choices.length)
+        if (
+          options.signal?.aborted ||
+          (options.deadlineAt ?? Infinity) <= Date.now() ||
+          !fallbackErrors.has(code) ||
+          this.index + 1 >= this.choices.length
+        )
           throw error;
         this.index++;
       }
@@ -103,6 +117,7 @@ export class FallbackProvider implements ModelProvider {
     schema: z.ZodType<T>,
     instructions: string,
     input: unknown[],
+    options: ModelCallOptions = {},
   ): Promise<T> {
     while (true) {
       const selected = this.choices[this.index];
@@ -110,7 +125,14 @@ export class FallbackProvider implements ModelProvider {
       const step = this.completedCalls === 0 ? 'routing' : 'response';
       const diagnosticCount = selected.diagnostics?.length || 0;
       try {
-        const output = await selected.structured(schema, instructions, input);
+        const signal = callSignal(options, modelTimeout());
+        const output = await withinBudget(
+          selected.structured(schema, instructions, input, {
+            ...options,
+            signal,
+          }),
+          signal,
+        );
         this.record({
           provider: selected.name,
           model: selected.model,
@@ -132,7 +154,12 @@ export class FallbackProvider implements ModelProvider {
           elapsedMs: Date.now() - started,
           ...selected.diagnostics?.[diagnosticCount],
         });
-        if (!fallbackErrors.has(code) || this.index + 1 >= this.choices.length)
+        if (
+          options.signal?.aborted ||
+          (options.deadlineAt ?? Infinity) <= Date.now() ||
+          !fallbackErrors.has(code) ||
+          this.index + 1 >= this.choices.length
+        )
           throw error;
         this.index++;
       }

@@ -22,11 +22,7 @@ describe('provider connection health', () => {
     });
     const [url, options] = request.mock.calls[0];
     const requestedUrl =
-      typeof url === 'string'
-        ? url
-        : url instanceof URL
-          ? url.href
-          : url.url;
+      typeof url === 'string' ? url : url instanceof URL ? url.href : url.url;
     expect(requestedUrl).toContain('/calendars/primary/events?');
     expect(requestedUrl).toContain('maxResults=1');
     expect(options?.method).toBeUndefined();
@@ -71,7 +67,7 @@ describe('provider connection health', () => {
     vi.stubEnv('GOOGLE_CLIENT_ID', 'client');
     vi.stubEnv('GOOGLE_CLIENT_SECRET', 'secret');
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-      Response.json({}, { status: 400 }),
+      Response.json({ error: 'invalid_grant' }, { status: 400 }),
     );
 
     await expect(googleAdsAccess('revoked-token')).rejects.toMatchObject({

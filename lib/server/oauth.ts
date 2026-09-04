@@ -68,6 +68,7 @@ export async function finishGoogle(request: Request) {
     user_id: string;
     verifier: string;
     provider: string;
+    generation: number;
   }>(db, 'consume_oauth_state', {
     p_state: await sha256(state),
     p_cookie: await sha256(nonce),
@@ -117,30 +118,18 @@ export async function finishGoogle(request: Request) {
   );
   requireValue(tokens.access_token, 'OAUTH_EXCHANGE_FAILED', 502);
   const calendar = await readPrimaryCalendar(tokens.access_token);
-  checked(
-    await db.from('integration_credentials').upsert(
-      {
-        workspace_id: stored.workspace_id,
-        connection_id: crypto.randomUUID(),
-        provider: 'google_calendar',
-        encrypted_refresh_token: await encrypt(
-          tokens.refresh_token,
-          stored.workspace_id,
-        ),
-        connected_by: stored.user_id,
-        external_id: 'primary',
-        display_name: calendar.summary,
-        credential_kind: 'calendar_refresh_v1',
-        status: 'connected',
-        verified_at: new Date().toISOString(),
-        last_error_code: null,
-        last_error_at: null,
-        scopes: [scope],
-        metadata: { timeZone: calendar.timeZone || null },
-      },
-      { onConflict: 'workspace_id,provider' },
-    ),
-  );
+  await rpc(db, 'complete_calendar_connection', {
+    p_workspace: stored.workspace_id,
+    p_user: stored.user_id,
+    p_generation: stored.generation,
+    p_connection: crypto.randomUUID(),
+    p_ciphertext: await encrypt(tokens.refresh_token, stored.workspace_id),
+    p_name: calendar.summary,
+    p_scopes: [scope],
+    p_metadata: { timeZone: calendar.timeZone || null },
+  });
+  const { invalidateCalendarTokenCache } = await import('./calendar');
+  invalidateCalendarTokenCache(stored.workspace_id);
   return new Response(null, {
     status: 303,
     headers: {

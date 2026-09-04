@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import type { ModelProvider, ModelUsage } from './ai';
+import { callSignal, type ModelCallOptions } from './chat-budget';
 import { env, required } from './config';
 import { modelSchema } from './model-schema';
 import { AppError, requireValue } from './errors';
@@ -111,7 +112,11 @@ export class ClaudeProvider implements ModelProvider {
   model = env('ANTHROPIC_MODEL') || 'claude-haiku-4-5-20251001';
   usage: ModelUsage[] = [];
   diagnostics: ModelDiagnostic[] = [];
-  async research(query: string, timeZone: string) {
+  async research(
+    query: string,
+    timeZone: string,
+    options: ModelCallOptions = {},
+  ) {
     const key = required('ANTHROPIC_API_KEY');
     const response = await modelFetch(
       'https://api.anthropic.com/v1/messages',
@@ -142,7 +147,7 @@ export class ClaudeProvider implements ModelProvider {
           ],
           tool_choice: { type: 'tool', name: 'web_search' },
         }),
-        signal: AbortSignal.timeout(modelTimeout()),
+        signal: callSignal(options, modelTimeout()),
       },
       this.diagnostics,
     );
@@ -224,9 +229,12 @@ export class ClaudeProvider implements ModelProvider {
     schema: z.ZodType<T>,
     instructions: string,
     input: unknown[],
+    options: ModelCallOptions = {},
   ): Promise<T> {
     const key = required('ANTHROPIC_API_KEY');
-    const maxTokens = Number(env('ANTHROPIC_MAX_OUTPUT_TOKENS') || 5000);
+    const maxTokens =
+      options.maxOutputTokens ??
+      Number(env('ANTHROPIC_MAX_OUTPUT_TOKENS') || 5000);
     requireValue(
       Number.isInteger(maxTokens) && maxTokens >= 256 && maxTokens <= 8000,
       'AI_LIMIT_CONFIG_INVALID',
@@ -253,7 +261,7 @@ export class ClaudeProvider implements ModelProvider {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify(payload),
-          signal: AbortSignal.timeout(modelTimeout()),
+          signal: callSignal(options, modelTimeout()),
         },
         this.diagnostics,
       );

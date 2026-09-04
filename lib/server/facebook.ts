@@ -4,6 +4,7 @@ import {
   markConnectionReconnectRequired,
   providerCredentials,
   recordConnectionVerification,
+  recordConnectionIssue,
 } from './connections';
 import { graphRead, appSecretProof } from './provider-http';
 import { graphVersion } from './provider-config';
@@ -22,37 +23,39 @@ export async function verifyFacebookConnection(
   workspaceId: string,
   connectionId: string,
 ) {
+  const connection = await providerCredentials(
+    workspaceId,
+    'facebook',
+    connectionId,
+    { allowReadOnlyRecheck: true },
+  );
   try {
-    const connection = await providerCredentials(
-      workspaceId,
-      'facebook',
-      connectionId,
+    const page = z.object({ id: z.string(), name: z.string().min(1) }).parse(
+      await graphRead(connection.resource.id, connection.token, {
+        fields: 'id,name',
+      }),
     );
-    const page = z
-      .object({ id: z.string(), name: z.string().min(1) })
-      .parse(
-        await graphRead(connection.resource.id, connection.token, {
-          fields: 'id,name',
-        }),
-      );
     requireValue(page.id === connection.resource.id, 'CONNECTION_CHANGED', 409);
-    await recordConnectionVerification(
-      workspaceId,
-      'facebook',
-      connectionId,
-      { displayName: page.name },
-    );
+    await recordConnectionVerification(workspaceId, 'facebook', connectionId, {
+      displayName: page.name,
+    });
     return page;
   } catch (error) {
     if (
       error instanceof AppError &&
-      ['FACEBOOK_ACCESS_FAILED', 'RECONNECT_REQUIRED'].includes(error.code)
+      [
+        'FACEBOOK_ACCESS_FAILED',
+        'FACEBOOK_PERMISSIONS_REQUIRED',
+        'RECONNECT_REQUIRED',
+      ].includes(error.code)
     ) {
       await markConnectionReconnectRequired(
         workspaceId,
         'facebook',
         connectionId,
-        'FACEBOOK_ACCESS_REVOKED',
+        error.code === 'FACEBOOK_PERMISSIONS_REQUIRED'
+          ? error.code
+          : 'FACEBOOK_ACCESS_REVOKED',
       );
       throw new AppError(
         'RECONNECT_REQUIRED',
@@ -60,6 +63,13 @@ export async function verifyFacebookConnection(
         'Reconnect Facebook to restore Page access.',
       );
     }
+    if (error instanceof AppError && error.code === 'FACEBOOK_CHECK_FAILED')
+      await recordConnectionIssue(
+        workspaceId,
+        'facebook',
+        connectionId,
+        error.code,
+      );
     throw error;
   }
 }
@@ -225,12 +235,19 @@ export async function publishFacebook(
       .object({ id: z.string() })
       .parse(await graphRead(p.pageId, connection.token, { fields: 'id' }));
   } catch (error) {
-    if (error instanceof AppError && error.code === 'FACEBOOK_ACCESS_FAILED') {
+    if (
+      error instanceof AppError &&
+      ['FACEBOOK_ACCESS_FAILED', 'FACEBOOK_PERMISSIONS_REQUIRED'].includes(
+        error.code,
+      )
+    ) {
       await markConnectionReconnectRequired(
         workspaceId,
         'facebook',
         connectionId,
-        'FACEBOOK_ACCESS_REVOKED',
+        error.code === 'FACEBOOK_PERMISSIONS_REQUIRED'
+          ? error.code
+          : 'FACEBOOK_ACCESS_REVOKED',
       );
       throw new AppError(
         'RECONNECT_REQUIRED',

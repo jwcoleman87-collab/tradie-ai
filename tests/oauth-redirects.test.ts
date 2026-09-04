@@ -114,6 +114,7 @@ describe('OAuth callback routes', () => {
       user_id: userId,
       verifier: 'verifier',
       provider: 'google_calendar',
+      generation: 7,
     });
     vi.spyOn(globalThis, 'fetch')
       .mockResolvedValueOnce(
@@ -139,13 +140,17 @@ describe('OAuth callback routes', () => {
     expect(response.headers.get('location')).toBe(
       `${origin}/workspace?calendar=connected`,
     );
-    expect(mocks.upsert).toHaveBeenCalledOnce();
-    expect(mocks.upsert.mock.calls[0][0]).toMatchObject({
-      display_name: 'greenvac@gmail.com',
-      verified_at: expect.any(String),
-      last_error_code: null,
-      metadata: { timeZone: 'Australia/Sydney' },
-    });
+    expect(mocks.rpc).toHaveBeenCalledWith(
+      expect.anything(),
+      'complete_calendar_connection',
+      expect.objectContaining({
+        p_workspace: workspaceId,
+        p_generation: 7,
+        p_name: 'greenvac@gmail.com',
+        p_metadata: { timeZone: 'Australia/Sydney' },
+      }),
+    );
+    expect(mocks.upsert).not.toHaveBeenCalled();
   });
 
   it.each(['facebook', 'google_ads'] as const)(
@@ -179,6 +184,7 @@ describe('OAuth callback routes', () => {
       user_id: userId,
       verifier: 'verifier',
       provider: 'google_ads',
+      generation: 9,
     });
     mocks.discoverAdsAccounts.mockResolvedValue({
       limited: false,
@@ -213,5 +219,8 @@ describe('OAuth callback routes', () => {
     expect(location.searchParams.get('status')).toBe('choose');
     expect(location.searchParams.get('candidate')).toMatch(/^[0-9a-f-]{36}$/);
     expect(mocks.insert).toHaveBeenCalledOnce();
+    expect(mocks.insert).toHaveBeenCalledWith(
+      expect.objectContaining({ generation: 9 }),
+    );
   });
 });
