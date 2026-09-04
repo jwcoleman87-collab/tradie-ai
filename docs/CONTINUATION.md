@@ -2,10 +2,13 @@
 
 > **Connector and Chat repair, 5 September 2026:** See
 > [CONNECTOR-CHAT-REPAIR.md](CONNECTOR-CHAT-REPAIR.md) for the repaired source,
-> lease/deadline policy, required migration, verification and pending rollout.
+> lease/deadline policy, applied migrations and production verification.
 > Current production address: `https://tradie-ai-efuf.vercel.app`. Both required
 > migrations are applied and the repaired build is live. Deployment/schema
-> checks passed; signed-in provider and Chat timing checks remain pending.
+> checks and both signed-in Chat tests passed (17s caption, 13s disconnected
+> Calendar, including reload recovery). The old private Sites app now redirects
+> to this app and its obsolete API is disabled. Live provider health checks remain
+> unverified because the selected workspace has no connected accounts.
 > Older deployment statements below are historical, not verification of this repair.
 
 > **Current next-build handover (2 September 2026):** Read
