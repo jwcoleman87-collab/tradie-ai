@@ -125,6 +125,7 @@ export const RouteOutput = z
     agents: z.array(Agent).min(1).max(5),
     reason: z.string().max(500),
     webSearch: z.boolean(),
+    calendarContext: z.boolean(),
     searchQuery: z.string().trim().min(3).max(300).nullable(),
   })
   .strict();
@@ -250,7 +251,9 @@ export type ActionStatus =
   | 'executing'
   | 'completed'
   | 'failed'
-  | 'expired';
+  | 'expired'
+  | 'superseded'
+  | 'cancelled';
 export type Action = {
   id: string;
   workspace_id: string;
@@ -264,6 +267,8 @@ export type Action = {
   expires_at: string;
   error_code: string | null;
   execution_result: Record<string, unknown> | null;
+  superseded_by?: string | null;
+  replaces_action_id?: string | null;
   created_at: string;
 };
 export type ChatMessage = {
@@ -338,6 +343,7 @@ export type Snapshot = {
   }[];
   runs: {
     id: string;
+    request_id?: string;
     agents: AgentName[];
     status: string;
     model: string | null;

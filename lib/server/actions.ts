@@ -4,6 +4,25 @@ import { AppError } from './errors';
 import { createCalendarEvent } from './calendar';
 import { publishFacebook } from './facebook';
 
+export async function replaceConnectionAction(
+  actionId: string,
+  userId: string,
+  connectionId: string,
+) {
+  return rpc<Action>(adminDb(), 'replace_connection_action', {
+    p_action: actionId,
+    p_user: userId,
+    p_connection: connectionId,
+  });
+}
+
+export async function cancelAction(actionId: string, userId: string) {
+  return rpc<Action>(adminDb(), 'cancel_action', {
+    p_action: actionId,
+    p_user: userId,
+  });
+}
+
 export async function executeAction(
   actionId: string,
   userId: string,

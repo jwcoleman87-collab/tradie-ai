@@ -64,15 +64,20 @@ export function ConnectionsPanel({
         connection.connectionId &&
         connection.status === 'connected' &&
         (!connection.verifiedAt ||
-          Date.now() - Date.parse(connection.verifiedAt) > 24 * 60 * 60 * 1000) &&
+          Date.now() - Date.parse(connection.verifiedAt) >
+            24 * 60 * 60 * 1000) &&
         !autoChecked.current.has(connection.connectionId),
     );
     if (!stale.length) return;
     stale.forEach((connection) =>
       autoChecked.current.add(connection.connectionId!),
     );
-    setChecking((current) =>
-      new Set([...current, ...stale.map((connection) => connection.provider)]),
+    setChecking(
+      (current) =>
+        new Set([
+          ...current,
+          ...stale.map((connection) => connection.provider),
+        ]),
     );
     void Promise.all(
       stale.map(async (connection) => {
@@ -88,11 +93,13 @@ export function ConnectionsPanel({
             },
           );
           return result.connection;
-        } catch {
+        } catch (cause) {
           setTemporaryErrors((current) => ({
             ...current,
             [connection.provider]:
-              'Could not check right now. Your saved connection was not removed.',
+              cause instanceof Error
+                ? cause.message
+                : 'Could not check right now. Your saved connection was not removed.',
           }));
           return null;
         }
@@ -139,12 +146,9 @@ export function ConnectionsPanel({
       connection.provider === 'google_calendar'
         ? 'google/start'
         : `integrations/${connection.provider}/start`;
-    const result = await requestApi<{ url: string }>(
-      token,
-      route,
-      'POST',
-      { workspaceId },
-    );
+    const result = await requestApi<{ url: string }>(token, route, 'POST', {
+      workspaceId,
+    });
     const target = new URL(result.url);
     const host =
       connection.provider === 'facebook'
@@ -250,27 +254,29 @@ export function ConnectionsPanel({
             c.configured &&
             c.status === 'connected' &&
             !!c.verifiedAt &&
+            !c.lastErrorCode &&
             !checkDelayed,
           needsCheck = c.status === 'connected' && !c.verifiedAt,
           needsReconnect = c.status === 'reconnect_required',
+          needsAttention = needsReconnect || !!c.lastErrorCode,
           stateLabel = !c.configured
             ? 'Setup needed'
             : isChecking
               ? 'Checking connection…'
-              : checkDelayed
-                ? 'Connection check delayed'
-                : isReady
-                ? 'Connected and ready'
-                : needsCheck
-                  ? 'Saved connection — check needed'
-                  : needsReconnect
-                    ? 'Needs attention'
-                    : 'Not connected';
+              : needsAttention
+                ? 'Needs attention'
+                : checkDelayed
+                  ? 'Connection check delayed'
+                  : isReady
+                    ? 'Connected and ready'
+                    : needsCheck
+                      ? 'Saved connection — check needed'
+                      : 'Not connected';
         return (
           <article
             key={c.provider}
             className={`action-card provider-connection provider-${
-              isReady ? 'ready' : needsReconnect ? 'attention' : 'idle'
+              isReady ? 'ready' : needsAttention ? 'attention' : 'idle'
             }`}
           >
             <div className="provider-connection-heading">
@@ -302,13 +308,18 @@ export function ConnectionsPanel({
                 {temporaryErrors[c.provider]}
               </output>
             )}
+            {c.lastErrorCode && (
+              <p className="auth-hint">{connectionRecovery(c.lastErrorCode)}</p>
+            )}
             <p>
               {c.provider === 'google_calendar'
                 ? 'Create bookings only after you approve the exact event details.'
                 : c.provider === 'facebook'
                   ? c.capabilities.includes('facebook.publish')
                     ? 'Ready to publish approved text, links or one photo to this Page.'
-                    : 'The Page is paired. Publishing will unlock after the operator completes Meta approval.'
+                    : !c.connectionId || needsAttention || needsCheck
+                      ? 'Verify Page access before publishing approved text, links or one photo.'
+                      : 'The Page is paired. Publishing will unlock after the operator completes Meta approval.'
                   : 'Read-only campaign reporting. Workbench cannot create ads, change budgets or spend money.'}
             </p>
             {!c.configured && (
@@ -326,15 +337,18 @@ export function ConnectionsPanel({
                   {needsReconnect ? 'Reconnect' : 'Connect'}
                 </Button>
               )}
-              {owner && c.connectionId && c.status === 'connected' && (
-                <Button
-                  size="sm"
-                  disabled={busy || isChecking}
-                  onClick={() => checkConnection(c)}
-                >
-                  {isChecking ? 'Checking…' : 'Check connection'}
-                </Button>
-              )}
+              {owner &&
+                c.connectionId &&
+                c.lastErrorCode !== 'FACEBOOK_PERMISSIONS_REQUIRED' &&
+                (c.status === 'connected' || needsReconnect) && (
+                  <Button
+                    size="sm"
+                    disabled={busy || isChecking}
+                    onClick={() => checkConnection(c)}
+                  >
+                    {isChecking ? 'Checking…' : 'Check connection'}
+                  </Button>
+                )}
               {owner && c.connectionId && (
                 <Button
                   size="sm"
@@ -357,13 +371,16 @@ export function ConnectionsPanel({
                   onClick={() =>
                     act(async () => {
                       setReport(null);
-                      setReport(
-                        await requestApi<AdsReport>(
-                          token,
-                          `integrations/google_ads/report?workspaceId=${workspaceId}`,
-                        ),
-                      );
-                      await load();
+                      try {
+                        setReport(
+                          await requestApi<AdsReport>(
+                            token,
+                            `integrations/google_ads/report?workspaceId=${workspaceId}`,
+                          ),
+                        );
+                      } finally {
+                        await load();
+                      }
                     })
                   }
                 >
@@ -510,6 +527,13 @@ function ResourcePicker({
           access before reconnecting.
         </p>
       )}
+      {candidate.incomplete && (
+        <output className="auth-hint block">
+          Some Google Ads accounts could not be checked. The available accounts
+          were returned successfully. If yours is missing, restore its account
+          or manager access in Google Ads, then connect again.
+        </output>
+      )}
       <Button
         size="sm"
         disabled={
@@ -532,6 +556,27 @@ function formatCost(micros: string, currency?: string) {
     }).format(n / 1000000);
   } catch {
     return `${n / 1000000} ${currency}`;
+  }
+}
+
+function connectionRecovery(code: string) {
+  switch (code) {
+    case 'GOOGLE_ADS_ACCOUNT_ACCESS_REQUIRED':
+      return 'Restore access to the selected account and its manager in Google Ads, then check again, or switch accounts.';
+    case 'GOOGLE_ADS_ACCOUNT_DISABLED':
+      return 'Complete account setup or reactivate this account in Google Ads, then check again.';
+    case 'GOOGLE_ADS_CONFIGURATION_REQUIRED':
+      return 'Ask the site operator to check Google Ads API access, the developer token and OAuth configuration, then check again.';
+    case 'GOOGLE_CALENDAR_CONFIGURATION_REQUIRED':
+      return 'Ask the site operator to check the Google Calendar OAuth configuration, then check again.';
+    case 'GOOGLE_ADS_CHECK_FAILED':
+    case 'GOOGLE_CALENDAR_CHECK_FAILED':
+    case 'FACEBOOK_CHECK_FAILED':
+      return 'Check the selected account access and application configuration, then check again. Your credentials are still saved.';
+    case 'FACEBOOK_PERMISSIONS_REQUIRED':
+      return 'Restore Page access and reconnect Facebook with the required Page permissions.';
+    default:
+      return 'Reconnect to restore authorization, or check the saved connection again after restoring access.';
   }
 }
 

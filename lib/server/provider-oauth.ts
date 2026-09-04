@@ -166,7 +166,15 @@ async function facebookCandidate(code: string): Promise<CandidateSecrets> {
     for (const resource of result.data)
       if (
         resource.access_token &&
-        resource.tasks.some((t) => ['CREATE_CONTENT', 'MANAGE'].includes(t))
+        resource.tasks.some((t) =>
+          [
+            'CREATE_CONTENT',
+            'MANAGE',
+            'PROFILE_PLUS_CREATE_CONTENT',
+            'PROFILE_PLUS_MANAGE',
+            'PROFILE_PLUS_FULL_CONTROL',
+          ].includes(t),
+        )
       )
         resources.push({
           id: resource.id,
@@ -201,6 +209,7 @@ export async function finishProvider(
     user_id: string;
     verifier: string;
     provider: string;
+    generation: number;
   }>(adminDb(), 'consume_oauth_state', {
     p_state: await sha256(state),
     p_cookie: await sha256(nonce),
@@ -272,6 +281,7 @@ export async function finishProvider(
         workspace_id: stored.workspace_id,
         user_id: stored.user_id,
         provider,
+        generation: stored.generation,
         ciphertext: await encrypt(
           JSON.stringify(secrets),
           credentialContext(stored.workspace_id, provider, id),
@@ -299,6 +309,7 @@ async function decodeCandidate(row: {
       resources: z.array(Choice),
       scopes: z.array(z.string()),
       limited: z.boolean(),
+      incomplete: z.boolean().default(false),
     })
     .parse(
       JSON.parse(
@@ -332,6 +343,7 @@ export async function pendingConnections(
         provider: row.provider,
         expiresAt: row.expires_at,
         limited: decoded.limited,
+        incomplete: decoded.incomplete,
         resources: decoded.resources.map(
           ({ token: _, ...resource }) => resource,
         ),

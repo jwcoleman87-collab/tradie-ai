@@ -10,6 +10,8 @@ import { env } from './config';
 import { AppError, requireValue } from './errors';
 import type { ModelDiagnostic } from '../ai-diagnostics';
 import type { WebResearch } from './web-research';
+import { callSignal, withinBudget, type ModelCallOptions } from './chat-budget';
+import { modelTimeout } from './model-http';
 export type ProviderAttempt = Partial<ModelDiagnostic> & {
   provider: AIProviderName;
   model: string;
@@ -26,6 +28,19 @@ const fallbackErrors = new Set([
   'AI_NETWORK_ERROR',
   'AI_RESEARCH_UNAVAILABLE',
 ]);
+
+function sharedDeadlineOptions(options: ModelCallOptions): ModelCallOptions {
+  const { deadlineAt, ...shared } = options;
+  if (deadlineAt !== undefined) {
+    // Convert the absolute deadline once. Recreating its timer for each adapter
+    // or retry can revive a timed-out stage when timer and wall-clock ticks differ.
+    // Downstream calls inherit this cancellation signal and add only their own
+    // per-attempt timeout; they must not recreate the absolute-deadline timer.
+    shared.signal = callSignal(options, Infinity);
+  }
+  return shared;
+}
+
 export class FallbackProvider implements ModelProvider {
   private index = 0;
   private completedCalls = 0;
@@ -62,9 +77,13 @@ export class FallbackProvider implements ModelProvider {
   }
   private record(attempt: ProviderAttempt) {
     this.attempts.push(attempt);
-    while (this.attempts.length > 3) this.attempts.shift();
   }
-  async research(query: string, timeZone: string): Promise<WebResearch> {
+  async research(
+    query: string,
+    timeZone: string,
+    options: ModelCallOptions = {},
+  ): Promise<WebResearch> {
+    const sharedOptions = sharedDeadlineOptions(options);
     while (true) {
       const selected = this.choices[this.index];
       const started = Date.now();
@@ -72,7 +91,11 @@ export class FallbackProvider implements ModelProvider {
       try {
         if (!selected.research)
           throw new AppError('AI_RESEARCH_UNAVAILABLE', 503);
-        const output = await selected.research(query, timeZone);
+        const signal = callSignal(sharedOptions, modelTimeout());
+        const output = await withinBudget(
+          selected.research(query, timeZone, { ...sharedOptions, signal }),
+          signal,
+        );
         this.record({
           provider: selected.name,
           model: selected.model,
@@ -93,7 +116,12 @@ export class FallbackProvider implements ModelProvider {
           elapsedMs: Date.now() - started,
           ...selected.diagnostics?.[diagnosticCount],
         });
-        if (!fallbackErrors.has(code) || this.index + 1 >= this.choices.length)
+        if (
+          sharedOptions.signal?.aborted ||
+          (options.deadlineAt ?? Infinity) <= Date.now() ||
+          !fallbackErrors.has(code) ||
+          this.index + 1 >= this.choices.length
+        )
           throw error;
         this.index++;
       }
@@ -103,14 +131,23 @@ export class FallbackProvider implements ModelProvider {
     schema: z.ZodType<T>,
     instructions: string,
     input: unknown[],
+    options: ModelCallOptions = {},
   ): Promise<T> {
+    const sharedOptions = sharedDeadlineOptions(options);
     while (true) {
       const selected = this.choices[this.index];
       const started = Date.now();
       const step = this.completedCalls === 0 ? 'routing' : 'response';
       const diagnosticCount = selected.diagnostics?.length || 0;
       try {
-        const output = await selected.structured(schema, instructions, input);
+        const signal = callSignal(sharedOptions, modelTimeout());
+        const output = await withinBudget(
+          selected.structured(schema, instructions, input, {
+            ...sharedOptions,
+            signal,
+          }),
+          signal,
+        );
         this.record({
           provider: selected.name,
           model: selected.model,
@@ -132,7 +169,12 @@ export class FallbackProvider implements ModelProvider {
           elapsedMs: Date.now() - started,
           ...selected.diagnostics?.[diagnosticCount],
         });
-        if (!fallbackErrors.has(code) || this.index + 1 >= this.choices.length)
+        if (
+          sharedOptions.signal?.aborted ||
+          (options.deadlineAt ?? Infinity) <= Date.now() ||
+          !fallbackErrors.has(code) ||
+          this.index + 1 >= this.choices.length
+        )
           throw error;
         this.index++;
       }

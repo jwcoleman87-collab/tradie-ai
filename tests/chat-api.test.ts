@@ -48,6 +48,15 @@ vi.mock('../lib/server/connections', async (importOriginal) => ({
 }));
 
 const runId = crypto.randomUUID();
+const userMessageId = crypto.randomUUID();
+const assistantMessage = {
+  id: crypto.randomUUID(),
+  role: 'assistant',
+  content: 'Saved reply',
+  run_id: runId,
+  created_at: '2026-09-05T00:00:00.000Z',
+  attachment_ids: [],
+};
 const input = {
   workspaceId: crypto.randomUUID(),
   conversationId: crypto.randomUUID(),
@@ -63,6 +72,7 @@ const writes: {
 }[] = [];
 let consent = true;
 let failTable = '';
+let failureUpdateWon = true;
 function query(table: string) {
   let operation = 'select';
   let data: Record<string, unknown> = {};
@@ -85,18 +95,28 @@ function query(table: string) {
       return { data: { status: 'active' }, error: null };
     if (table === 'integration_credentials') return { data: null, error: null };
     if (table === 'messages')
-      return { data: [{ role: 'user', content: input.text }], error: null };
+      return {
+        data: filters.some(
+          (filter) => JSON.stringify(filter) === '["role","assistant"]',
+        )
+          ? assistantMessage
+          : [{ role: 'user', content: input.text }],
+        error: null,
+      };
     if (table === 'agent_runs')
       return {
         data:
           operation === 'update'
-            ? [{ id: runId }]
+            ? failureUpdateWon
+              ? [{ id: runId }]
+              : []
             : { error_code: 'AI_TIMEOUT' },
         error: null,
       };
     return { data: [], error: null };
   };
   const chain = {
+    abortSignal: () => chain,
     select: () => chain,
     order: () => chain,
     limit: () => chain,
@@ -124,11 +144,15 @@ function query(table: string) {
   };
   return chain;
 }
-const send = () =>
+const send = (stream = false, signal?: AbortSignal) =>
   api(
     new Request('https://example.test/api/chat', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        ...(stream ? { Accept: 'application/x-ndjson' } : {}),
+      },
+      signal,
       body: JSON.stringify(input),
     }),
   );
@@ -136,12 +160,13 @@ beforeEach(() => {
   writes.length = 0;
   consent = true;
   failTable = '';
+  failureUpdateWon = true;
   mocks.from.mockReset().mockImplementation(query);
   mocks.rpc
     .mockReset()
     .mockImplementation(async (_db, name) =>
       name === 'begin_chat'
-        ? { id: runId, status: 'working', existing: false }
+        ? { id: runId, status: 'working', existing: false, userMessageId }
         : null,
     );
   mocks.runTeam.mockReset().mockResolvedValue({
@@ -155,6 +180,7 @@ beforeEach(() => {
     escalation: 'none',
   });
   vi.spyOn(console, 'error').mockImplementation(() => {});
+  vi.spyOn(console, 'info').mockImplementation(() => {});
 });
 afterEach(() => vi.restoreAllMocks());
 
@@ -165,12 +191,150 @@ it('returns a saved receipt only after the completed reply transaction', async (
     messageSaved: true,
     runId,
     status: 'completed',
+    assistantMessage,
   });
   expect(mocks.rpc.mock.calls.map((call) => call[1])).toEqual([
     'begin_chat',
     'complete_chat',
   ]);
   expect(writes).toEqual([]);
+});
+
+it('streams durable acceptance before generation and exposes the reply only after atomic persistence', async () => {
+  let finish!: (value: unknown) => void;
+  const pending = new Promise((resolve) => {
+    finish = resolve;
+  });
+  mocks.runTeam.mockReturnValue(pending);
+  const response = await send(true);
+  expect(response.headers.get('content-type')).toContain(
+    'application/x-ndjson',
+  );
+  const reader = response.body!.getReader();
+  const decoder = new TextDecoder();
+  const first = decoder.decode((await reader.read()).value);
+  expect(JSON.parse(first)).toMatchObject({
+    type: 'accepted',
+    messageSaved: true,
+    runId,
+    userMessageId,
+    requestId: input.requestId,
+    status: 'working',
+  });
+  expect(mocks.rpc.mock.calls.some((call) => call[1] === 'complete_chat')).toBe(
+    false,
+  );
+  finish({
+    reply: 'Saved reply',
+    agents: ['social'],
+    versions: [],
+    usage: [],
+    providerTrace: [],
+    proposals: [],
+    escalation: 'none',
+  });
+  let remaining = '';
+  while (true) {
+    const chunk = await reader.read();
+    if (chunk.done) break;
+    remaining += decoder.decode(chunk.value, { stream: true });
+  }
+  const events = remaining
+    .trim()
+    .split('\n')
+    .map((line) => JSON.parse(line));
+  expect(events.at(-1)).toMatchObject({
+    type: 'completed',
+    messageSaved: true,
+    assistantMessage,
+  });
+  expect(
+    mocks.rpc.mock.calls.filter((call) => call[1] === 'complete_chat'),
+  ).toHaveLength(1);
+});
+
+it('cancels work after a disconnected accepted request without persisting late proposals', async () => {
+  const cancellation = new AbortController();
+  let started!: () => void;
+  const running = new Promise<void>((resolve) => {
+    started = resolve;
+  });
+  mocks.runTeam.mockImplementation(() => {
+    started();
+    return new Promise(() => {});
+  });
+  const response = await send(true, cancellation.signal);
+  await running;
+  cancellation.abort();
+  const events = (await response.text())
+    .trim()
+    .split('\n')
+    .map((line) => JSON.parse(line));
+  expect(events[0].type).toBe('accepted');
+  expect(events.at(-1)).toMatchObject({
+    type: 'failed',
+    messageSaved: true,
+    error: { code: 'AI_TIMEOUT' },
+  });
+  expect(mocks.rpc.mock.calls.some((call) => call[1] === 'complete_chat')).toBe(
+    false,
+  );
+  expect(writes[0]).toMatchObject({
+    table: 'agent_runs',
+    data: { status: 'failed' },
+  });
+});
+
+it('reads a durable status receipt scoped to the authenticated actor and workspace', async () => {
+  mocks.rpc.mockResolvedValue({
+    id: runId,
+    status: 'completed',
+    userMessageId,
+    assistantMessage,
+  });
+  const response = await api(
+    new Request(
+      `https://example.test/api/chat/status?workspaceId=${input.workspaceId}&requestId=${input.requestId}`,
+    ),
+  );
+  expect(await response.json()).toMatchObject({
+    runId,
+    userMessageId,
+    messageSaved: true,
+    assistantMessage,
+    status: 'completed',
+  });
+  expect(mocks.rpc).toHaveBeenCalledWith(
+    expect.anything(),
+    'read_chat_receipt',
+    {
+      p_workspace: input.workspaceId,
+      p_user: 'test-user',
+      p_request: input.requestId,
+    },
+  );
+  expect(mocks.runTeam).not.toHaveBeenCalled();
+});
+
+it('reports the committed reply when completion wins despite a lost commit acknowledgement', async () => {
+  failureUpdateWon = false;
+  mocks.rpc.mockImplementation(async (_db, name) => {
+    if (name === 'begin_chat')
+      return { id: runId, existing: false, status: 'working', userMessageId };
+    if (name === 'complete_chat') throw new AppError('AI_TIMEOUT', 503);
+    return {
+      id: runId,
+      status: 'completed',
+      requestId: input.requestId,
+      userMessageId,
+      assistantMessage,
+    };
+  });
+  expect(await (await send()).json()).toMatchObject({
+    status: 'completed',
+    messageSaved: true,
+    assistantMessage,
+  });
 });
 it('records a failed outcome and safe diagnostics and still acknowledges the saved message', async () => {
   mocks.runTeam.mockRejectedValue(
@@ -237,11 +401,19 @@ it.each(['agent_runs', 'audit_logs'])(
     failTable = table;
     mocks.runTeam.mockRejectedValue(new AppError('AI_TIMEOUT', 503));
     const response = await send();
-    expect(await response.json()).toMatchObject({
-      messageSaved: true,
-      status: 'failed',
-      error: { code: 'AI_TIMEOUT' },
-    });
+    expect(await response.json()).toMatchObject(
+      table === 'agent_runs'
+        ? {
+            messageSaved: true,
+            status: 'working',
+            notice: expect.stringContaining('saved outcome'),
+          }
+        : {
+            messageSaved: true,
+            status: 'failed',
+            error: { code: 'AI_TIMEOUT' },
+          },
+    );
     expect(JSON.stringify(vi.mocked(console.error).mock.calls)).toContain(
       'chat_failure_persist_failed',
     );

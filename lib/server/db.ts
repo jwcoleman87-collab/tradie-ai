@@ -90,6 +90,8 @@ export async function rpc<T = unknown>(
       CONSENT_REQUIRED: 403,
       CONNECTION_CHANGED: 409,
       PUBLICATION_UNCERTAIN: 409,
+      OUTCOME_REVIEW_REQUIRED: 409,
+      CALENDAR_DATE_PASSED: 409,
       RETRY_LIMIT: 409,
       ACTIVE_WORK_REMAINS: 409,
       WORKSPACE_ARCHIVED: 409,
@@ -100,17 +102,21 @@ export async function rpc<T = unknown>(
       code ? statuses[code] || 400 : 503,
       code === 'PUBLICATION_UNCERTAIN'
         ? 'Facebook may already have published this post. Check the Page; automatic reposting is blocked.'
-        : code === 'ACTIVE_WORK_REMAINS'
-          ? 'Finish or deny work that still needs attention before archiving.'
-          : code === 'WORKSPACE_ARCHIVED'
-            ? 'Restore this workspace before adding new work.'
-            : code === 'CONVERSATION_ARCHIVED'
-              ? 'Restore this conversation before adding new messages.'
-              : code === 'RATE_LIMITED'
-                ? 'Please wait a minute before trying again.'
-                : code === 'BUSY'
-                  ? 'Your team is still working on the previous request.'
-                  : 'The change was not applied. Refresh the workspace and try again.',
+        : code === 'OUTCOME_REVIEW_REQUIRED'
+          ? 'Check the original calendar event outcome before preparing a replacement.'
+          : code === 'CALENDAR_DATE_PASSED'
+            ? 'The original booking time has passed. Ask Chat to prepare a new booking with a future date.'
+            : code === 'ACTIVE_WORK_REMAINS'
+              ? 'Finish or deny work that still needs attention before archiving.'
+              : code === 'WORKSPACE_ARCHIVED'
+                ? 'Restore this workspace before adding new work.'
+                : code === 'CONVERSATION_ARCHIVED'
+                  ? 'Restore this conversation before adding new messages.'
+                  : code === 'RATE_LIMITED'
+                    ? 'Please wait a minute before trying again.'
+                    : code === 'BUSY'
+                      ? 'Your team is still working on the previous request.'
+                      : 'The change was not applied. Refresh the workspace and try again.',
     );
   }
   return data as T;

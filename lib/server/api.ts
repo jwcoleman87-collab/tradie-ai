@@ -1,7 +1,13 @@
 import { z } from 'zod';
-import { Uuid, ChatInput, CaseInput, type Action } from '../contracts';
+import {
+  Uuid,
+  ChatInput,
+  CaseInput,
+  type Action,
+  type ChatMessage,
+} from '../contracts';
 import { adminDb, authenticate, checked, membership, rpc } from './db';
-import { body, endpoint, json } from './http';
+import { body, endpoint, json, noStore } from './http';
 import { publicConfig } from './config';
 import { AppError, requireValue } from './errors';
 import { runTeam } from './ai';
@@ -13,12 +19,24 @@ import { finishGoogle, startGoogle } from './oauth';
 import { readFileBody, safeFilename, validateFile } from './uploads';
 import { integrationApi } from './integration-api';
 import { finishProvider } from './provider-oauth';
-import { AdditionalProviderSchema, connectionList } from './connections';
+import {
+  AdditionalProviderSchema,
+  connectionList,
+  disconnectIntegration,
+} from './connections';
 import { aiProblem } from '../ai-diagnostics';
 import { onboardingApi } from './onboarding-api';
 import { preferredWorkspace } from '../workspace-selection';
+import {
+  CHAT_DEADLINE_MS,
+  CHAT_WORK_MS,
+  callSignal,
+  withinBudget,
+  mapConcurrent,
+} from './chat-budget';
 
 export const api = endpoint(async (request) => {
+  const requestStartedAt = Date.now();
   const url = new URL(request.url),
     path = url.pathname.replace(/^\/api\/?/, '').replace(/\/$/, ''),
     method = request.method;
@@ -38,6 +56,7 @@ export const api = endpoint(async (request) => {
       request,
     );
   const { db, user } = await authenticate(request);
+  const authenticationMs = Date.now() - requestStartedAt;
   const admin = adminDb();
   const onboardingResponse = await onboardingApi(request, path, db, user.id);
   if (onboardingResponse) return onboardingResponse;
@@ -167,7 +186,7 @@ export const api = endpoint(async (request) => {
         ? db
             .from('agent_runs')
             .select(
-              'id,agents,status,model,error_code,provider_trace,created_at,finished_at',
+              'id,request_id,agents,status,model,error_code,provider_trace,created_at,finished_at',
             )
             .eq('conversation_id', conversationId)
             .order('created_at', { ascending: false })
@@ -362,6 +381,35 @@ export const api = endpoint(async (request) => {
     });
     return json({ ok: true });
   }
+  if (path === 'chat/status' && method === 'GET') {
+    const workspaceId = Uuid.parse(url.searchParams.get('workspaceId'));
+    const requestId = Uuid.parse(url.searchParams.get('requestId'));
+    await membership(db, user.id, workspaceId);
+    const receipt = await rpc<
+      { id: string; status: string; errorCode?: string } & Record<
+        string,
+        unknown
+      >
+    >(admin, 'read_chat_receipt', {
+      p_workspace: workspaceId,
+      p_user: user.id,
+      p_request: requestId,
+    });
+    return json({
+      ...receipt,
+      runId: receipt.id,
+      requestId,
+      messageSaved: true,
+      ...(receipt.status === 'failed'
+        ? {
+            error: {
+              code: receipt.errorCode || 'AI_FAILED',
+              message: aiProblem(receipt.errorCode),
+            },
+          }
+        : {}),
+    });
+  }
   if (path === 'chat' && method === 'POST') {
     const input = ChatInput.parse(await body(request));
     await membership(db, user.id, input.workspaceId);
@@ -401,18 +449,22 @@ export const api = endpoint(async (request) => {
       'Choose your AI providers in Connections before sending a message.',
     );
     const provider = createAIProvider(preferences as AIPreferences);
-    const run = await rpc<{ id: string; status: string; existing: boolean }>(
-      admin,
-      'begin_chat',
-      {
-        p_workspace: input.workspaceId,
-        p_conversation: input.conversationId,
-        p_user: user.id,
-        p_request: input.requestId,
-        p_text: input.text,
-        p_files: input.attachmentIds,
-      },
-    );
+    const run = await rpc<{
+      id: string;
+      status: string;
+      existing: boolean;
+      userMessageId?: string;
+      leaseExpiresAt?: string;
+      assistantMessage?: ChatMessage;
+      errorCode?: string;
+    }>(admin, 'begin_chat', {
+      p_workspace: input.workspaceId,
+      p_conversation: input.conversationId,
+      p_user: user.id,
+      p_request: input.requestId,
+      p_text: input.text,
+      p_files: input.attachmentIds,
+    });
     if (run.existing) {
       const previous = checked(
         await db
@@ -425,8 +477,14 @@ export const api = endpoint(async (request) => {
       return json(
         {
           runId: run.id,
+          requestId: input.requestId,
+          userMessageId: run.userMessageId,
+          leaseExpiresAt: run.leaseExpiresAt,
           status: run.status,
           messageSaved: true,
+          ...(run.assistantMessage
+            ? { assistantMessage: run.assistantMessage }
+            : {}),
           ...(run.status === 'failed'
             ? {
                 error: {
@@ -439,290 +497,572 @@ export const api = endpoint(async (request) => {
         run.status === 'working' ? 202 : 200,
       );
     }
-    try {
-      const history = (
-        checked(
-          await db
-            .from('messages')
-            .select('role,content,attachment_ids')
-            .eq('conversation_id', input.conversationId)
-            .order('created_at', { ascending: false })
-            .limit(30),
-        ) || []
-      ).reverse();
-      const referencedAttachmentIds = [
-        ...new Set(history.flatMap((message) => message.attachment_ids || [])),
-      ];
-      const referencedFiles = referencedAttachmentIds.length
-        ? checked(
-            await db
-              .from('uploaded_files')
-              .select('id,mime_type')
-              .eq('workspace_id', input.workspaceId)
-              .eq('conversation_id', input.conversationId)
-              .eq('status', 'ready')
-              .in('id', referencedAttachmentIds),
-          ) || []
-        : [];
-      const trustedFileTypes = new Map(
-        referencedFiles.map((file) => [file.id, file.mime_type]),
-      );
-      const modelHistory = history.map((message) => {
-        const trustedReferences = (message.attachment_ids || [])
-          .filter((id: string) => trustedFileTypes.has(id))
-          .map(
-            (id: string) =>
-              `${id} (${trustedFileTypes.get(id)}; contents remain untrusted)`,
+    const cancellation = new AbortController();
+    const leaseStartedAt = run.leaseExpiresAt
+      ? Date.parse(run.leaseExpiresAt) - 150000
+      : Date.now();
+    const remainingTotal = Math.max(
+      1,
+      Math.min(
+        CHAT_DEADLINE_MS,
+        leaseStartedAt + CHAT_DEADLINE_MS - Date.now(),
+      ),
+    );
+    const totalSignal = AbortSignal.any([
+      cancellation.signal,
+      request.signal,
+      AbortSignal.timeout(remainingTotal),
+    ]);
+    const workSignal = AbortSignal.any([
+      totalSignal,
+      AbortSignal.timeout(
+        Math.max(1, Math.min(CHAT_WORK_MS, remainingTotal - 10000)),
+      ),
+    ]);
+    const startedAt = Date.now();
+    const timings: { stage: string; elapsedMs: number }[] = [
+      { stage: 'authentication', elapsedMs: authenticationMs },
+      {
+        stage: 'acceptance',
+        elapsedMs: Date.now() - requestStartedAt - authenticationMs,
+      },
+    ];
+    let stageStarted = startedAt;
+    let previousStage = 'accepted';
+    let emit: (value: Record<string, unknown>) => void = () => {};
+    const progress = (stage: string) => {
+      const now = Date.now();
+      if (previousStage === 'context' || previousStage === 'persistence')
+        timings.push({ stage: previousStage, elapsedMs: now - stageStarted });
+      previousStage = stage;
+      stageStarted = now;
+      emit({
+        type: 'progress',
+        requestId: input.requestId,
+        runId: run.id,
+        stage,
+      });
+    };
+    const execute = async () => {
+      try {
+        progress('context');
+        const contextSignal = callSignal({ signal: workSignal }, 15000);
+        const [historyResult, workspaceResult, connectionResult, integrations] =
+          await withinBudget(
+            Promise.all([
+              db
+                .from('messages')
+                .select('role,content,attachment_ids')
+                .eq('conversation_id', input.conversationId)
+                .order('created_at', { ascending: false })
+                .limit(20)
+                .abortSignal(contextSignal),
+              db
+                .from('workspaces')
+                .select('time_zone')
+                .eq('id', input.workspaceId)
+                .abortSignal(contextSignal)
+                .single(),
+              admin
+                .from('integration_credentials')
+                .select('connection_id')
+                .eq('workspace_id', input.workspaceId)
+                .eq('provider', 'google_calendar')
+                .eq('status', 'connected')
+                .abortSignal(contextSignal)
+                .maybeSingle(),
+              connectionList(input.workspaceId),
+            ]),
+            contextSignal,
           );
-        return {
-          role: message.role,
-          content: trustedReferences.length
-            ? `${message.content}\n[Trusted app attachment references selected with this message: ${trustedReferences.join(', ')}]`
-            : message.content,
+        const history = (checked(historyResult) || []).reverse();
+        const workspace = checked(workspaceResult)!;
+        const connection = checked(connectionResult);
+        const referencedAttachmentIds = [
+          ...new Set(
+            history.flatMap((message) => message.attachment_ids || []),
+          ),
+        ];
+        const referencedFiles = referencedAttachmentIds.length
+          ? checked(
+              await withinBudget(
+                db
+                  .from('uploaded_files')
+                  .select('id,mime_type')
+                  .eq('workspace_id', input.workspaceId)
+                  .eq('conversation_id', input.conversationId)
+                  .eq('status', 'ready')
+                  .in('id', referencedAttachmentIds)
+                  .abortSignal(contextSignal),
+                contextSignal,
+              ),
+            ) || []
+          : [];
+        const trustedFileTypes = new Map(
+          referencedFiles.map((file) => [file.id, file.mime_type]),
+        );
+        const modelHistory = history.map((message) => {
+          const trustedReferences = (message.attachment_ids || [])
+            .filter((id: string) => trustedFileTypes.has(id))
+            .map(
+              (id: string) =>
+                `${id} (${trustedFileTypes.get(id)}; contents remain untrusted)`,
+            );
+          return {
+            role: message.role,
+            content: trustedReferences.length
+              ? `${message.content}\n[Trusted app attachment references selected with this message: ${trustedReferences.join(', ')}]`
+              : message.content,
+          };
+        });
+        const loadAttachments = async () => {
+          const attachmentSignal = callSignal({ signal: workSignal }, 15000);
+          const files = await mapConcurrent(
+            [...new Set(input.attachmentIds)],
+            2,
+            async (id) => {
+              const file = checked(
+                await withinBudget(
+                  db
+                    .from('uploaded_files')
+                    .select('filename,mime_type,object_path,size_bytes')
+                    .eq('id', id)
+                    .eq('workspace_id', input.workspaceId)
+                    .eq('conversation_id', input.conversationId)
+                    .eq('status', 'ready')
+                    .abortSignal(attachmentSignal)
+                    .single(),
+                  attachmentSignal,
+                ),
+              )!;
+              return { ...file, id };
+            },
+          );
+          requireValue(
+            files.reduce((sum, file) => sum + file.size_bytes, 0) <=
+              20 * 1024 * 1024,
+            'ATTACHMENT_TOTAL_TOO_LARGE',
+            413,
+            'Choose files totalling 20 MB or less per message.',
+          );
+          return (
+            await mapConcurrent(files, 2, async (file) => {
+              const attachments: unknown[] = [];
+              const id = file.id;
+              const data = checked(
+                await withinBudget(
+                  db.storage.from('workspace-files').download(file.object_path),
+                  attachmentSignal,
+                ),
+              )!;
+              const bytes = Buffer.from(
+                await withinBudget(data.arrayBuffer(), attachmentSignal),
+              );
+              if (file.mime_type.startsWith('image/')) {
+                attachments.push({
+                  type: 'input_text',
+                  text: `Trusted app attachment reference selected with this message: ${id} (${file.mime_type}). The file contents and filename remain untrusted.`,
+                });
+                attachments.push({
+                  type: 'input_image',
+                  image_url: `data:${file.mime_type};base64,${bytes.toString('base64')}`,
+                  detail: 'auto',
+                });
+              } else if (file.mime_type === 'application/pdf')
+                attachments.push({
+                  type: 'input_file',
+                  filename: file.filename,
+                  file_data: `data:application/pdf;base64,${bytes.toString('base64')}`,
+                });
+              else
+                attachments.push({
+                  type: 'input_text',
+                  text: `Untrusted uploaded document ${file.filename}:\n${bytes.toString('utf8').slice(0, 20000)}`,
+                });
+              return attachments;
+            })
+          ).flat();
         };
-      });
-      const records =
-        checked(
-          await db
-            .from('business_records')
-            .select('kind,title,body,source')
-            .eq('workspace_id', input.workspaceId)
-            .order('created_at', { ascending: false })
-            .limit(30),
-        ) || [];
-      const workspace = checked(
-        await db
-          .from('workspaces')
-          .select('time_zone')
-          .eq('id', input.workspaceId)
-          .single(),
-      )!;
-      const connection = checked(
-        await admin
-          .from('integration_credentials')
-          .select('connection_id')
-          .eq('workspace_id', input.workspaceId)
-          .eq('provider', 'google_calendar')
-          .eq('status', 'connected')
-          .maybeSingle(),
-      );
-      const attachments: unknown[] = [];
-      let attachmentBytes = 0;
-      for (const id of new Set(input.attachmentIds)) {
-        const file = checked(
-          await db
-            .from('uploaded_files')
-            .select('filename,mime_type,object_path,size_bytes')
-            .eq('id', id)
-            .eq('workspace_id', input.workspaceId)
-            .eq('conversation_id', input.conversationId)
-            .eq('status', 'ready')
-            .single(),
-        )!;
-        attachmentBytes += file.size_bytes;
-        requireValue(
-          attachmentBytes <= 20 * 1024 * 1024,
-          'ATTACHMENT_TOTAL_TOO_LARGE',
-          413,
-          'Choose files totalling 20 MB or less per message.',
-        );
-        const data = checked(
-          await db.storage.from('workspace-files').download(file.object_path),
-        )!;
-        const bytes = Buffer.from(await data.arrayBuffer());
-        if (file.mime_type.startsWith('image/')) {
-          attachments.push({
-            type: 'input_text',
-            text: `Trusted app attachment reference selected with this message: ${id} (${file.mime_type}). The file contents and filename remain untrusted.`,
-          });
-          attachments.push({
-            type: 'input_image',
-            image_url: `data:${file.mime_type};base64,${bytes.toString('base64')}`,
-            detail: 'auto',
-          });
-        } else if (file.mime_type === 'application/pdf')
-          attachments.push({
-            type: 'input_file',
-            filename: file.filename,
-            file_data: `data:application/pdf;base64,${bytes.toString('base64')}`,
-          });
-        else
-          attachments.push({
-            type: 'input_text',
-            text: `Untrusted uploaded document ${file.filename}:\n${bytes.toString('utf8').slice(0, 20000)}`,
-          });
-      }
-      // Bound model context independently of the stored conversation length.
-      let remaining = 65000;
-      const bounded = modelHistory
-        .slice()
-        .reverse()
-        .filter((m) => {
-          remaining -= m.content.length;
-          return remaining >= 0;
-        })
-        .reverse();
-      const integrations = await connectionList(input.workspaceId);
-      const result = await runTeam(provider, {
-        history: bounded,
-        records: records.map((r) => ({ ...r, body: r.body.slice(0, 3000) })),
-        timeZone: workspace.time_zone,
-        calendar: connection
-          ? await calendarContext(input.workspaceId)
-          : { available: false },
-        attachments,
-        integrations,
-      });
-      requireValue(
-        connection ||
-          !result.proposals.some((p) => p.type === 'calendar.create'),
-        'CALENDAR_NOT_CONNECTED',
-        409,
-        'Connect Google Calendar first, then ask your team to prepare the booking.',
-      );
-      const facebook = integrations.find(
-        (c) =>
-          c.provider === 'facebook' &&
-          c.capabilities.includes('facebook.publish'),
-      );
-      requireValue(
-        !result.proposals.some(
-          (p) =>
-            p.type === 'facebook.publish' &&
-            (!facebook || p.payload.pageId !== facebook.externalId),
-        ),
-        'FACEBOOK_NOT_CONNECTED',
-        409,
-        'Connect and select a Facebook Page with publishing enabled first.',
-      );
-      for (const proposal of result.proposals) {
-        if (
-          proposal.type !== 'facebook.publish' ||
-          !proposal.payload.imageFileId
-        )
-          continue;
-        const image = checked(
-          await db
-            .from('uploaded_files')
-            .select('id')
-            .eq('id', proposal.payload.imageFileId)
-            .eq('workspace_id', input.workspaceId)
-            .eq('conversation_id', input.conversationId)
-            .eq('status', 'ready')
-            .in('mime_type', ['image/jpeg', 'image/png'])
-            .lte('size_bytes', 4 * 1024 * 1024)
-            .maybeSingle(),
+        // Bound model context independently of the stored conversation length.
+        let remaining = 65000;
+        const bounded = modelHistory
+          .slice()
+          .reverse()
+          .filter((m) => {
+            remaining -= m.content.length;
+            return remaining >= 0;
+          })
+          .reverse();
+        const result = await withinBudget(
+          runTeam(provider, {
+            history: bounded,
+            loadRecords: async (agents) => {
+              const kinds = {
+                finance: ['invoice', 'expense', 'customer', 'job', 'note'],
+                marketing: ['campaign', 'customer', 'job', 'note'],
+                social: ['social', 'campaign', 'note'],
+                maintenance: ['asset', 'maintenance', 'note'],
+                website: ['website', 'note'],
+              };
+              const records =
+                checked(
+                  await db
+                    .from('business_records')
+                    .select('kind,title,body,source')
+                    .eq('workspace_id', input.workspaceId)
+                    .eq('status', 'active')
+                    .in('kind', [
+                      ...new Set(agents.flatMap((agent) => kinds[agent])),
+                    ])
+                    .order('created_at', { ascending: false })
+                    .limit(15),
+                ) || [];
+              return records.map((record) => ({
+                ...record,
+                body: record.body.slice(0, 2000),
+              }));
+            },
+            timeZone: workspace.time_zone,
+            loadCalendar: connection
+              ? (signal) =>
+                  calendarContext(
+                    input.workspaceId,
+                    signal,
+                    connection.connection_id,
+                  )
+              : undefined,
+            loadAttachments,
+            signal: workSignal,
+            onStage: progress,
+            onTiming: (stage, elapsedMs) => timings.push({ stage, elapsedMs }),
+            integrations,
+          }),
+          workSignal,
         );
         requireValue(
-          image,
-          'FACEBOOK_IMAGE_INVALID',
+          connection ||
+            !result.proposals.some((p) => p.type === 'calendar.create'),
+          'CALENDAR_NOT_CONNECTED',
           409,
-          'Choose one ready JPEG or PNG image under 4 MB from this conversation.',
+          'Connect Google Calendar first, then ask your team to prepare the booking.',
         );
-      }
-      await rpc(admin, 'complete_chat', {
-        p_run: run.id,
-        p_reply: result.reply,
-        p_agents: result.agents,
-        p_versions: result.versions,
-        p_model: result.model,
-        p_usage: result.usage,
-        p_trace: result.providerTrace,
-        p_proposals: result.proposals.map((p) => ({
-          ...p,
-          connectionId:
-            p.type === 'calendar.create'
-              ? connection?.connection_id
-              : p.type === 'facebook.publish'
-                ? facebook?.connectionId
-                : null,
-        })),
-      });
-      let notice: string | undefined;
-      if (result.escalation !== 'none') {
-        // No AI-authored free text or transcript is included in escalation.
-        // The reply is already committed. A case failure must not relabel it failed.
+        const facebook = integrations.find(
+          (c) =>
+            c.provider === 'facebook' &&
+            c.capabilities.includes('facebook.publish'),
+        );
+        requireValue(
+          !result.proposals.some(
+            (p) =>
+              p.type === 'facebook.publish' &&
+              (!facebook || p.payload.pageId !== facebook.externalId),
+          ),
+          'FACEBOOK_NOT_CONNECTED',
+          409,
+          'Connect and select a Facebook Page with publishing enabled first.',
+        );
+        for (const proposal of result.proposals) {
+          if (
+            proposal.type !== 'facebook.publish' ||
+            !proposal.payload.imageFileId
+          )
+            continue;
+          const image = checked(
+            await withinBudget(
+              db
+                .from('uploaded_files')
+                .select('id')
+                .eq('id', proposal.payload.imageFileId)
+                .eq('workspace_id', input.workspaceId)
+                .eq('conversation_id', input.conversationId)
+                .eq('status', 'ready')
+                .in('mime_type', ['image/jpeg', 'image/png'])
+                .lte('size_bytes', 4 * 1024 * 1024)
+                .maybeSingle(),
+              workSignal,
+            ),
+          );
+          requireValue(
+            image,
+            'FACEBOOK_IMAGE_INVALID',
+            409,
+            'Choose one ready JPEG or PNG image under 4 MB from this conversation.',
+          );
+        }
+        if (workSignal.aborted) throw new AppError('AI_TIMEOUT', 503);
+        progress('persistence');
+        await withinBudget(
+          rpc(admin, 'complete_chat', {
+            p_run: run.id,
+            p_reply: result.reply,
+            p_agents: result.agents,
+            p_versions: result.versions,
+            p_model: result.model,
+            p_usage: result.usage,
+            p_trace: result.providerTrace,
+            p_proposals: result.proposals.map((p) => ({
+              ...p,
+              connectionId:
+                p.type === 'calendar.create'
+                  ? connection?.connection_id
+                  : p.type === 'facebook.publish'
+                    ? facebook?.connectionId
+                    : null,
+            })),
+          }),
+          totalSignal,
+        );
+        let assistantMessage;
         try {
-          checked(
-            await admin.from('escalation_cases').insert({
-              workspace_id: input.workspaceId,
-              conversation_id: input.conversationId,
-              agent: result.agents[0],
-              category: result.escalation,
-              problem:
-                'The Workbench crew needs clarification or a specialist review. Please review this conversation in your private workspace.',
-              created_by: user.id,
-            }),
+          assistantMessage = checked(
+            await withinBudget(
+              db
+                .from('messages')
+                .select('id,run_id,role,content,created_at,attachment_ids')
+                .eq('run_id', run.id)
+                .eq('role', 'assistant')
+                .abortSignal(totalSignal)
+                .maybeSingle(),
+              totalSignal,
+            ),
           );
         } catch {
-          notice =
-            'Your reply is saved, but the Ask James case could not be created. Open Ask James to request help.';
+          /* The committed reply can also be read by the status endpoint. */
+        }
+        let notice: string | undefined;
+        if (result.escalation !== 'none') {
+          // No AI-authored free text or transcript is included in escalation.
+          // The reply is already committed. A case failure must not relabel it failed.
+          try {
+            checked(
+              await withinBudget(
+                admin.from('escalation_cases').insert({
+                  workspace_id: input.workspaceId,
+                  conversation_id: input.conversationId,
+                  agent: result.agents[0],
+                  category: result.escalation,
+                  problem:
+                    'The Workbench crew needs clarification or a specialist review. Please review this conversation in your private workspace.',
+                  created_by: user.id,
+                }),
+                totalSignal,
+              ),
+            );
+          } catch {
+            notice =
+              'Your reply is saved, but the Ask James case could not be created. Open Ask James to request help.';
+            console.error(
+              JSON.stringify({
+                event: 'chat_escalation_failed',
+                runId: run.id,
+              }),
+            );
+          }
+        }
+        return json({
+          runId: run.id,
+          requestId: input.requestId,
+          userMessageId: run.userMessageId,
+          status: 'completed',
+          messageSaved: true,
+          agents: result.agents,
+          providerTrace: result.providerTrace,
+          ...(assistantMessage?.role === 'assistant'
+            ? { assistantMessage }
+            : {}),
+          ...(notice ? { notice } : {}),
+        });
+      } catch (error) {
+        const code = error instanceof AppError ? error.code : 'AI_FAILED';
+        const failureSignal = AbortSignal.timeout(
+          Math.max(
+            1,
+            Math.min(5000, startedAt + CHAT_DEADLINE_MS - Date.now()),
+          ),
+        );
+        let failurePersisted = false;
+        try {
+          const updated = await withinBudget(
+            admin
+              .from('agent_runs')
+              .update({
+                status: 'failed',
+                error_code: code,
+                usage: provider.usage,
+                provider_trace: provider.attempts,
+                finished_at: new Date().toISOString(),
+              })
+              .eq('id', run.id)
+              .eq('status', 'working')
+              .abortSignal(failureSignal)
+              .select('id'),
+            failureSignal,
+          );
+          checked(updated);
+          if (updated.data?.length) {
+            failurePersisted = true;
+            const auditResult = await withinBudget(
+              admin.from('audit_logs').insert({
+                workspace_id: input.workspaceId,
+                actor_id: user.id,
+                event: 'chat.failed',
+                entity_id: run.id,
+                metadata: {
+                  error_code: code,
+                  provider_trace: provider.attempts,
+                },
+              }),
+              failureSignal,
+            );
+            checked(auditResult);
+          } else {
+            // The atomic completion may have won a race against cancellation.
+            // Report that persisted outcome instead of relabelling it failed.
+            const receipt = await withinBudget(
+              rpc<
+                { id: string; status: string; errorCode?: string } & Record<
+                  string,
+                  unknown
+                >
+              >(admin, 'read_chat_receipt', {
+                p_workspace: input.workspaceId,
+                p_user: user.id,
+                p_request: input.requestId,
+              }),
+              failureSignal,
+            );
+            if (
+              receipt &&
+              ['completed', 'failed', 'working'].includes(receipt.status)
+            )
+              return json({
+                ...receipt,
+                runId: run.id,
+                messageSaved: true,
+                ...(receipt.status === 'failed'
+                  ? {
+                      error: {
+                        code: receipt.errorCode || 'AI_FAILED',
+                        message: aiProblem(receipt.errorCode),
+                      },
+                    }
+                  : {}),
+              });
+          }
+        } catch {
+          // Keep the saved-message receipt even if failure/audit persistence is down.
           console.error(
-            JSON.stringify({ event: 'chat_escalation_failed', runId: run.id }),
+            JSON.stringify({
+              event: 'chat_failure_persist_failed',
+              runId: run.id,
+            }),
           );
         }
-      }
-      return json({
-        runId: run.id,
-        status: 'completed',
-        messageSaved: true,
-        agents: result.agents,
-        providerTrace: result.providerTrace,
-        ...(notice ? { notice } : {}),
-      });
-    } catch (error) {
-      const code = error instanceof AppError ? error.code : 'AI_FAILED';
-      try {
-        const updated = await admin
-          .from('agent_runs')
-          .update({
-            status: 'failed',
-            error_code: code,
-            usage: provider.usage,
-            provider_trace: provider.attempts,
-            finished_at: new Date().toISOString(),
-          })
-          .eq('id', run.id)
-          .eq('status', 'working')
-          .select('id');
-        checked(updated);
-        if (updated.data?.length) {
-          const auditResult = await admin.from('audit_logs').insert({
-            workspace_id: input.workspaceId,
-            actor_id: user.id,
-            event: 'chat.failed',
-            entity_id: run.id,
-            metadata: { error_code: code, provider_trace: provider.attempts },
-          });
-          checked(auditResult);
-        }
-      } catch {
-        // Keep the saved-message receipt even if failure/audit persistence is down.
         console.error(
           JSON.stringify({
-            event: 'chat_failure_persist_failed',
+            event: failurePersisted ? 'chat.failed' : 'chat.outcome_pending',
             runId: run.id,
+            code,
+            providerTrace: provider.attempts,
+          }),
+        );
+        // A timed-out atomic commit can still have won on the database. Never
+        // publish a terminal failure until the durable failure is confirmed.
+        if (!failurePersisted)
+          return json(
+            {
+              runId: run.id,
+              requestId: input.requestId,
+              userMessageId: run.userMessageId,
+              messageSaved: true,
+              status: 'working',
+              notice:
+                'Your message is saved. Checking the final saved outcome automatically.',
+            },
+            202,
+          );
+        return json(
+          {
+            runId: run.id,
+            status: 'failed',
+            requestId: input.requestId,
+            userMessageId: run.userMessageId,
+            messageSaved: true,
+            error: { code, message: aiProblem(code) },
+          },
+          error instanceof AppError ? error.status : 500,
+        );
+      } finally {
+        cancellation.abort();
+        if (previousStage === 'context' || previousStage === 'persistence')
+          timings.push({
+            stage: previousStage,
+            elapsedMs: Date.now() - stageStarted,
+          });
+        console.info(
+          JSON.stringify({
+            event: 'chat.timing',
+            runId: run.id,
+            requestId: input.requestId,
+            acknowledgementMs: startedAt - requestStartedAt,
+            elapsedMs: Date.now() - startedAt,
+            stages: timings,
           }),
         );
       }
-      console.error(
-        JSON.stringify({
-          event: 'chat.failed',
+    };
+    if (!request.headers.get('accept')?.includes('application/x-ndjson'))
+      return execute();
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream<Uint8Array>({
+      async start(controller) {
+        let open = true;
+        emit = (event) => {
+          if (open) {
+            try {
+              controller.enqueue(encoder.encode(`${JSON.stringify(event)}\n`));
+            } catch {
+              open = false;
+            }
+          }
+        };
+        emit({
+          type: 'accepted',
           runId: run.id,
-          code,
-          providerTrace: provider.attempts,
-        }),
-      );
-      return json(
-        {
-          runId: run.id,
-          status: 'failed',
+          requestId: input.requestId,
+          userMessageId: run.userMessageId,
+          status: 'working',
           messageSaved: true,
-          error: { code, message: aiProblem(code) },
-        },
-        error instanceof AppError ? error.status : 500,
-      );
-    }
+          leaseExpiresAt: run.leaseExpiresAt,
+        });
+        try {
+          const response = await execute();
+          const receipt = (await response.json()) as { status: string };
+          emit({
+            ...receipt,
+            type: receipt.status === 'working' ? 'accepted' : receipt.status,
+          });
+        } finally {
+          if (open) {
+            try {
+              controller.close();
+            } catch {
+              /* client disconnected */
+            }
+          }
+        }
+      },
+      cancel() {
+        cancellation.abort();
+      },
+    });
+    return new Response(stream, {
+      headers: {
+        ...noStore,
+        'Content-Type': 'application/x-ndjson; charset=utf-8',
+        'X-Accel-Buffering': 'no',
+      },
+    });
   }
   const decisionMatch = path.match(/^actions\/([^/]+)\/decision$/);
   if (decisionMatch && method === 'POST') {
@@ -934,13 +1274,7 @@ export const api = endpoint(async (request) => {
       .strict()
       .parse(await body(request));
     await membership(db, user.id, input.workspaceId, true);
-    checked(
-      await admin
-        .from('integration_credentials')
-        .delete()
-        .eq('workspace_id', input.workspaceId)
-        .eq('provider', 'google_calendar'),
-    );
+    await disconnectIntegration(input.workspaceId, 'google_calendar', user.id);
     return json({ ok: true });
   }
   throw new AppError('NOT_FOUND', 404, 'This endpoint does not exist.');

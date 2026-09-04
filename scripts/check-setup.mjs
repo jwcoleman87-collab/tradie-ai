@@ -74,6 +74,11 @@ if (process.argv.includes('--remote') && result.supabaseConfigured) {
     providerPreferences:
       'workspaces?select=ai_primary_provider,ai_fallback_enabled,ai_allowed_providers&limit=0',
     runTrace: 'agent_runs?select=usage,provider_trace&limit=0',
+    chatLeases: 'agent_runs?select=lease_expires_at&limit=0',
+    connectionGenerations:
+      'integration_generations?select=workspace_id,provider,generation&limit=0',
+    actionReplacements:
+      'proposed_actions?select=replaces_action_id,superseded_by&limit=0',
     multiProviderCredentials:
       'integration_credentials?select=provider,credential_kind,external_id&limit=0',
     connectionHealth:
@@ -102,4 +107,5 @@ if (process.argv.includes('--remote') && result.supabaseConfigured) {
     process.exitCode = 1;
 }
 console.log(JSON.stringify(result, null, 2));
-if (!result.supabaseConfigured || !encryption || !appOrigin) process.exitCode = 1;
+if (!result.supabaseConfigured || !encryption || !appOrigin)
+  process.exitCode = 1;

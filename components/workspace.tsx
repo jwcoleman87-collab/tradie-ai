@@ -20,7 +20,10 @@ import { BrandMark, BrandMentions } from './brand';
 import { eligibleAIProviders, aiProviderLabel } from '@/lib/ai-settings';
 import { aiBrands } from '@/lib/brands';
 import { aiProblem } from '@/lib/ai-diagnostics';
-import { chatBlockedReason, submitChat } from '@/lib/chat-client';
+import { chatBlockedReason } from '@/lib/chat-client';
+import { useChatRun } from '@/lib/use-chat-run';
+import { bindWorkspaceViewport } from '@/lib/workspace-viewport';
+import type { ConnectionInfo } from '@/lib/integrations';
 import {
   Wallet,
   Megaphone,
@@ -140,6 +143,10 @@ const messageOf = (e: unknown) =>
 type AuthView = 'sign-in' | 'reset-request' | 'password-recovery';
 
 export default function Workspace() {
+  const shellRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    if (shellRef.current) return bindWorkspaceViewport(shellRef.current);
+  }, []);
   const {
     config,
     session,
@@ -149,6 +156,10 @@ export default function Workspace() {
     error: authError,
   } = useWorkbenchAuth();
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
+  const [connectionState, setConnectionState] = useState<{
+    workspaceId: string;
+    connections: ConnectionInfo[];
+  }>({ workspaceId: '', connections: [] });
   const [loading, setLoading] = useState(true),
     [busy, setBusy] = useState(false),
     [error, setError] = useState(''),
@@ -191,19 +202,7 @@ export default function Workspace() {
         ? 'This workspace is archived. Restore it to add new work.'
         : currentConversation?.status === 'archived'
           ? 'This conversation is archived. Restore it to add messages.'
-          : '',
-    blockedReason =
-      lifecycleBlockedReason ||
-      chatBlockedReason(
-        !!session,
-        snapshot?.workspace,
-        config?.aiProviders,
-        busy,
-      );
-  const canChat =
-    authView !== 'password-recovery' &&
-    !blockedReason &&
-    !!snapshot?.conversationId;
+          : '';
 
   useEffect(() => {
     clientRef.current = client;
@@ -284,6 +283,58 @@ export default function Workspace() {
     },
     [token],
   );
+  const chat = useChatRun(token, snapshot, (result) => {
+    if (result.status === 'failed')
+      setError(
+        `Your message is saved, but no reply was completed. ${aiProblem(result.error?.code)}${result.error?.code ? ` [${result.error.code}]` : ''}`,
+      );
+    else setNotice(result.notice || '');
+    void refresh().catch(() =>
+      setNotice(
+        'Your reply is saved. Other workspace panels could not refresh; reload to update them.',
+      ),
+    );
+  });
+  const blockedReason =
+    lifecycleBlockedReason ||
+    chatBlockedReason(
+      !!session,
+      snapshot?.workspace,
+      config?.aiProviders,
+      busy || chat.busy,
+    );
+  const canChat =
+    authView !== 'password-recovery' &&
+    !blockedReason &&
+    !!snapshot?.conversationId;
+  const canCompose =
+    canChat ||
+    (chat.accepted &&
+      authView !== 'password-recovery' &&
+      !lifecycleBlockedReason &&
+      !chatBlockedReason(
+        !!session,
+        snapshot?.workspace,
+        config?.aiProviders,
+        busy,
+      ));
+  useEffect(() => {
+    if (!token || !workspaceId) return;
+    const controller = new AbortController();
+    void requestApi<{ connections: ConnectionInfo[] }>(
+      token,
+      `integrations?${new URLSearchParams({ workspaceId })}`,
+      'GET',
+      undefined,
+      controller.signal,
+    )
+      .then((result) => {
+        if (!controller.signal.aborted)
+          setConnectionState({ workspaceId, connections: result.connections });
+      })
+      .catch(() => {});
+    return () => controller.abort();
+  }, [token, workspaceId, snapshot]);
   useEffect(() => {
     if (token) {
       setLoading(true);
@@ -312,7 +363,7 @@ export default function Workspace() {
       top: historyRef.current.scrollHeight,
       behavior: 'smooth',
     });
-  }, [snapshot?.messages.length, busy]);
+  }, [chat.messages.length, chat.stage]);
 
   async function perform(fn: () => Promise<void>) {
     setError('');
@@ -414,47 +465,26 @@ export default function Workspace() {
     ]);
     if (sendRequest.current?.key !== key)
       sendRequest.current = { key, id: crypto.randomUUID() };
+    setError('');
+    setNotice('');
     try {
-      await perform(async () => {
-        try {
-          const result = await submitChat(
-            token,
-            {
-              workspaceId,
-              conversationId: snapshot.conversationId,
-              requestId: sendRequest.current!.id,
-              text: text.trim(),
-              attachmentIds: selectedFiles,
-            },
-            () => {
-              setText('');
-              setSelectedFiles([]);
-              setFocusedAgent(null);
-              sendRequest.current = null;
-            },
-          );
-          if (result.status === 'failed') {
-            throw Error(
-              `Your message is saved, but no reply was completed. ${aiProblem(result.error?.code)}${result.error?.code ? ` [${result.error.code}]` : ''}`,
-            );
-          }
-          if (result.status === 'working') {
-            setNotice(
-              'The previous request is still running. Refresh in a moment.',
-            );
-            return;
-          }
-          setNotice(result.notice || '');
-        } finally {
-          try {
-            await refresh();
-          } catch {
-            setNotice(
-              'The conversation could not refresh. Your message receipt is unchanged; reload to see the latest history.',
-            );
-          }
-        }
-      });
+      await chat.send(
+        {
+          workspaceId,
+          conversationId: snapshot.conversationId,
+          requestId: sendRequest.current!.id,
+          text: text.trim(),
+          attachmentIds: selectedFiles,
+        },
+        () => {
+          setText('');
+          setSelectedFiles([]);
+          setFocusedAgent(null);
+          sendRequest.current = null;
+        },
+      );
+    } catch (e) {
+      setError(messageOf(e));
     } finally {
       sending.current = false;
     }
@@ -551,7 +581,9 @@ export default function Workspace() {
     recentAgents = snapshot?.runs[0]?.agents || [],
     actionHistory =
       snapshot?.actions.filter((action) =>
-        ['completed', 'denied', 'expired'].includes(action.status),
+        ['completed', 'denied', 'expired', 'superseded', 'cancelled'].includes(
+          action.status,
+        ),
       ) || [],
     activeRecords =
       snapshot?.records.filter((record) => record.status === 'active') || [],
@@ -572,7 +604,7 @@ export default function Workspace() {
     activeWorkspaceHeading =
       workspaceHeadings[view] || workspaceHeadings.actions;
   return (
-    <main className="app-shell">
+    <main className="app-shell" ref={shellRef}>
       <header className="topbar">
         <Link className="brand" href="/" aria-label="Workbench home">
           <Image
@@ -659,7 +691,7 @@ export default function Workspace() {
               <h1>G’day. What can I get done?</h1>
             </div>
             <span className="status-pill">
-              {busy
+              {chat.busy
                 ? 'Crew working…'
                 : focusedAgent
                   ? `${team.find((agent) => agent.id === focusedAgent)?.name} focus`
@@ -837,7 +869,7 @@ export default function Workspace() {
               </form>
             ) : (
               <>
-                {!snapshot?.messages.length && (
+                {!chat.messages.length && (
                   <>
                     <div className="welcome-mark">
                       <Image
@@ -1071,21 +1103,21 @@ export default function Workspace() {
                     ))}
                   </div>
                 )}
-                {(Boolean(snapshot?.messages.length) || busy) && (
+                {(Boolean(chat.messages.length) || chat.busy) && (
                   <div
                     className="message-thread"
                     role="log"
                     aria-label="Conversation messages"
                     aria-live="polite"
                   >
-                    {snapshot?.messages.map((m) => {
+                    {chat.messages.map((m) => {
                       const attachments = m.attachment_ids
                         .map((id) =>
-                          snapshot.uploads.find((file) => file.id === id),
+                          snapshot?.uploads.find((file) => file.id === id),
                         )
                         .filter((file): file is Upload => Boolean(file));
                       const answeringAgents = m.run_id
-                        ? snapshot.runs.find((run) => run.id === m.run_id)
+                        ? snapshot?.runs.find((run) => run.id === m.run_id)
                             ?.agents || []
                         : [];
                       const answerLabel = answeringAgents.length
@@ -1105,6 +1137,9 @@ export default function Workspace() {
                               hour: '2-digit',
                               minute: '2-digit',
                             })}
+                            {chat.pendingMessageIds.has(m.id)
+                              ? ' · Sending…'
+                              : ''}
                           </span>
                           <MessageCopy text={m.content} />
                           <BrandMentions text={m.content} />
@@ -1138,9 +1173,9 @@ export default function Workspace() {
                         </article>
                       );
                     })}
-                    {busy && (
+                    {chat.busy && (
                       <output className="pending-state block">
-                        Working on your request…
+                        {chat.stage}
                       </output>
                     )}
                   </div>
@@ -1152,11 +1187,11 @@ export default function Workspace() {
             <Textarea
               id="magic-message"
               aria-label="Message Chat"
-              placeholder={blockedReason || 'Message Chat…'}
+              placeholder={canCompose ? 'Message Chat…' : blockedReason}
               aria-describedby="composer-help"
               value={text}
               maxLength={12000}
-              disabled={!canChat}
+              disabled={!canCompose}
               onChange={(e) => setText(e.target.value)}
               onKeyDown={(e) => {
                 if (
@@ -1220,6 +1255,7 @@ export default function Workspace() {
             {blockedReason}
             {snapshot &&
               !busy &&
+              !chat.busy &&
               blockedReason &&
               (owner ? (
                 <Button
@@ -1438,6 +1474,68 @@ export default function Workspace() {
                       })
                     }
                     onReconnect={() => chooseView('connections')}
+                    connectionChanged={
+                      !!a.connection_id &&
+                      connectionState.workspaceId === workspaceId &&
+                      connectionState.connections.some(
+                        (connection) =>
+                          connection.provider ===
+                            (a.action_type === 'calendar.create'
+                              ? 'google_calendar'
+                              : 'facebook') &&
+                          connection.connectionId !== a.connection_id,
+                      )
+                    }
+                    onReplace={() =>
+                      perform(async () => {
+                        const result = await requestApi<{
+                          connections: ConnectionInfo[];
+                        }>(
+                          token,
+                          `integrations?${new URLSearchParams({ workspaceId })}`,
+                        );
+                        const connection = result.connections.find(
+                          (item) =>
+                            item.provider ===
+                            (a.action_type === 'calendar.create'
+                              ? 'google_calendar'
+                              : 'facebook'),
+                        );
+                        if (
+                          !connection?.connectionId ||
+                          connection.status !== 'connected' ||
+                          !connection.verifiedAt ||
+                          connection.lastErrorCode
+                        )
+                          throw Error(
+                            'Open Connections and check or reconnect this account before preparing a replacement.',
+                          );
+                        await requestApi<Action>(
+                          token,
+                          `actions/${a.id}/replace`,
+                          'POST',
+                          { connectionId: connection.connectionId },
+                        );
+                        setNotice(
+                          `Replacement prepared for ${connection.displayName || 'the verified connection'}. Review it and approve again before anything is sent.`,
+                        );
+                        await refresh();
+                      })
+                    }
+                    onCancel={() =>
+                      perform(async () => {
+                        await requestApi(
+                          token,
+                          `actions/${a.id}/cancel`,
+                          'POST',
+                          {},
+                        );
+                        setNotice(
+                          'Proposal closed. Its approval and history are retained. Existing external posts or bookings are unchanged.',
+                        );
+                        await refresh();
+                      })
+                    }
                   />
                 ))}
               </>
@@ -2069,6 +2167,9 @@ function ActionCard({
   onDecision,
   onRetry,
   onReconnect,
+  connectionChanged,
+  onReplace,
+  onCancel,
 }: {
   action: Action;
   token: string;
@@ -2077,6 +2178,9 @@ function ActionCard({
   onDecision: (d: 'accept' | 'deny') => void;
   onRetry: () => void;
   onReconnect: () => void;
+  connectionChanged: boolean;
+  onReplace: () => void;
+  onCancel: () => void;
 }) {
   const storageKey = `workbench:action-card:${a.id}:open`;
   const [open, setOpen] = useState(false);
@@ -2091,6 +2195,7 @@ function ActionCard({
 
   const calendar = a.action_type === 'calendar.create',
     facebook = a.action_type === 'facebook.publish',
+    obsolete = connectionChanged || a.error_code === 'CONNECTION_CHANGED',
     expired = Date.parse(a.expires_at) <= Date.now(),
     imageFileId =
       typeof a.payload.imageFileId === 'string' ? a.payload.imageFileId : null,
@@ -2226,7 +2331,7 @@ function ActionCard({
                 <X size={14} /> Deny
               </Button>
               <Button
-                disabled={disabled || expired}
+                disabled={disabled || expired || obsolete}
                 onClick={() => onDecision('accept')}
               >
                 <Check size={14} />{' '}
@@ -2244,13 +2349,34 @@ function ActionCard({
                 : 'Saved privately.'}
           </p>
         )}
-        {a.error_code && a.error_code !== 'PUBLISHING_DISABLED' && (
-          <output className="block">
-            {a.error_code === 'PUBLICATION_UNCERTAIN'
-              ? 'Facebook may already have published this post. Automatic retry is blocked. Check the Page and Ask James before creating a replacement.'
-              : `Action not completed (${a.error_code}). Check the connection before retrying.`}
-          </output>
+        {a.replaces_action_id && (
+          <p className="auth-hint">
+            This replacement uses the newly verified connection and requires
+            your fresh approval.
+          </p>
         )}
+        {obsolete &&
+          ['approved', 'failed', 'waiting_approval'].includes(a.status) && (
+            <div className="action-connection-error">
+              <p>
+                The connected account has changed. This proposal cannot use its
+                previous approval. Prepare a replacement for the current account
+                and review it again.
+              </p>
+              <Button variant="outline" disabled={disabled} onClick={onReplace}>
+                Prepare replacement for review
+              </Button>
+            </div>
+          )}
+        {a.error_code &&
+          a.error_code !== 'PUBLISHING_DISABLED' &&
+          !obsolete && (
+            <output className="block">
+              {a.error_code === 'PUBLICATION_UNCERTAIN'
+                ? 'Facebook may already have published this post. Automatic retry is blocked. Check the Page and Ask James before creating a replacement.'
+                : `Action not completed (${a.error_code}). Check the connection before retrying.`}
+            </output>
+          )}
         {a.error_code === 'PUBLISHING_DISABLED' && (
           <div className="action-connection-error">
             <p>
@@ -2264,6 +2390,7 @@ function ActionCard({
         )}
         {a.error_code !== 'PUBLICATION_UNCERTAIN' &&
           a.error_code !== 'PUBLISHING_DISABLED' &&
+          !obsolete &&
           ['approved', 'failed', 'executing'].includes(a.status) && (
             <Button variant="outline" disabled={disabled} onClick={onRetry}>
               {a.status === 'executing'
@@ -2271,6 +2398,11 @@ function ActionCard({
                 : 'Retry approved action'}
             </Button>
           )}
+        {['approved', 'failed'].includes(a.status) && (
+          <Button variant="ghost" disabled={disabled} onClick={onCancel}>
+            Close proposal
+          </Button>
+        )}
         {typeof a.execution_result?.url === 'string' &&
           /^https:\/\/(www\.google\.com\/calendar\/|calendar\.google\.com\/|www\.facebook\.com\/\d+_\d+$)/.test(
             a.execution_result.url,

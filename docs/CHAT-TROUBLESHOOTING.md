@@ -1,5 +1,12 @@
 # Chat failure diagnosis
 
+## September 5 connector and Chat repair
+
+See [the repair and rollout report](CONNECTOR-CHAT-REPAIR.md) for the current
+deadline, receipt, connection recovery and migration requirements. The sections
+below retain the history of the August repair; its live verification statements
+do not establish the September deployment status.
+
 ## August 31 hosted failure
 
 The reported `AI_UNAVAILABLE` was not evidence of exhausted credits. Both
@@ -29,8 +36,9 @@ did not establish hosted compatibility or future API balance.
    `chat_failure_persist_failed` with the run ID, and still return the saved
    message receipt. Failure row and audit insertion are separate requests; a
    crash between them can leave a missing audit entry. The run trace provides
-   another record. Worker termination can leave a working run until existing
-   stale-run recovery is invoked by a subsequent request.
+   another record. Status polling and replay now expire the same interrupted
+   request after its 150-second lease. An uncertain completion write remains
+   pollable until the database confirms the outcome.
 
 | Code | Meaning / next step |
 | --- | --- |
@@ -73,4 +81,5 @@ API tests mock services; PGlite tests execute real migrations; the Worker test
 exercises actual runtime request semantics. These complement one another but
 do not prove full authenticated hosted chat, approval, uploads or real Calendar
 execution. Do not delete customer conversations or Claude's audit messages as
-test cleanup. No additional database migration is required for this repair.
+test cleanup. The September repair requires
+`202609050009_chat_and_connection_lifecycle.sql` before the updated server is deployed.
