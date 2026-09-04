@@ -120,11 +120,20 @@ the actual Chat hook's acceptance, next-draft preservation, direct final reply,
 drop/status recovery and stale-run expiry. It is not an authenticated production
 end-to-end test.
 
-At preparation time the local checkout has no runtime credentials, Vercel and
-Supabase browser sessions require sign-in, and GitHub CLI authentication is
-invalid. The GitHub connector remains available. No migration, deployment or real
-provider action has been performed in this repair session. Production connection
-results and timing attribution remain unverified until the rollout above runs.
+The source is saved in [draft PR #3](https://github.com/jwcoleman87-collab/tradie-ai/pull/3).
+GitHub Linux CI passed, and the automatic Vercel preview deployment passed.
+GitHub and Vercel CLI authentication work outside the Windows sandbox. The
+existing Vercel project identity was verified and linked locally; its production
+configuration names were inspected without exposing secret values.
+
+Production rollout remains pending Supabase administration access: its CLI
+returns Unauthorized and its browser session requires sign-in. Automatic approval
+review rejected pulling production environment secrets into a local file, so that
+readiness check did not run and no secrets were downloaded. Use authenticated
+Supabase administration to verify backup/schema and apply the migration, then
+deploy the verified source through the existing Vercel session. No production
+migration, production deployment or real provider action has been performed.
+Production connection results and timing attribution remain unverified.
 
 Provider references: [Meta's maintained Pages task example](https://www.postman.com/meta/facebook/documentation/r56bjfd/facebook-api?entity=request-23987686-0b79260c-96bd-49de-875b-6076213785fc),
 [Google Ads common errors](https://developers.google.com/google-ads/api/docs/common-errors),
