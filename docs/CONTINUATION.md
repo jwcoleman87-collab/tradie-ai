@@ -1,5 +1,11 @@
 # Workbench — continuation checkpoint for Claude or another engineer
 
+> **CI deadline correction, 5 September 2026:** The later CI run exposed a retry
+> race at stage expiry. See [CI-DEADLINE-FIX.md](CI-DEADLINE-FIX.md). Shared deadline
+> cancellation now remains terminal across provider retries, with deterministic
+> regression coverage. Local validation: 286 tests, lint, typecheck and build pass.
+> The workflow's checkout/setup-node actions now use their Node.js 24 versions.
+
 > **Mobile composer repair, 5 September 2026:** See
 > [MOBILE-COMPOSER-FIX.md](MOBILE-COMPOSER-FIX.md). The Chat field now uses at least
 > 16px text and the shell follows the space above the mobile keyboard. Compact

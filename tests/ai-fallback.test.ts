@@ -171,31 +171,104 @@ describe('privacy-first provider selection', () => {
   });
 });
 describe('bounded availability fallback', () => {
-  it('propagates a shared stage deadline and does not start a backup after it expires', async () => {
-    const a = make('openai'),
-      b = make('anthropic');
-    a.structured.mockImplementation(
-      (_schema, _instructions, _input, options) =>
-        new Promise((_resolve, reject) => {
-          options.signal.addEventListener(
-            'abort',
-            () => reject(new AppError('AI_TIMEOUT', 503)),
-            { once: true },
-          );
-        }),
-    );
-    const provider = new FallbackProvider([a, b]);
-    await expect(
-      provider.structured(schema, '', [], { deadlineAt: Date.now() + 15 }),
-    ).rejects.toMatchObject({ code: 'AI_TIMEOUT' });
-    expect(b.structured).not.toHaveBeenCalled();
-    expect(provider.attempts).toHaveLength(1);
-    expect(provider.attempts[0]).toMatchObject({
-      status: 'failed',
-      step: 'routing',
-      errorCode: 'AI_TIMEOUT',
+  for (const method of ['structured', 'research'] as const) {
+    const makeResearch = (name: AIProviderName) => ({
+      ...make(name),
+      research: vi.fn().mockResolvedValue({
+        summary: 'current notes',
+        sources: [],
+        searchedAt: '2026-09-02T00:00:00.000Z',
+        provider: name,
+      }),
     });
-  });
+    it(`${method} cannot start a backup once the shared deadline signal aborts, even before the wall-clock boundary`, async () => {
+      const a = makeResearch('openai'),
+        b = makeResearch('anthropic');
+      const clock = vi.spyOn(Date, 'now').mockReturnValue(1000);
+      vi.stubEnv('AI_REQUEST_TIMEOUT_MS', '30000');
+      const timers: { milliseconds: number; controller: AbortController }[] =
+        [];
+      vi.spyOn(AbortSignal, 'timeout').mockImplementation((milliseconds) => {
+        const controller = new AbortController();
+        timers.push({ milliseconds, controller });
+        return controller.signal;
+      });
+      a[method].mockImplementation(() => new Promise(() => {}));
+      const provider = new FallbackProvider([a, b]);
+      const options = { deadlineAt: 1015 };
+      const pending =
+        method === 'structured'
+          ? provider.structured(schema, '', [], options)
+          : provider.research('public update', 'Australia/Sydney', options);
+      const assertion = expect(pending).rejects.toMatchObject({
+        code: 'AI_TIMEOUT',
+      });
+      const deadlineTimer = timers.find((timer) => timer.milliseconds === 15);
+      expect(deadlineTimer).toBeDefined();
+      const primarySignal: AbortSignal =
+        a[method].mock.calls[0][method === 'structured' ? 3 : 2].signal;
+      expect(primarySignal.aborted).toBe(false);
+      // Timer expiry is authoritative even when Date.now() still reads one
+      // millisecond before the deadline (or the system clock moves backwards).
+      clock.mockReturnValue(1014);
+      deadlineTimer!.controller.abort();
+      expect(primarySignal.aborted).toBe(true);
+      await assertion;
+      expect(a[method]).toHaveBeenCalledTimes(1);
+      expect(b[method]).not.toHaveBeenCalled();
+      expect(provider.attempts).toHaveLength(1);
+      expect(provider.attempts[0]).toMatchObject({
+        status: 'failed',
+        step: method === 'structured' ? 'routing' : 'research',
+        errorCode: 'AI_TIMEOUT',
+      });
+    });
+    it(`${method} can use the consented backup after a per-attempt timeout while shared budget remains`, async () => {
+      const a = makeResearch('openai'),
+        b = makeResearch('anthropic');
+      const clock = vi.spyOn(Date, 'now').mockReturnValue(1000);
+      vi.stubEnv('AI_REQUEST_TIMEOUT_MS', '1000');
+      const timers: { milliseconds: number; controller: AbortController }[] =
+        [];
+      vi.spyOn(AbortSignal, 'timeout').mockImplementation((milliseconds) => {
+        const controller = new AbortController();
+        timers.push({ milliseconds, controller });
+        return controller.signal;
+      });
+      a[method].mockImplementation(() => new Promise(() => {}));
+      const provider = new FallbackProvider([a, b]);
+      const options = { deadlineAt: 61_000 };
+      const pending =
+        method === 'structured'
+          ? provider.structured(schema, '', [], options)
+          : provider.research('public update', 'Australia/Sydney', options);
+      const attemptTimer = timers.find((timer) => timer.milliseconds === 1000);
+      expect(attemptTimer).toBeDefined();
+      clock.mockReturnValue(2000);
+      attemptTimer!.controller.abort();
+      await expect(pending).resolves.toMatchObject(
+        method === 'structured' ? { ok: true } : { provider: 'anthropic' },
+      );
+      expect(a[method]).toHaveBeenCalledTimes(1);
+      expect(b[method]).toHaveBeenCalledTimes(1);
+      expect(
+        a[method].mock.calls[0][method === 'structured' ? 3 : 2].signal.aborted,
+      ).toBe(true);
+      expect(
+        b[method].mock.calls[0][method === 'structured' ? 3 : 2].signal.aborted,
+      ).toBe(false);
+      expect(
+        provider.attempts.map((attempt) => ({
+          provider: attempt.provider,
+          status: attempt.status,
+          errorCode: attempt.errorCode,
+        })),
+      ).toEqual([
+        { provider: 'openai', status: 'failed', errorCode: 'AI_TIMEOUT' },
+        { provider: 'anthropic', status: 'completed', errorCode: undefined },
+      ]);
+    });
+  }
   it('does not send any request when the run has already been cancelled', async () => {
     const a = make('openai'),
       b = make('anthropic');

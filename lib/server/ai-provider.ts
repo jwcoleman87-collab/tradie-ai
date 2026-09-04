@@ -28,6 +28,19 @@ const fallbackErrors = new Set([
   'AI_NETWORK_ERROR',
   'AI_RESEARCH_UNAVAILABLE',
 ]);
+
+function sharedDeadlineOptions(options: ModelCallOptions): ModelCallOptions {
+  const { deadlineAt, ...shared } = options;
+  if (deadlineAt !== undefined) {
+    // Convert the absolute deadline once. Recreating its timer for each adapter
+    // or retry can revive a timed-out stage when timer and wall-clock ticks differ.
+    // Downstream calls inherit this cancellation signal and add only their own
+    // per-attempt timeout; they must not recreate the absolute-deadline timer.
+    shared.signal = callSignal(options, Infinity);
+  }
+  return shared;
+}
+
 export class FallbackProvider implements ModelProvider {
   private index = 0;
   private completedCalls = 0;
@@ -70,6 +83,7 @@ export class FallbackProvider implements ModelProvider {
     timeZone: string,
     options: ModelCallOptions = {},
   ): Promise<WebResearch> {
+    const sharedOptions = sharedDeadlineOptions(options);
     while (true) {
       const selected = this.choices[this.index];
       const started = Date.now();
@@ -77,9 +91,9 @@ export class FallbackProvider implements ModelProvider {
       try {
         if (!selected.research)
           throw new AppError('AI_RESEARCH_UNAVAILABLE', 503);
-        const signal = callSignal(options, modelTimeout());
+        const signal = callSignal(sharedOptions, modelTimeout());
         const output = await withinBudget(
-          selected.research(query, timeZone, { ...options, signal }),
+          selected.research(query, timeZone, { ...sharedOptions, signal }),
           signal,
         );
         this.record({
@@ -103,7 +117,7 @@ export class FallbackProvider implements ModelProvider {
           ...selected.diagnostics?.[diagnosticCount],
         });
         if (
-          options.signal?.aborted ||
+          sharedOptions.signal?.aborted ||
           (options.deadlineAt ?? Infinity) <= Date.now() ||
           !fallbackErrors.has(code) ||
           this.index + 1 >= this.choices.length
@@ -119,16 +133,17 @@ export class FallbackProvider implements ModelProvider {
     input: unknown[],
     options: ModelCallOptions = {},
   ): Promise<T> {
+    const sharedOptions = sharedDeadlineOptions(options);
     while (true) {
       const selected = this.choices[this.index];
       const started = Date.now();
       const step = this.completedCalls === 0 ? 'routing' : 'response';
       const diagnosticCount = selected.diagnostics?.length || 0;
       try {
-        const signal = callSignal(options, modelTimeout());
+        const signal = callSignal(sharedOptions, modelTimeout());
         const output = await withinBudget(
           selected.structured(schema, instructions, input, {
-            ...options,
+            ...sharedOptions,
             signal,
           }),
           signal,
@@ -155,7 +170,7 @@ export class FallbackProvider implements ModelProvider {
           ...selected.diagnostics?.[diagnosticCount],
         });
         if (
-          options.signal?.aborted ||
+          sharedOptions.signal?.aborted ||
           (options.deadlineAt ?? Infinity) <= Date.now() ||
           !fallbackErrors.has(code) ||
           this.index + 1 >= this.choices.length
