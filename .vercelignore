@@ -1,0 +1,4 @@
+# Local verification fixtures and generated reports are not application source.
+work/
+outputs/
+tmp/

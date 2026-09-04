@@ -38,5 +38,8 @@ fully visible and there is no horizontal page overflow. Four focus-transfer and
 touchscreen-tap checks kept the compact layout stable and triggered exactly one
 intercepted local form submission. Leaving the composer restored the headings;
 pinch zoom retained the last unzoomed shell height. No browser errors were seen.
+The 1440x900 desktop check also passed with all three panels and the composer
+inside the viewport, and without a mobile height override. Temporary verification
+fixtures and generated output are excluded from deployment and TypeScript input.
 
 Reference: [browser keyboard and viewport resize behavior](https://developer.chrome.com/blog/viewport-resize-behavior/).
