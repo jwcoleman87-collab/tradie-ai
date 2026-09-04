@@ -42,4 +42,11 @@ The 1440x900 desktop check also passed with all three panels and the composer
 inside the viewport, and without a mobile height override. Temporary verification
 fixtures and generated output are excluded from deployment and TypeScript input.
 
+The fix is live at https://tradie-ai-efuf.vercel.app, deployed from source
+`073f9e95b6f063b551f90bf8f8b317f5718a6425` as
+`dpl_1c9QLWXCVNrqTdgi1aWqr1hAnmJ8`. The production build passed and was promoted
+successfully. An authenticated reload of the deployed workspace verified the
+computed textarea size is 16px and the viewport metadata still permits manual
+zoom (`width=device-width, initial-scale=1`).
+
 Reference: [browser keyboard and viewport resize behavior](https://developer.chrome.com/blog/viewport-resize-behavior/).

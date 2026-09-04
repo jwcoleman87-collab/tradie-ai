@@ -194,10 +194,12 @@ are unchanged. Safe diagnostics identify token exhaustion without recording
 partial model output. See [OpenAI's reasoning guide](https://developers.openai.com/api/docs/guides/reasoning).
 
 The follow-up fix passed 277 tests, lint, typecheck and build, plus an independent
-review. Canonical production now resolves to **`dpl_5eFzwN4RQCV2LtM4hYMjSHoixNfS`**,
+review. At the routing repair's completion, production resolved to **`dpl_5eFzwN4RQCV2LtM4hYMjSHoixNfS`**,
 source **`a775cb6cceef548454d9f0a1c7049bea5efd67a5`**, at
 `https://tradie-quck3d8uv-jwcoleman87-collabs-projects.vercel.app`. The verified API
 runtime remains Node.js 24 in `iad1` with a 150-second timeout.
+The subsequent [mobile composer repair](MOBILE-COMPOSER-FIX.md) records the newer
+production deployment; these connector and Chat server protections remain intact.
 
 Both repeated live checks succeeded. The caption appeared directly and the
 Calendar reply correctly stated that Calendar was disconnected and availability
