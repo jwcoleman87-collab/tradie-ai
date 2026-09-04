@@ -22,6 +22,7 @@ import { aiBrands } from '@/lib/brands';
 import { aiProblem } from '@/lib/ai-diagnostics';
 import { chatBlockedReason } from '@/lib/chat-client';
 import { useChatRun } from '@/lib/use-chat-run';
+import { bindWorkspaceViewport } from '@/lib/workspace-viewport';
 import type { ConnectionInfo } from '@/lib/integrations';
 import {
   Wallet,
@@ -142,6 +143,10 @@ const messageOf = (e: unknown) =>
 type AuthView = 'sign-in' | 'reset-request' | 'password-recovery';
 
 export default function Workspace() {
+  const shellRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    if (shellRef.current) return bindWorkspaceViewport(shellRef.current);
+  }, []);
   const {
     config,
     session,
@@ -599,7 +604,7 @@ export default function Workspace() {
     activeWorkspaceHeading =
       workspaceHeadings[view] || workspaceHeadings.actions;
   return (
-    <main className="app-shell">
+    <main className="app-shell" ref={shellRef}>
       <header className="topbar">
         <Link className="brand" href="/" aria-label="Workbench home">
           <Image

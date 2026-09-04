@@ -1,5 +1,11 @@
 # Workbench — continuation checkpoint for Claude or another engineer
 
+> **Mobile composer repair, 5 September 2026:** See
+> [MOBILE-COMPOSER-FIX.md](MOBILE-COMPOSER-FIX.md). The Chat field now uses at least
+> 16px text and the shell follows the space above the mobile keyboard. Compact
+> typing layouts keep Send visible, including short landscape views; manual zoom
+> remains enabled. Validation: 283 tests and 28 browser layout cases passed.
+
 > **Connector and Chat repair, 5 September 2026:** See
 > [CONNECTOR-CHAT-REPAIR.md](CONNECTOR-CHAT-REPAIR.md) for the repaired source,
 > lease/deadline policy, applied migrations and production verification.
