@@ -99,9 +99,10 @@ export default function SignIn() {
       if (!client) throw Error('Workbench sign-in is not configured.');
       if (createAccount && password !== signupConfirmation)
         throw Error('The two passwords do not match.');
+      const accountEmail = email.trim();
       const result = createAccount
         ? await client.auth.signUp({
-            email,
+            email: accountEmail,
             password,
             options: {
               emailRedirectTo: new URL(
@@ -110,11 +111,19 @@ export default function SignIn() {
               ).toString(),
             },
           })
-        : await client.auth.signInWithPassword({ email, password });
+        : await client.auth.signInWithPassword({
+            email: accountEmail,
+            password,
+          });
       if (result.error) throw result.error;
       setPassword('');
       if (createAccount) {
         setSignupConfirmation('');
+        if (result.data.session) {
+          setRouting(true);
+          router.replace('/onboarding');
+          return;
+        }
         setNotice(
           'Check your email to confirm your account. The confirmation link will bring you back to Chat onboarding.',
         );
@@ -321,11 +330,21 @@ export default function SignIn() {
                 minLength={10}
                 autoComplete="new-password"
                 value={signupConfirmation}
+                aria-invalid={
+                  signupConfirmation.length > 0 &&
+                  password !== signupConfirmation
+                }
                 onChange={(change) =>
                   setSignupConfirmation(change.target.value)
                 }
                 required
               />
+              {signupConfirmation.length > 0 &&
+                password !== signupConfirmation && (
+                  <output className="auth-hint">
+                    Passwords do not match yet.
+                  </output>
+                )}
               <Button
                 className="auth-primary"
                 type="submit"

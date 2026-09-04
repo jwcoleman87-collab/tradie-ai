@@ -6,6 +6,8 @@ import {
 import type { ModelProvider } from '../lib/server/ai';
 import {
   extractIdentityFacts,
+  onboardingGoalProgress,
+  prepareOnboardingAnswer,
   runOnboardingMagic,
 } from '../lib/server/onboarding';
 
@@ -108,6 +110,114 @@ describe('continuous Magic onboarding', () => {
       expect.objectContaining({ fieldPath: 'display_name', value: 'GreenVac' }),
     ]);
     expect(result.identityChanged).toBe(false);
+  });
+
+  it('uses saved facts to choose an unanswered follow-up goal', async () => {
+    vi.stubEnv('WEB_SEARCH_ENABLED', 'false');
+    const structured = vi.fn().mockResolvedValue({
+      reply:
+        'Most enquiries arrive by phone and Facebook — got it. What admin task costs you the most time?',
+      facts: [
+        {
+          fieldPath: 'enquiry_channels',
+          value: ['Phone', 'Facebook'],
+          confidence: 'high',
+          factState: 'owner_supplied',
+        },
+      ],
+      goalsCovered: [],
+      nextGoal: 'identity_anchor',
+      reviewReady: false,
+      webSearch: false,
+      searchQuery: null,
+    });
+    const result = await runOnboardingMagic(
+      { model: 'test-model', structured } as ModelProvider,
+      {
+        messages: [
+          {
+            role: 'user',
+            content: 'Most enquiries arrive by phone and Facebook.',
+          },
+        ],
+        existingFacts: [
+          { field_path: 'display_name', value: 'Coastal Sparkies' },
+          { field_path: 'services', value: ['Electrical maintenance'] },
+          { field_path: 'preferred_job_types', value: ['Commercial work'] },
+        ],
+        timeZone: 'Australia/Sydney',
+      },
+    );
+
+    expect(structured.mock.calls[0][1]).toContain('PROFILE PROGRESS');
+    expect(result.goalsCovered).toEqual([
+      'identity_anchor',
+      'preferred_work',
+      'enquiry_admin',
+    ]);
+    expect(result.nextGoal).toBe('first_bottleneck');
+  });
+
+  it('keeps a submitted answer stable across retries', () => {
+    const requestId = crypto.randomUUID();
+    const createdAt = '2026-09-04T07:00:00.000Z';
+    const first = prepareOnboardingAnswer([], {
+      requestId,
+      answer: 'We are Coastal Sparkies and handle commercial maintenance.',
+      createdAt,
+    });
+    expect(first.isNew).toBe(true);
+    expect(first.messages.at(-1)).toEqual(
+      expect.objectContaining({
+        id: requestId,
+        role: 'user',
+        content:
+          'We are Coastal Sparkies and handle commercial maintenance.',
+      }),
+    );
+
+    const retry = prepareOnboardingAnswer(first.messages, {
+      requestId,
+      answer: 'We are Coastal Sparkies and handle commercial maintenance.',
+      createdAt,
+    });
+    expect(retry.isNew).toBe(false);
+    expect(retry.alreadyInterpreted).toBe(false);
+    expect(retry.messages).toHaveLength(first.messages.length);
+
+    const completed = prepareOnboardingAnswer(
+      [
+        ...first.messages,
+        {
+          id: crypto.randomUUID(),
+          role: 'assistant',
+          content: 'Commercial maintenance — understood.',
+          createdAt,
+        },
+      ],
+      {
+        requestId,
+        answer: 'We are Coastal Sparkies and handle commercial maintenance.',
+        createdAt,
+      },
+    );
+    expect(completed.alreadyInterpreted).toBe(true);
+  });
+
+  it('tracks profile progress from facts rather than a fixed question count', () => {
+    expect(
+      onboardingGoalProgress([
+        'display_name',
+        'services',
+        'preferred_job_types',
+      ]),
+    ).toEqual(
+      expect.objectContaining({
+        coveredGoals: ['identity_anchor', 'preferred_work'],
+        openGoals: ['enquiry_admin', 'first_bottleneck'],
+        suggestedNextGoal: 'enquiry_admin',
+      }),
+    );
   });
 
   it('overrides a stale business identity and recovers its matching website', async () => {
@@ -246,9 +356,17 @@ describe('continuous Magic onboarding', () => {
     expect(
       OnboardingTurnInput.safeParse({
         workspaceId: null,
+        requestId: crypto.randomUUID(),
         answer: 'x'.repeat(4001),
       }).success,
     ).toBe(false);
+    const legacyInput = OnboardingTurnInput.safeParse({
+      workspaceId: null,
+      answer: 'A valid answer from a cached client',
+    });
+    expect(legacyInput.success).toBe(true);
+    if (legacyInput.success)
+      expect(legacyInput.data.requestId).toHaveLength(36);
     expect(
       OnboardingCorrectionInput.safeParse({
         workspaceId: crypto.randomUUID(),

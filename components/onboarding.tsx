@@ -92,6 +92,9 @@ export default function Onboarding() {
   const [error, setError] = useState('');
   const [allowAI, setAllowAI] = useState(false);
   const [editingFacts, setEditingFacts] = useState<Set<string>>(new Set());
+  const [answerRequestId, setAnswerRequestId] = useState(() =>
+    crypto.randomUUID(),
+  );
   const chatRef = useRef<HTMLDivElement>(null);
 
   const load = useCallback(
@@ -201,6 +204,7 @@ export default function Onboarding() {
         'POST',
         {
           workspaceId: state?.workspaceId || null,
+          requestId: answerRequestId,
           answer: answer.trim(),
           allowAI: state?.aiConsentRequired ? allowAI : false,
         },
@@ -208,6 +212,7 @@ export default function Onboarding() {
       setState(next);
       setAnswer('');
       setAllowAI(false);
+      setAnswerRequestId(crypto.randomUUID());
     });
   }
 
@@ -404,7 +409,10 @@ export default function Onboarding() {
                 placeholder="Ask Chat anything or tell me about your business…"
                 value={answer}
                 maxLength={4000}
-                onChange={(change) => setAnswer(change.target.value)}
+                onChange={(change) => {
+                  setAnswer(change.target.value);
+                  setAnswerRequestId(crypto.randomUUID());
+                }}
                 disabled={busy}
               />
               {state.aiConsentRequired && (

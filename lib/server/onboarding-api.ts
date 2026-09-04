@@ -19,6 +19,7 @@ import { preferredWorkspace } from '../workspace-selection';
 import {
   factValueForProfile,
   firstOnboardingPrompt,
+  prepareOnboardingAnswer,
   provisionalBusinessName,
   runOnboardingMagic,
   type OnboardingGoalName,
@@ -276,32 +277,54 @@ export async function onboardingApi(
       );
       workspace.ai_consent_at = consentedAt;
     }
+    const sessionId = session?.id || crypto.randomUUID();
+    const now = new Date().toISOString();
+    const preparedAnswer = prepareOnboardingAnswer(session?.messages || [], {
+      requestId: input.requestId,
+      answer: input.answer,
+      createdAt: now,
+    });
+    if (preparedAnswer.alreadyInterpreted)
+      return json(await snapshot(db, userId, workspace.id));
     await rpc(admin, 'consume_rate', {
       p_workspace: workspace.id,
       p_user: userId,
       p_operation: 'onboarding',
       p_limit: 10,
     });
-    const sessionId = session?.id || crypto.randomUUID();
-    const now = new Date().toISOString();
-    const conversationBeforeReply: OnboardingMessage[] = [
-      ...(session?.messages?.length
-        ? session.messages
-        : [
-            {
-              id: crypto.randomUUID(),
-              role: 'assistant' as const,
-              content: firstOnboardingPrompt,
-              createdAt: now,
-            },
-          ]),
-      {
-        id: crypto.randomUUID(),
-        role: 'user',
-        content: input.answer,
-        createdAt: now,
-      },
-    ];
+    const conversationBeforeReply = preparedAnswer.messages;
+    const turnNumber = conversationBeforeReply.filter(
+      (message) => message.role === 'user',
+    ).length;
+    // Keep compatibility with projects that still have the original 0..5
+    // database constraint. Conversation history, not this legacy counter,
+    // drives Chat and continues beyond five turns.
+    const promptCount = Math.min(turnNumber, 5);
+    if (preparedAnswer.isNew)
+      checked(
+        await admin.from('onboarding_sessions').upsert(
+          {
+            id: sessionId,
+            user_id: userId,
+            workspace_id: workspace.id,
+            messages: conversationBeforeReply,
+            information_goals: session?.information_goals || [],
+            current_goal: session?.current_goal || 'identity_anchor',
+            unresolved_questions: [],
+            discovery_status:
+              session?.discovery_status ||
+              (env('WEB_SEARCH_ENABLED') === 'true'
+                ? 'ready'
+                : 'unavailable'),
+            prompt_count: promptCount,
+            status: profileWasConfirmed
+              ? 'completed'
+              : session?.status || 'in_progress',
+            updated_at: now,
+          },
+          { onConflict: 'workspace_id', ignoreDuplicates: false },
+        ),
+      );
     const provider = createAIProvider(workspace);
     const turn = await runOnboardingMagic(provider, {
       messages: conversationBeforeReply.map(({ role, content }) => ({
@@ -320,13 +343,6 @@ export async function onboardingApi(
         createdAt: now,
       },
     ];
-    const turnNumber = conversationBeforeReply.filter(
-      (message) => message.role === 'user',
-    ).length;
-    // Keep compatibility with projects that still have the original 0..5
-    // database constraint. Conversation history, not this legacy counter,
-    // drives Chat and continues beyond five turns.
-    const promptCount = Math.min(turnNumber, 5);
     const sourceReference = `owner://onboarding/${sessionId}/${turnNumber}`;
     const patch = profilePatch(turn.facts);
     const reviewReady = turn.identityChanged
@@ -401,7 +417,12 @@ export async function onboardingApi(
           user_id: userId,
           workspace_id: workspace.id,
           messages,
-          information_goals: turn.goalsCovered,
+          information_goals: [
+            ...new Set([
+              ...(session?.information_goals || []),
+              ...turn.goalsCovered,
+            ]),
+          ],
           current_goal: turn.nextGoal,
           unresolved_questions: [],
           discovery_status: discoveryStatus,

@@ -176,6 +176,7 @@ export const OnboardingFactValue = z.union([
 export const OnboardingTurnInput = z
   .object({
     workspaceId: Uuid.nullable().default(null),
+    requestId: Uuid.default(() => crypto.randomUUID()),
     answer: z.string().trim().min(2).max(4000),
     allowAI: z.boolean().default(false),
   })
