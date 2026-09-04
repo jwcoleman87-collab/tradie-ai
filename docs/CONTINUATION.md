@@ -3,6 +3,9 @@
 > **Connector and Chat repair, 5 September 2026:** See
 > [CONNECTOR-CHAT-REPAIR.md](CONNECTOR-CHAT-REPAIR.md) for the repaired source,
 > lease/deadline policy, required migration, verification and pending rollout.
+> Current production address: `https://tradie-ai-efuf.vercel.app`. The repair
+> build is staged; migration execution awaits explicit approval because the
+> Supabase Free project has no full backup. Do not promote before migration.
 > Older deployment statements below are historical, not verification of this repair.
 
 > **Current next-build handover (2 September 2026):** Read

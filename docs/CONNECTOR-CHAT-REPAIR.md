@@ -69,7 +69,9 @@ No prompts, files, customer content, tokens or raw provider errors are logged.
 ## Deployment sequence
 
 The current native application target is the existing Vercel project at
-`https://tradie-ai-nine.vercel.app`. `.openai/hosting.json` identifies the older
+`https://tradie-ai-efuf.vercel.app`. This current alias was verified on 5 September;
+the historical `tradie-ai-nine` alias returns `DEPLOYMENT_NOT_FOUND`.
+`.openai/hosting.json` identifies the older
 private Sites deployment; do not migrate hosting or publish that older build as
 part of this repair.
 
@@ -126,14 +128,42 @@ GitHub and Vercel CLI authentication work outside the Windows sandbox. The
 existing Vercel project identity was verified and linked locally; its production
 configuration names were inspected without exposing secret values.
 
-Production rollout remains pending Supabase administration access: its CLI
-returns Unauthorized and its browser session requires sign-in. Automatic approval
-review rejected pulling production environment secrets into a local file, so that
-readiness check did not run and no secrets were downloaded. Use authenticated
-Supabase administration to verify backup/schema and apply the migration, then
-deploy the verified source through the existing Vercel session. No production
-migration, production deployment or real provider action has been performed.
-Production connection results and timing attribution remain unverified.
+Authenticated Supabase administration was subsequently available in Chrome. The
+verified project is **Tradie Ai**, `gjrhukwqagaawdklnvxd`, in organization
+`fxmmlbekdpofrrkyvmqp`; the current Vercel public configuration points to this
+same project. Preflight found all expected baseline migrations except
+`202609020008_continuous_magic_onboarding.sql`: the live onboarding constraint
+still limits prompts to five. Both this missing migration and the new lifecycle
+migration must be applied. All five checked function definitions and server-only
+grants exactly matched the audited baseline. There were no working Chat runs or
+live OAuth states/candidates; aggregate counts were 90 messages, 22 proposals,
+three workspaces and two saved credentials.
+
+Supabase's Free plan provides no database backups. A reviewed transaction wrapper
+was tested against the missing-008 baseline: both success and forced failure
+behaved correctly, including rollback of both migrations and ledger entries. It
+also preserves the replaced function definitions/grants and constraints in a
+postgres-only schema, copying no customer content or credentials. This schema
+restore record is a rollback aid, not a disaster-recovery backup.
+
+The exact wrapper is staged in the authenticated SQL editor. **Automatic approval
+review blocked execution because no full backup exists; explicit owner approval
+is pending. Neither migration has been run.** The earlier attempt to pull all
+production environment values was also rejected before execution, and no secrets
+were downloaded. The remote setup CLI check was replaced by direct metadata,
+function-definition and permission checks through authenticated administration.
+
+Production build `dpl_121HmyhF156ALXmNo6GN5Gnz2NuB` is Ready at
+`https://tradie-o184xxnqt-jwcoleman87-collabs-projects.vercel.app`, staged with
+production configuration using `--skip-domain`. Its actual API function timeout
+is 150 seconds and Fluid Compute is enabled. The canonical `tradie-ai-efuf`
+alias still serves the original audited deployment
+`dpl_3ZTBqPgdnCjpKKw6SWcQom6gNKi7`; it has not been promoted. After approved
+migration execution and postflight checks, promote the exact staged deployment.
+The current Google OAuth client already lists both required `efuf` Calendar/Ads
+callbacks; no provider configuration was changed. Authenticated app sign-in and
+the owner's test workspace selection are pending. Production connection results
+and Chat timing attribution remain unverified; no real provider action was run.
 
 Provider references: [Meta's maintained Pages task example](https://www.postman.com/meta/facebook/documentation/r56bjfd/facebook-api?entity=request-23987686-0b79260c-96bd-49de-875b-6076213785fc),
 [Google Ads common errors](https://developers.google.com/google-ads/api/docs/common-errors),
