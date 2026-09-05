@@ -329,6 +329,49 @@
   margin-top: var(--s-3);
 }
 
+/* Brand mentions are borderless lockups, with each company's own colours. */
+.app-shell .brand-mentions .brand-mark[data-brand] {
+  gap: var(--s-2);
+  min-height: var(--h-sm);
+  padding: var(--s-1) var(--s-3);
+  border: 0;
+  border-radius: var(--r-sm);
+  background: var(--mention-fill, transparent);
+  color: var(--mention-ink, var(--workbench-ink));
+  box-shadow: none;
+  font-size: var(--fs-ui);
+  line-height: var(--lh-ui);
+}
+.app-shell .brand-mentions [data-brand='green_vac'] {
+  --mention-fill: #1b7045;
+  --mention-ink: #fff;
+}
+.app-shell .brand-mentions [data-brand='facebook'] {
+  --mention-fill: #0866ff;
+  --mention-ink: #fff;
+}
+.app-shell .brand-mentions .brand-mark .brand-logo-box {
+  width: var(--icon-md);
+  height: var(--icon-md);
+  min-width: var(--icon-md);
+  flex-basis: var(--icon-md);
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+/* The supplied GreenVac thumbnail contains its own frame. Use one clear name. */
+.app-shell .brand-mentions [data-brand='green_vac'] .brand-logo-box {
+  display: none;
+}
+/* Clip the JPEG's white canvas to the Facebook disk without recolouring it. */
+.app-shell .brand-mentions [data-brand='facebook'] .brand-logo-box {
+  border-radius: 50%;
+}
+.app-shell .brand-mentions [data-brand='facebook'] .brand-logo-box img {
+  transform: scale(1.26);
+}
+
 .app-shell .topbar-business {
   min-width: 0;
   padding-left: var(--s-5);
