@@ -84,9 +84,20 @@ function linkedText(text: string) {
 
 export function MessageCopy({ text }: { text: string }) {
   const research = parseResearchMessage(text);
+  const coverage = research.body.match(/^Data coverage: ([^\n]+)\n\n/);
+  const message = coverage
+    ? research.body.slice(coverage[0].length)
+    : research.body;
   return (
     <div className="message-copy">
-      <div className="message-body">{linkedText(research.body)}</div>
+      {coverage && (
+        <p className="data-coverage">
+          <strong>Partial data</strong>
+          <br />
+          {coverage[1]}
+        </p>
+      )}
+      <div className="message-body">{linkedText(message)}</div>
       {research.sources.length > 0 && (
         <details className="research-sources">
           <summary>

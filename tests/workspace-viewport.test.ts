@@ -4,12 +4,38 @@ import { bindWorkspaceViewport } from '../lib/workspace-viewport';
 afterEach(() => vi.unstubAllGlobals());
 
 function fixture({ mobile = true, viewportAvailable = true } = {}) {
-  const viewport = Object.assign(new EventTarget(), { height: 800, scale: 1 });
+  const viewport = Object.assign(new EventTarget(), {
+    height: 800,
+    offsetTop: 0,
+    scale: 1,
+  });
   const media = Object.assign(new EventTarget(), { matches: mobile });
   const browser = Object.assign(new EventTarget(), {
     visualViewport: viewportAvailable ? viewport : null,
     matchMedia: vi.fn(() => media),
+    innerHeight: 800,
+    requestAnimationFrame: vi.fn((callback: FrameRequestCallback) => {
+      frames.set(++frameId, callback);
+      return frameId;
+    }),
+    cancelAnimationFrame: vi.fn((id: number) => frames.delete(id)),
   });
+  let frameId = 0;
+  const frames = new Map<number, FrameRequestCallback>();
+  const flush = () => {
+    const pending = [...frames.values()];
+    frames.clear();
+    pending.forEach((callback) => callback(0));
+  };
+  // These tests model a browser rendering turn after each event dispatch.
+  for (const target of [viewport, media, browser]) {
+    const dispatch = target.dispatchEvent.bind(target);
+    target.dispatchEvent = (event: Event) => {
+      const result = dispatch(event);
+      flush();
+      return result;
+    };
+  }
   const properties = new Map<string, string>();
   const element = {
     style: {
@@ -24,6 +50,8 @@ function fixture({ mobile = true, viewportAvailable = true } = {}) {
     media,
     browser,
     height: () => properties.get('--workspace-viewport-height'),
+    top: () => properties.get('--workspace-viewport-top'),
+    bottomInset: () => properties.get('--workspace-bottom-inset'),
   };
 }
 
@@ -31,7 +59,7 @@ it('follows keyboard opening and closing on a mobile viewport', () => {
   const { element, viewport, browser, height } = fixture();
   const cleanup = bindWorkspaceViewport(element);
   expect(browser.matchMedia).toHaveBeenCalledWith(
-    '(max-width: 900px), (pointer: coarse)',
+    '(max-width: 1024px), (pointer: coarse)',
   );
   expect(height()).toBe('800px');
   viewport.height = 410;
@@ -108,11 +136,64 @@ it('removes every listener and the inline height when unmounted', () => {
   cleanup();
   expect(height()).toBeUndefined();
   expect(viewportRemove).toHaveBeenCalledWith('resize', expect.any(Function));
+  expect(viewportRemove).toHaveBeenCalledWith('scroll', expect.any(Function));
   expect(browserRemove).toHaveBeenCalledWith('resize', expect.any(Function));
+  expect(browserRemove).toHaveBeenCalledWith('pageshow', expect.any(Function));
   expect(mediaRemove).toHaveBeenCalledWith('change', expect.any(Function));
   viewport.height = 300;
   viewport.dispatchEvent(new Event('resize'));
   browser.dispatchEvent(new Event('resize'));
   media.dispatchEvent(new Event('change'));
+  expect(height()).toBeUndefined();
+});
+
+it('follows Safari panning independently of height and restores the safe area', () => {
+  const { element, viewport, height, top, bottomInset } = fixture();
+  const cleanup = bindWorkspaceViewport(element);
+  viewport.height = 410;
+  viewport.offsetTop = 90;
+  viewport.dispatchEvent(new Event('resize'));
+  expect(Number.parseFloat(top()!) + Number.parseFloat(height()!)).toBe(500);
+  expect(bottomInset()).toBe('0px');
+  viewport.offsetTop = 130;
+  viewport.dispatchEvent(new Event('scroll'));
+  expect(top()).toBe('130px');
+  viewport.height = 800;
+  viewport.offsetTop = 0;
+  viewport.dispatchEvent(new Event('resize'));
+  expect(height()).toBe('800px');
+  expect(top()).toBe('0px');
+  expect(bottomInset()).toBeUndefined();
+  cleanup();
+  expect(top()).toBeUndefined();
+});
+
+it('does not move the shell while pinch-zooming or accept invalid dimensions', () => {
+  const { element, viewport, height, top } = fixture();
+  const cleanup = bindWorkspaceViewport(element);
+  viewport.scale = 2;
+  viewport.offsetTop = 180;
+  viewport.dispatchEvent(new Event('scroll'));
+  expect(top()).toBe('0px');
+  viewport.scale = 1;
+  for (const invalid of [0, -1, NaN, Infinity]) {
+    viewport.height = invalid;
+    viewport.dispatchEvent(new Event('resize'));
+    expect(height()).toBe('800px');
+  }
+  cleanup();
+});
+
+it('coalesces resize/scroll into one frame and cancels pending work on unmount', () => {
+  const { element, viewport, browser, height } = fixture();
+  const cleanup = bindWorkspaceViewport(element);
+  viewport.height = 410;
+  // Dispatch without simulating a paint between events.
+  EventTarget.prototype.dispatchEvent.call(viewport, new Event('resize'));
+  EventTarget.prototype.dispatchEvent.call(viewport, new Event('scroll'));
+  expect(browser.requestAnimationFrame).toHaveBeenCalledOnce();
+  cleanup();
+  expect(browser.cancelAnimationFrame).toHaveBeenCalledWith(1);
+  browser.dispatchEvent(new Event('pageshow'));
   expect(height()).toBeUndefined();
 });

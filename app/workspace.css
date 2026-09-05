@@ -210,10 +210,10 @@
   color: #8a5ebf;
   margin: 5px 0 22px;
 }
-.message-history > h2 {
+.message-content > h2 {
   font-size: 27px;
 }
-.message-history > .muted {
+.message-content > .muted {
   font-size: 13px;
 }
 .starter-grid {

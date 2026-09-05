@@ -14,6 +14,8 @@ import { runTeam } from './ai';
 import { createAIProvider } from './ai-provider';
 import { AIConsentInput, type AIPreferences } from '../ai-settings';
 import { executeAction } from './actions';
+import { actionContext, loadActionData, publicAction } from './action-data';
+import { loadRecordContext } from './record-context';
 import { calendarContext } from './calendar';
 import { finishGoogle, startGoogle } from './oauth';
 import { readFileBody, safeFilename, validateFile } from './uploads';
@@ -35,7 +37,10 @@ import {
   mapConcurrent,
 } from './chat-budget';
 
-export const api = endpoint(async (request) => {
+async function handleApi(
+  request: Request,
+  keepAlive?: (work: Promise<unknown>) => void,
+) {
   const requestStartedAt = Date.now();
   const url = new URL(request.url),
     path = url.pathname.replace(/^\/api\/?/, '').replace(/\/$/, ''),
@@ -143,14 +148,7 @@ export const api = endpoint(async (request) => {
             .order('created_at', { ascending: false })
             .limit(200)
         : Promise.resolve({ data: [], error: null }),
-      db
-        .from('proposed_actions')
-        .select(
-          'id,workspace_id,conversation_id,agent,action_type,summary,payload,status,expires_at,error_code,execution_result,created_at',
-        )
-        .eq('workspace_id', workspaceId)
-        .order('created_at', { ascending: false })
-        .limit(100),
+      loadActionData(db, admin, workspaceId),
       conversationId
         ? db
             .from('uploaded_files')
@@ -213,7 +211,8 @@ export const api = endpoint(async (request) => {
       conversations,
       conversationId,
       messages: (checked(messages) || []).reverse(),
-      actions: checked(actions),
+      actions: actions.actions,
+      actionCoverage: actions.coverage,
       uploads: checked(uploads),
       cases: checked(cases),
       records: checked(records),
@@ -554,34 +553,56 @@ export const api = endpoint(async (request) => {
       try {
         progress('context');
         const contextSignal = callSignal({ signal: workSignal }, 15000);
-        const [historyResult, workspaceResult, connectionResult, integrations] =
-          await withinBudget(
-            Promise.all([
-              db
-                .from('messages')
-                .select('role,content,attachment_ids')
-                .eq('conversation_id', input.conversationId)
-                .order('created_at', { ascending: false })
-                .limit(20)
-                .abortSignal(contextSignal),
-              db
-                .from('workspaces')
-                .select('time_zone')
-                .eq('id', input.workspaceId)
-                .abortSignal(contextSignal)
-                .single(),
-              admin
-                .from('integration_credentials')
-                .select('connection_id')
-                .eq('workspace_id', input.workspaceId)
-                .eq('provider', 'google_calendar')
-                .eq('status', 'connected')
-                .abortSignal(contextSignal)
-                .maybeSingle(),
-              connectionList(input.workspaceId),
-            ]),
-            contextSignal,
-          );
+        const [
+          historyResult,
+          workspaceResult,
+          connectionResult,
+          integrations,
+          actionData,
+          profileResult,
+        ] = await withinBudget(
+          Promise.all([
+            db
+              .from('messages')
+              .select('role,content,attachment_ids')
+              .eq('conversation_id', input.conversationId)
+              .order('created_at', { ascending: false })
+              .limit(20)
+              .abortSignal(contextSignal),
+            db
+              .from('workspaces')
+              .select('time_zone')
+              .eq('id', input.workspaceId)
+              .abortSignal(contextSignal)
+              .single(),
+            admin
+              .from('integration_credentials')
+              .select('connection_id')
+              .eq('workspace_id', input.workspaceId)
+              .eq('provider', 'google_calendar')
+              .eq('status', 'connected')
+              .abortSignal(contextSignal)
+              .maybeSingle(),
+            connectionList(input.workspaceId),
+            loadActionData(
+              db,
+              admin,
+              input.workspaceId,
+              input.conversationId,
+              contextSignal,
+            ),
+            db
+              .from('business_profiles')
+              .select(
+                'display_name,website_url,base_location,service_areas,services,preferred_job_types,enquiry_channels,primary_goal,admin_bottleneck,brand_summary,confirmed_at',
+              )
+              .eq('workspace_id', input.workspaceId)
+              .eq('onboarding_status', 'confirmed')
+              .abortSignal(contextSignal)
+              .maybeSingle(),
+          ]),
+          contextSignal,
+        );
         const history = (checked(historyResult) || []).reverse();
         const workspace = checked(workspaceResult)!;
         const connection = checked(connectionResult);
@@ -703,32 +724,13 @@ export const api = endpoint(async (request) => {
         const result = await withinBudget(
           runTeam(provider, {
             history: bounded,
-            loadRecords: async (agents) => {
-              const kinds = {
-                finance: ['invoice', 'expense', 'customer', 'job', 'note'],
-                marketing: ['campaign', 'customer', 'job', 'note'],
-                social: ['social', 'campaign', 'note'],
-                maintenance: ['asset', 'maintenance', 'note'],
-                website: ['website', 'note'],
-              };
-              const records =
-                checked(
-                  await db
-                    .from('business_records')
-                    .select('kind,title,body,source')
-                    .eq('workspace_id', input.workspaceId)
-                    .eq('status', 'active')
-                    .in('kind', [
-                      ...new Set(agents.flatMap((agent) => kinds[agent])),
-                    ])
-                    .order('created_at', { ascending: false })
-                    .limit(15),
-                ) || [];
-              return records.map((record) => ({
-                ...record,
-                body: record.body.slice(0, 2000),
-              }));
+            actionHistory: {
+              actions: actionData.actions.map(actionContext),
+              coverage: actionData.coverage,
             },
+            businessProfile: checked(profileResult),
+            loadRecords: (agents) =>
+              loadRecordContext(db, input.workspaceId, agents, workSignal),
             timeZone: workspace.time_zone,
             loadCalendar: connection
               ? (signal) =>
@@ -1087,13 +1089,18 @@ export const api = endpoint(async (request) => {
     );
     requireValue(action, 'NOT_FOUND', 404);
     await membership(db, user.id, action.workspace_id, true);
-    return json(
-      await rpc<Action>(admin, 'decide_action', {
-        p_action: actionId,
-        p_user: user.id,
-        p_decision: input.decision,
-      }),
-    );
+    const decided = await rpc<Action>(admin, 'decide_action', {
+      p_action: actionId,
+      p_user: user.id,
+      p_decision: input.decision,
+    });
+    // Execution belongs to this server request. A second browser request
+    // is no longer needed to start the approved work.
+    // Only approved work starts here; replay must not retry a known failure.
+    if (decided.status !== 'approved') return json(publicAction(decided));
+    const execution = executeAction(actionId, user.id);
+    keepAlive?.(execution);
+    return json(await execution);
   }
   const executeMatch = path.match(/^actions\/([^/]+)\/execute$/);
   if (executeMatch && method === 'POST') {
@@ -1110,7 +1117,9 @@ export const api = endpoint(async (request) => {
     );
     requireValue(action, 'NOT_FOUND', 404);
     await membership(db, user.id, action.workspace_id, true);
-    return json(await executeAction(id, user.id));
+    const execution = executeAction(id, user.id);
+    keepAlive?.(execution);
+    return json(await execution);
   }
   if (path === 'uploads' && method === 'POST') {
     const workspaceId = Uuid.parse(url.searchParams.get('workspaceId')),
@@ -1285,4 +1294,8 @@ export const api = endpoint(async (request) => {
     return json({ ok: true });
   }
   throw new AppError('NOT_FOUND', 404, 'This endpoint does not exist.');
-});
+}
+export function createApi(keepAlive?: (work: Promise<unknown>) => void) {
+  return endpoint((request) => handleApi(request, keepAlive));
+}
+export const api = createApi();

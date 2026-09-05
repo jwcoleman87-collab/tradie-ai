@@ -15,6 +15,8 @@
     "test": "vitest run --config vitest.config.ts",
     "check": "npm run typecheck && npm test && npm run build",
     "test:live": "vitest run --config vitest.live.config.ts",
+    "eval:crew": "vitest run --config vitest.config.ts tests/crew-evals.test.ts",
+    "eval:crew:live": "vitest run --config vitest.live.config.ts tests/live/crew-evals.test.ts",
     "setup:check": "node scripts/check-setup.mjs"
   },
   "dependencies": {

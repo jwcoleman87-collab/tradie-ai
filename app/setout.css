@@ -1,14 +1,29 @@
-/* Workspace measurements. Keep this after the legacy and public stylesheets.
-   Brand colours and the mobile visual-viewport behavior remain in workbench.css. */
+/* One viewport owner, one conversation scroller. Public routes keep page scrolling. */
+html:has(.app-shell),
+body:has(.app-shell) {
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
 .app-shell {
   --gutter: var(--s-5);
   --topbar-height: calc(var(--h-lg) + var(--s-5));
   font-size: var(--fs-body);
   line-height: var(--lh-body);
+  position: fixed;
+  top: var(--workspace-viewport-top, 0px);
+  inset-inline: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: var(--workspace-viewport-height, 100dvh);
+  container: workspace / size;
 }
 
 .app-shell .topbar {
-  height: var(--topbar-height);
+  height: auto;
+  min-height: var(--topbar-height);
+  flex: 0 0 auto;
   gap: var(--s-5);
   padding-inline: var(--gutter);
   justify-content: flex-start;
@@ -28,7 +43,11 @@
 .app-shell .workspace-grid {
   display: grid;
   grid-template-columns: 240px minmax(0, 1fr) 360px;
-  height: calc(var(--workspace-viewport-height, 100dvh) - var(--topbar-height));
+  flex: 1;
+  min-height: 0;
+  height: auto;
+  width: 100%;
+  margin-block: 0;
 }
 .app-shell .mobile-tabs {
   display: none;
@@ -46,6 +65,7 @@
   min-width: 0;
 }
 .app-shell .panel-heading {
+  flex-shrink: 0;
   min-height: 0;
   flex-wrap: wrap;
   gap: var(--s-3);
@@ -89,6 +109,7 @@
   overflow-wrap: anywhere;
 }
 .app-shell .conversation-toolbar {
+  flex-shrink: 0;
   display: flex;
   flex-wrap: wrap;
   gap: var(--s-2);
@@ -105,6 +126,19 @@
 .app-shell .message-history {
   padding: var(--s-5) var(--gutter);
   scrollbar-gutter: auto;
+  scroll-behavior: auto;
+}
+.app-shell .conversation-panel {
+  overflow: hidden;
+}
+.app-shell .message-content {
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 auto;
+  min-height: 100%;
+}
+.app-shell .message-content > * {
+  flex-shrink: 0;
 }
 .app-shell .message-thread {
   width: 100%;
@@ -329,6 +363,49 @@
   margin-top: var(--s-3);
 }
 
+/* Brand mentions are borderless lockups, with each company's own colours. */
+.app-shell .brand-mentions .brand-mark[data-brand] {
+  gap: var(--s-2);
+  min-height: var(--h-sm);
+  padding: var(--s-1) var(--s-3);
+  border: 0;
+  border-radius: var(--r-sm);
+  background: var(--mention-fill, transparent);
+  color: var(--mention-ink, var(--workbench-ink));
+  box-shadow: none;
+  font-size: var(--fs-ui);
+  line-height: var(--lh-ui);
+}
+.app-shell .brand-mentions [data-brand='green_vac'] {
+  --mention-fill: #1b7045;
+  --mention-ink: #fff;
+}
+.app-shell .brand-mentions [data-brand='facebook'] {
+  --mention-fill: #0866ff;
+  --mention-ink: #fff;
+}
+.app-shell .brand-mentions .brand-mark .brand-logo-box {
+  width: var(--icon-md);
+  height: var(--icon-md);
+  min-width: var(--icon-md);
+  flex-basis: var(--icon-md);
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+/* The supplied GreenVac thumbnail contains its own frame. Use one clear name. */
+.app-shell .brand-mentions [data-brand='green_vac'] .brand-logo-box {
+  display: none;
+}
+/* Clip the JPEG's white canvas to the Facebook disk without recolouring it. */
+.app-shell .brand-mentions [data-brand='facebook'] .brand-logo-box {
+  border-radius: 50%;
+}
+.app-shell .brand-mentions [data-brand='facebook'] .brand-logo-box img {
+  transform: scale(1.26);
+}
+
 .app-shell .topbar-business {
   min-width: 0;
   padding-left: var(--s-5);
@@ -506,6 +583,219 @@
   border-radius: var(--r-sm);
   font-size: var(--fs-ui);
   line-height: var(--lh-ui);
+}
+/* Proposal content reads like a finished draft, with supporting detail below. */
+.app-shell .action-card[data-action-kind='draft.save'] {
+  border-top: 3px solid var(--workbench-yellow);
+}
+.app-shell .action-details[data-record-preview='true'] {
+  padding: 0;
+  margin: 0;
+  background: transparent;
+  white-space: normal;
+}
+.app-shell .record-preview {
+  min-width: 0;
+  color: var(--workbench-ink);
+}
+.app-shell .record-preview-heading {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  padding: var(--s-3);
+  margin-bottom: var(--s-4);
+  border-radius: var(--r-sm);
+  background: #f0f5f8;
+}
+.app-shell .record-preview-icon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 36px;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--r-sm);
+  color: white;
+  background: var(--workbench-navy);
+}
+.app-shell .record-preview[data-kind='social'] .record-preview-icon {
+  background: #0866ff;
+}
+.app-shell .record-preview-identity {
+  flex: 1;
+  min-width: 0;
+}
+.app-shell .record-preview-identity > span {
+  display: block;
+  margin-bottom: 2px;
+  color: var(--workbench-steel);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+}
+.app-shell .record-preview-identity strong {
+  display: block;
+  font-size: var(--fs-ui);
+  line-height: var(--lh-ui);
+  overflow-wrap: anywhere;
+}
+.app-shell .record-preview-private {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  color: var(--workbench-steel);
+  font-size: var(--fs-caption);
+}
+.app-shell .record-preview-title {
+  margin: 0 0 var(--s-3);
+  font-size: var(--fs-subhead);
+  line-height: var(--lh-subhead);
+  font-weight: 750;
+  overflow-wrap: anywhere;
+}
+.app-shell .record-preview-copy p {
+  margin: 0 0 var(--s-4);
+  color: var(--workbench-ink);
+  font-size: var(--fs-body);
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+.app-shell .record-preview-image {
+  margin: var(--s-4) 0;
+}
+.app-shell .record-preview-image .private-image-trigger {
+  padding: 0;
+  border: 0;
+  box-shadow: none;
+  border-radius: var(--r-sm);
+}
+.app-shell .record-preview-image .private-image-trigger img {
+  width: 100%;
+  height: auto;
+  max-height: 320px;
+  object-fit: contain;
+}
+.app-shell .record-preview-image figcaption {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  margin-top: var(--s-2);
+  color: var(--workbench-steel);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+}
+.app-shell .record-preview-image figcaption span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.app-shell .record-preview-attachment {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s-2);
+  padding: var(--s-3);
+  margin-bottom: var(--s-4);
+  background: var(--workbench-paper);
+  border-radius: var(--r-sm);
+  font-size: var(--fs-ui);
+  line-height: var(--lh-ui);
+}
+.app-shell .record-preview-attachment svg {
+  flex-shrink: 0;
+}
+.app-shell .record-preview-attachment small {
+  display: block;
+  margin-top: var(--s-1);
+  color: var(--workbench-steel);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+}
+.app-shell .record-preview-notes {
+  border-block: 1px solid var(--workbench-line);
+  margin-top: var(--s-4);
+}
+.app-shell .record-preview-notes > summary {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  padding-block: var(--s-3);
+  min-height: var(--h-lg);
+  list-style: none;
+  cursor: pointer;
+  font-size: var(--fs-ui);
+  line-height: var(--lh-ui);
+  font-weight: 650;
+}
+.app-shell .record-preview-notes > summary::-webkit-details-marker {
+  display: none;
+}
+.app-shell .record-preview-notes > summary span {
+  flex: 1;
+}
+.app-shell .record-preview-notes[open] > summary > svg:last-child {
+  transform: rotate(180deg);
+}
+.app-shell .record-preview-notes p,
+.app-shell .record-preview-notes li {
+  font-size: var(--fs-ui);
+  line-height: 1.5;
+  color: var(--workbench-ink);
+  white-space: pre-wrap;
+}
+.app-shell .record-preview-notes p {
+  margin: 0 0 var(--s-3);
+}
+.app-shell .record-preview-notes ul {
+  list-style: disc;
+  padding-left: var(--s-5);
+  margin: 0 0 var(--s-3);
+}
+.app-shell .record-preview-notes li + li {
+  margin-top: var(--s-2);
+}
+.app-shell .record-preview-original {
+  margin-block: var(--s-2);
+}
+.app-shell .record-preview-original > summary {
+  padding-block: var(--s-2);
+  cursor: pointer;
+  color: var(--workbench-steel);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+}
+.app-shell .record-preview-original p {
+  margin: var(--s-2) 0;
+  font-size: var(--fs-ui);
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.app-shell .record-preview :is(summary, button):focus-visible {
+  outline: 2px solid var(--workbench-navy);
+  outline-offset: 3px;
+}
+.app-shell .record-preview-outcome {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s-2);
+  padding: var(--s-3);
+  margin-top: var(--s-4);
+  border-radius: var(--r-sm);
+  background: #edf6ef;
+  color: #205b38;
+}
+.app-shell .record-preview-outcome > svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+.app-shell .record-preview-outcome strong {
+  display: block;
+  font-size: var(--fs-ui);
+  line-height: var(--lh-ui);
+}
+.app-shell .record-preview-outcome p {
+  margin: var(--s-1) 0 0;
+  color: inherit;
+  font-size: var(--fs-caption);
+  line-height: 1.5;
 }
 .app-shell .action-buttons,
 .app-shell .provider-connection-heading {
@@ -698,16 +988,31 @@
     display: none;
   }
   .app-shell {
-    --topbar-height: calc(var(--h-lg) + var(--s-4));
+    --topbar-height: 52px;
+    --gutter: var(--s-3);
   }
   .app-shell .topbar {
-    gap: var(--s-4);
+    gap: var(--s-2);
+    padding-block: var(--s-1);
   }
   .app-shell .brand {
-    width: 160px;
+    width: 32px;
+    height: 32px;
   }
   .app-shell .workbench-lockup {
-    width: 160px;
+    display: none;
+  }
+  .app-shell .workbench-mobile-mark {
+    display: block;
+    width: 32px;
+    height: 32px;
+    object-fit: contain;
+  }
+  /* Business identity remains in Crew and the Chat status. Navigation shares
+     the brand row instead of taking a second strip above every conversation. */
+  .app-shell .topbar-business,
+  .app-shell .privacy-badge :is(.workspace-private, .user-chip) {
+    display: none;
   }
   .app-shell .workspace-grid {
     display: flex;
@@ -715,13 +1020,16 @@
   }
   .app-shell .mobile-tabs {
     display: flex;
-    gap: var(--s-2);
-    padding: var(--s-2) var(--gutter);
+    flex: 1;
+    min-width: 0;
+    gap: var(--s-1);
+    padding: 0;
     background: var(--workbench-ink);
   }
   .app-shell .mobile-tabs button {
     flex: 1;
-    min-height: var(--h-lg);
+    min-height: 44px;
+    padding: var(--s-1);
     color: var(--workbench-paper);
   }
   .app-shell .mobile-tabs button[aria-current='page'] {
@@ -735,8 +1043,11 @@
   .app-shell .conversation-panel {
     flex: 1;
     min-height: 0;
-    overflow-y: auto;
-    padding-bottom: env(safe-area-inset-bottom, 0px);
+    overflow: hidden;
+    padding-bottom: var(
+      --workspace-bottom-inset,
+      env(safe-area-inset-bottom, 0px)
+    );
   }
   .app-shell .workspace-grid[data-mobile='team'] .team-panel {
     display: flex;
@@ -761,38 +1072,138 @@
     height: var(--h-lg);
     min-width: var(--h-lg);
   }
+  .app-shell .conversation-panel .panel-heading {
+    padding: var(--s-1) var(--gutter);
+    gap: var(--s-2);
+    flex-wrap: nowrap;
+  }
+  .app-shell .conversation-panel .panel-heading h1 {
+    margin: 0;
+    font-size: var(--fs-body);
+    line-height: var(--lh-body);
+  }
+  .app-shell .conversation-panel .conversation-toolbar {
+    flex-wrap: nowrap;
+    gap: var(--s-1);
+    padding: var(--s-1) var(--gutter);
+  }
+  .app-shell .conversation-panel .conversation-toolbar .workspace-select {
+    flex: 1 1 0;
+    width: 0;
+    min-height: 44px;
+    font-size: 16px;
+  }
+  .app-shell .conversation-panel .conversation-toolbar .conversation-action {
+    flex: 0 0 44px;
+    width: 44px;
+    min-height: 44px;
+    padding: 0;
+  }
+  .app-shell .conversation-action > span,
+  .app-shell .composer .attach-button > span {
+    /* Icon controls retain their accessible names and all their actions. */
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+  .app-shell .composer {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: end;
+    gap: var(--s-1);
+    margin-top: var(--s-1);
+    padding: var(--s-1);
+  }
   .app-shell .composer textarea {
-    min-height: var(--h-md);
-    max-height: min(120px, 25cqh);
+    height: auto;
+    min-height: 44px;
+    max-height: 96px;
+    padding: var(--s-2);
+  }
+  .app-shell .composer .agent-tags {
+    grid-column: 1 / -1;
+    grid-row: 1;
+    max-height: 64px;
+    overflow-y: auto;
+    margin: 0;
+  }
+  .app-shell .composer-footer {
+    gap: var(--s-1);
+  }
+  .app-shell .composer-footer [data-slot='button'],
+  .app-shell .privacy-badge [data-slot='button'] {
+    width: 44px;
+    min-width: 44px;
+    height: 44px;
+    min-height: 44px;
+    padding: 0;
+  }
+  .app-shell .composer-caption {
+    margin-block: var(--s-1);
   }
   .app-shell .workspace-grid[data-settings='true'] .workspace-content-layout {
     grid-template-columns: 200px minmax(0, 1fr);
   }
-  /* Preserve keyboard-aware compaction across the tablet breakpoint as well. */
-  @container workspace (max-height: 500px) {
+  /* Reflow short, wide screens without removing controls when focus changes. */
+  @container workspace (max-height: 400px) and (min-width: 540px) {
     .app-shell
-      .conversation-panel:has(.composer:focus-within)
-      :is(.panel-heading, .conversation-toolbar) {
-      display: none;
+      .workspace-grid[data-mobile='chat']:not([data-settings='true'])
+      .conversation-panel {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(260px, 2fr);
+      grid-template-rows: auto minmax(0, 1fr) auto auto;
+    }
+    .app-shell .conversation-panel .panel-heading {
+      min-width: 0;
     }
     .app-shell
-      .conversation-panel:has(.composer:focus-within)
-      .message-history {
-      padding-block: var(--s-2);
+      .conversation-panel:not(:has(.conversation-toolbar))
+      .panel-heading {
+      grid-column: 1 / -1;
     }
-  }
-  @container workspace (max-height: 300px) {
-    .app-shell:has(.composer:focus-within) :is(.topbar, .mobile-tabs) {
-      display: none;
+    .app-shell .conversation-panel .status-pill {
+      display: block;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      min-width: 0;
     }
-    .app-shell:has(.composer:focus-within) .workspace-grid {
-      height: 100%;
+    .app-shell .conversation-panel .conversation-toolbar {
+      min-width: 0;
     }
-    .app-shell:has(.composer:focus-within) .composer {
-      margin-top: var(--s-1);
+    .app-shell .conversation-panel .message-history {
+      grid-column: 1 / -1;
+      grid-row: 2;
+      padding-block: var(--s-1);
     }
-    .app-shell:has(.composer:focus-within) .composer-caption {
-      margin-block: var(--s-1);
+    .app-shell .conversation-panel .composer {
+      grid-column: 1 / -1;
+      grid-row: 3;
+    }
+    .app-shell .composer textarea {
+      height: 44px;
+    }
+    .app-shell .composer:has(.agent-tags) {
+      grid-template-columns: minmax(0, 1fr) minmax(0, 140px) auto;
+    }
+    .app-shell .composer .agent-tags {
+      grid-column: 2;
+      grid-row: auto;
+      flex-wrap: nowrap;
+      overflow: auto;
+      max-height: 44px;
+    }
+    .app-shell .composer .agent-tags button {
+      flex-shrink: 0;
+      white-space: nowrap;
+    }
+    .app-shell .conversation-panel .composer-caption {
+      grid-column: 1 / -1;
+      grid-row: 4;
+      max-height: 2lh;
+      overflow-y: auto;
     }
   }
 }
@@ -887,4 +1298,72 @@
   .app-shell .workspace-simple-nav button.active {
     border-bottom-color: Highlight;
   }
+}
+
+/* D10: action outcomes use labels as well as colour, including while folded. */
+.app-shell .action-status-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-2);
+}
+.app-shell .action-status-chip {
+  height: auto;
+  min-height: 1.5rem;
+  max-width: 100%;
+  padding: 0.125rem 0.5rem;
+  border: 1px solid currentColor;
+  border-radius: var(--r-control, 0.375rem);
+  font-size: var(--fs-ui);
+  line-height: var(--lh-ui);
+  white-space: normal;
+}
+.app-shell .action-status-amber {
+  color: var(--status-amber-ink);
+  background: var(--status-amber-fill);
+}
+.app-shell .action-status-green {
+  color: var(--status-green-ink);
+  background: var(--status-green-fill);
+}
+.app-shell .action-status-red {
+  color: var(--status-red-ink);
+  background: var(--status-red-fill);
+}
+.app-shell .action-status-neutral {
+  color: var(--workbench-steel);
+  background: var(--workbench-paper);
+}
+.app-shell .action-outcome {
+  display: grid;
+  gap: var(--s-2);
+  margin-block: var(--s-3);
+}
+.app-shell .action-outcome p {
+  margin: 0;
+}
+.app-shell .action-outcome-time {
+  font-size: var(--fs-ui);
+  color: var(--workbench-steel);
+}
+.app-shell .action-outcome a {
+  color: var(--workbench-navy);
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+  overflow-wrap: anywhere;
+}
+.app-shell .recent-action-outcomes {
+  display: grid;
+  gap: var(--s-3);
+  margin-top: var(--s-5);
+}
+.app-shell .data-coverage {
+  padding: var(--s-3);
+  margin: 0 0 var(--s-3);
+  border-left: 3px solid var(--status-amber-ink);
+  background: var(--status-amber-fill);
+  color: var(--status-amber-ink);
+  font-size: var(--fs-ui);
+  line-height: var(--lh-body);
+  white-space: normal;
 }

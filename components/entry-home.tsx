@@ -16,7 +16,7 @@ import { useWorkbenchAuth } from '@/lib/use-workbench-auth';
 const crew = [
   { icon: Megaphone, name: 'Marketing', blurb: 'Drive more leads' },
   { icon: Share2, name: 'Social', blurb: 'Grow your presence' },
-  { icon: Globe2, name: 'Website', blurb: 'Look professional' },
+  { icon: Globe2, name: 'Website', blurb: 'Prepare website copy' },
   { icon: Wallet, name: 'Finance', blurb: 'Keep cash flowing' },
   { icon: Wrench, name: 'Maintenance', blurb: 'Keep everything running' },
 ];

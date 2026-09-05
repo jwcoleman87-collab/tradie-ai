@@ -273,6 +273,14 @@ export type Action = {
   executed_at?: string | null;
   lease_until?: string | null;
   attempts?: number;
+  publication_receipt?: { url: string } | null;
+  publication_confirmed_at?: string | null;
+  publication_status?:
+    | 'sending'
+    | 'uncertain'
+    | 'confirmed'
+    | 'rejected'
+    | null;
   created_at: string;
 };
 export type ChatMessage = {
@@ -336,6 +344,12 @@ export type Snapshot = {
   conversationId: string | null;
   messages: ChatMessage[];
   actions: Action[];
+  actionCoverage?: {
+    outstandingReturned: number;
+    outstandingTotal: number | null;
+    historyReturned: number;
+    historyTotal: number | null;
+  };
   uploads: Upload[];
   cases: Escalation[];
   records: BusinessRecord[];

@@ -39,3 +39,6 @@ next-env.d.ts
 /outputs/
 /work/
 /tmp/
+/output/
+/docs/d10-action-states.html
+/.openai/
