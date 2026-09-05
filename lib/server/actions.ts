@@ -10,18 +10,22 @@ export async function replaceConnectionAction(
   userId: string,
   connectionId: string,
 ) {
-  return rpc<Action>(adminDb(), 'replace_connection_action', {
-    p_action: actionId,
-    p_user: userId,
-    p_connection: connectionId,
-  });
+  return publicAction(
+    await rpc<Action>(adminDb(), 'replace_connection_action', {
+      p_action: actionId,
+      p_user: userId,
+      p_connection: connectionId,
+    }),
+  );
 }
 
 export async function cancelAction(actionId: string, userId: string) {
-  return rpc<Action>(adminDb(), 'cancel_action', {
-    p_action: actionId,
-    p_user: userId,
-  });
+  return publicAction(
+    await rpc<Action>(adminDb(), 'cancel_action', {
+      p_action: actionId,
+      p_user: userId,
+    }),
+  );
 }
 
 export async function executeAction(

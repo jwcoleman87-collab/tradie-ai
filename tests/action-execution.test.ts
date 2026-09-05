@@ -1,5 +1,9 @@
 import { beforeEach, expect, it, vi } from 'vitest';
-import { executeAction } from '../lib/server/actions';
+import {
+  cancelAction,
+  executeAction,
+  replaceConnectionAction,
+} from '../lib/server/actions';
 import { publishFacebook } from '../lib/server/facebook';
 import { memoryDb } from './fixtures/memory-db';
 
@@ -66,6 +70,31 @@ it('strips private metadata when an execution claim is not acquired', async () =
   expect(JSON.stringify(result)).not.toContain('PRIVATE');
   expect(mocks.rpc).toHaveBeenCalledOnce();
 });
+it.each(['cancel', 'replace'])(
+  'strips private metadata from %s responses without altering the action result',
+  async (operation) => {
+    mocks.rpc.mockResolvedValue({
+      ...row,
+      status: operation === 'cancel' ? 'cancelled' : 'waiting_approval',
+    });
+    const result =
+      operation === 'cancel'
+        ? await cancelAction(id, 'owner')
+        : await replaceConnectionAction(id, 'owner', 'connection');
+    expect(result.id).toBe(id);
+    expect(result.status).toBe(
+      operation === 'cancel' ? 'cancelled' : 'waiting_approval',
+    );
+    expect(result.payload).toEqual(row.payload);
+    expect(result).not.toHaveProperty('execution_token');
+    expect(result).not.toHaveProperty('approved_by');
+    expect(mocks.rpc).toHaveBeenCalledWith(
+      mocks.db,
+      operation === 'cancel' ? 'cancel_action' : 'replace_connection_action',
+      expect.objectContaining({ p_action: id, p_user: 'owner' }),
+    );
+  },
+);
 for (const status of ['sending', 'uncertain'])
   it(`preserves a Facebook ${status} outcome before any connection preflight`, async () => {
     mocks.db = memoryDb({
