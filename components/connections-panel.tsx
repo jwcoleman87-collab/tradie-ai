@@ -1,6 +1,6 @@
 'use client';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Button } from './ui/button';
+import { Button, Select } from './workbench-controls';
 import { AISettings } from './ai-settings';
 import { BrandMark } from './brand';
 import { requestApi, type ClientConfig } from '@/lib/client';
@@ -512,14 +512,14 @@ function ResourcePicker({
       </p>
       <label>
         Account or Page
-        <select value={choice} onChange={(e) => setChoice(e.target.value)}>
+        <Select value={choice} onChange={(e) => setChoice(e.target.value)}>
           <option value="">Choose…</option>
           {candidate.resources.map((r) => (
             <option key={r.id} value={r.id}>
               {r.name} ({r.id})
             </option>
           ))}
-        </select>
+        </Select>
       </label>
       {candidate.limited && (
         <p className="auth-hint">

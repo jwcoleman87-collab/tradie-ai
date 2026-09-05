@@ -1,4 +1,14 @@
 # Local verification fixtures and generated reports are not application source.
 work/
 outputs/
+output/
 tmp/
+*.tsbuildinfo
+.vercel/
+.openai/
+.env*
+!.env.example
+.next/
+node_modules/
+coverage/
+*.pem

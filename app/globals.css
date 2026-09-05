@@ -54,6 +54,37 @@ body {
 }
 
 :root {
+  /* Workbench set-out: shared measurements, independent of the colour theme. */
+  --s-1: 4px;
+  --s-2: 8px;
+  --s-3: 12px;
+  --s-4: 16px;
+  --s-5: 24px;
+  --s-6: 32px;
+  --s-7: 48px;
+  --r-sm: 8px;
+  --r-md: 12px;
+  --r-pill: 999px;
+  --h-sm: 32px;
+  --h-md: 40px;
+  --h-lg: 48px;
+  --brand-sm: 24px;
+  --brand-md: 32px;
+  --icon-sm: 16px;
+  --icon-md: 20px;
+  --fs-caption: 0.75rem;
+  --lh-caption: 1rem;
+  --fs-ui: 0.875rem;
+  --lh-ui: 1.25rem;
+  --fs-body: 1rem;
+  --lh-body: 1.5rem;
+  --fs-subhead: 1.125rem;
+  --lh-subhead: 1.5rem;
+  --fs-heading: 1.5rem;
+  --lh-heading: 1.875rem;
+  --fs-display: 2.125rem;
+  --lh-display: 2.375rem;
+  --gutter: var(--s-5);
   --workbench-yellow: #f1b505;
   --workbench-yellow-strong: #d99f00;
   --workbench-ink: #030d18;

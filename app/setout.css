@@ -1,0 +1,890 @@
+/* Workspace measurements. Keep this after the legacy and public stylesheets.
+   Brand colours and the mobile visual-viewport behavior remain in workbench.css. */
+.app-shell {
+  --gutter: var(--s-5);
+  --topbar-height: calc(var(--h-lg) + var(--s-5));
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+}
+
+.app-shell .topbar {
+  height: var(--topbar-height);
+  gap: var(--s-5);
+  padding-inline: var(--gutter);
+  justify-content: flex-start;
+}
+.app-shell .brand {
+  flex: 0 0 auto;
+  width: 192px;
+  height: var(--h-lg);
+}
+.app-shell .workbench-lockup {
+  width: 192px;
+  height: var(--h-md);
+}
+.app-shell .workbench-mobile-mark {
+  display: none;
+}
+.app-shell .workspace-grid {
+  display: grid;
+  grid-template-columns: 240px minmax(0, 1fr) 360px;
+  height: calc(var(--workspace-viewport-height, 100dvh) - var(--topbar-height));
+}
+.app-shell .mobile-tabs {
+  display: none;
+}
+.app-shell .team-panel,
+.app-shell .panel-heading,
+.app-shell .workspace-panel-intro {
+  padding: var(--s-5) var(--gutter);
+}
+.app-shell .team-panel {
+  display: flex;
+}
+.app-shell .actions-panel {
+  display: block;
+  min-width: 0;
+}
+.app-shell .panel-heading {
+  min-height: 0;
+  flex-wrap: wrap;
+  gap: var(--s-3);
+}
+.app-shell .panel-heading h1 {
+  font-size: var(--fs-heading);
+  line-height: var(--lh-heading);
+  margin-top: var(--s-1);
+}
+.app-shell h2 {
+  font-size: var(--fs-subhead);
+  line-height: var(--lh-subhead);
+  margin-block: var(--s-2);
+}
+.app-shell h3 {
+  font-size: var(--fs-subhead);
+  line-height: var(--lh-subhead);
+}
+.app-shell .section-label,
+.app-shell .small,
+.app-shell .auth-hint,
+.app-shell .meta,
+.app-shell .action-details dt,
+.app-shell .action-card-toggle-hint,
+.app-shell .connection-state,
+.app-shell .connected-resource :is(span, small) {
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+}
+.app-shell .section-label {
+  letter-spacing: 0.08em;
+}
+.app-shell .status-pill,
+.app-shell .outline-pill {
+  max-width: 100%;
+  padding: var(--s-1) var(--s-2);
+  border-radius: var(--r-pill);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.app-shell .conversation-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+  padding: var(--s-3) var(--gutter);
+  overflow: visible;
+}
+.app-shell .conversation-toolbar .workspace-select {
+  flex: 1 1 100%;
+  min-width: 0;
+  max-width: 100%;
+  width: 100%;
+  margin: 0;
+}
+.app-shell .message-history {
+  padding: var(--s-5) var(--gutter);
+  scrollbar-gutter: auto;
+}
+.app-shell .message-thread {
+  width: 100%;
+  margin: auto 0 0;
+  padding-top: 0;
+  gap: var(--s-4);
+}
+.app-shell article.message,
+.app-shell article.message.user,
+.app-shell article.message.assistant {
+  width: 88%;
+  max-width: 88%;
+  margin: 0;
+  padding: var(--s-4);
+  border: 1px solid var(--workbench-line);
+  border-radius: var(--r-md);
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+}
+.app-shell article.message.user {
+  background: color-mix(in srgb, var(--workbench-yellow) 14%, white);
+  border-end-end-radius: var(--r-sm);
+}
+.app-shell article.message.assistant {
+  border-end-start-radius: var(--r-sm);
+}
+.app-shell article.message .meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--s-1);
+  margin-bottom: var(--s-2);
+}
+.app-shell .message-speaker-mark {
+  flex: 0 0 var(--icon-md);
+  width: var(--icon-md);
+  height: var(--icon-md);
+  object-fit: contain;
+  background: var(--workbench-ink);
+  border-radius: var(--r-sm);
+}
+.app-shell .message-copy {
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+}
+.app-shell .composer {
+  width: calc(100% - 2 * var(--gutter));
+  margin: var(--s-3) var(--gutter) 0;
+  padding: var(--s-2);
+  border-radius: var(--r-md);
+}
+.app-shell .composer textarea {
+  padding: var(--s-2);
+  font-size: max(16px, var(--fs-body));
+  line-height: var(--lh-body);
+}
+.app-shell .composer-footer {
+  gap: var(--s-2);
+  padding: 0;
+  min-height: var(--h-md);
+}
+.app-shell .composer-footer button[type='submit'] {
+  margin-left: auto;
+}
+.app-shell .composer-caption {
+  margin: var(--s-2) var(--gutter) var(--s-4);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+  text-align: left;
+  flex-shrink: 0;
+}
+
+/* Compose the installed Button; content cards may grow beyond a control height. */
+.app-shell [data-slot='button'] {
+  height: auto;
+  min-height: var(--h-md);
+  padding: var(--s-2) var(--s-3);
+  gap: var(--s-2);
+  border-radius: var(--r-sm);
+  font-size: var(--fs-ui);
+  line-height: var(--lh-ui);
+  font-weight: 600;
+  white-space: normal;
+}
+.app-shell [data-control-size='sm'],
+.app-shell [data-control-size='xs'] {
+  min-height: var(--h-sm);
+  padding-block: var(--s-1);
+}
+.app-shell [data-control-size='lg'] {
+  min-height: var(--h-lg);
+}
+.app-shell [data-control-size^='icon'] {
+  width: var(--h-md);
+  height: var(--h-md);
+  min-width: var(--h-md);
+  padding: 0;
+}
+.app-shell button:focus-visible,
+.app-shell a:focus-visible,
+.app-shell select:focus-visible,
+.app-shell input:focus-visible {
+  outline: 2px solid var(--workbench-yellow-strong);
+  outline-offset: 3px;
+}
+.app-shell
+  :is(input:not([type='checkbox']):not([type='file']), select, textarea) {
+  border-radius: var(--r-sm);
+}
+.app-shell select.workbench-select {
+  appearance: none;
+  min-height: var(--h-md);
+  border: 1px solid var(--input);
+  padding: var(--s-2) var(--s-6) var(--s-2) var(--s-3);
+  background-color: var(--workbench-white);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='%23152D47' stroke-width='1.75'%3E%3Cpath d='m5 8 5 5 5-5'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-size: var(--icon-md);
+  background-position: right var(--s-2) center;
+  color: var(--workbench-ink);
+  font-size: var(--fs-ui);
+  line-height: var(--lh-ui);
+}
+.app-shell .checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  min-height: var(--h-lg);
+  padding-block: var(--s-2);
+  font-size: var(--fs-ui);
+  line-height: var(--lh-ui);
+  cursor: pointer;
+}
+.app-shell .workbench-checkbox {
+  appearance: none;
+  flex: 0 0 var(--icon-md);
+  width: var(--icon-md);
+  height: var(--icon-md);
+  margin: 0;
+  border: 1px solid var(--workbench-steel);
+  border-radius: var(--s-1);
+  background: white;
+  cursor: pointer;
+}
+.app-shell .workbench-checkbox:checked {
+  border-color: var(--workbench-yellow-strong);
+  background: var(--workbench-yellow) center / var(--icon-md) no-repeat
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='%23030D18' stroke-width='2'%3E%3Cpath d='m4 10 4 4 8-8'/%3E%3C/svg%3E");
+}
+.app-shell :is(select, input):disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.app-shell .connection-form {
+  gap: var(--s-4);
+}
+.app-shell .connection-form label {
+  font-size: var(--fs-ui);
+  line-height: var(--lh-ui);
+}
+.app-shell .ai-provider-option {
+  align-items: center;
+  gap: var(--s-3);
+}
+.app-shell .ai-provider-option > span:last-child {
+  min-width: 0;
+}
+.app-shell .ai-provider-option small {
+  margin-top: var(--s-1);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+}
+
+/* A logo is always fitted inside its slot, regardless of source aspect ratio. */
+.brand-mark[data-brand-size] {
+  gap: var(--s-2);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+}
+.brand-mark[data-brand-size] .brand-logo-box {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--brand-md);
+  height: var(--brand-md);
+  min-width: var(--brand-md);
+  flex: 0 0 var(--brand-md);
+  padding: var(--s-1);
+  border: 1px solid var(--workbench-line);
+  border-radius: var(--r-sm);
+  overflow: hidden;
+  background: white;
+}
+.brand-mark[data-brand-size='sm'] .brand-logo-box {
+  width: var(--brand-sm);
+  height: var(--brand-sm);
+  min-width: var(--brand-sm);
+  flex-basis: var(--brand-sm);
+  padding: 2px;
+}
+.brand-mark[data-brand-size] .brand-logo-box img {
+  display: block;
+  min-width: 0;
+  min-height: 0;
+  width: 100%;
+  height: 100%;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+.brand-mark[data-brand-size] .brand-initials {
+  background: var(--workbench-navy);
+  color: white;
+  font-weight: 700;
+}
+.app-shell .brand-lockup-row {
+  gap: var(--s-3);
+  margin-block: var(--s-4);
+}
+.app-shell .brand-mentions {
+  gap: var(--s-2);
+  margin-top: var(--s-3);
+}
+
+.app-shell .topbar-business {
+  min-width: 0;
+  padding-left: var(--s-5);
+  border-left: 1px solid var(--sidebar-border);
+}
+.app-shell .business-identity,
+.app-shell .user-chip {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  min-width: 0;
+}
+.app-shell .business-identity > .brand-mark {
+  flex-shrink: 0;
+}
+.app-shell .identity-copy {
+  display: block;
+  min-width: 0;
+}
+.app-shell .identity-copy :is(strong, small) {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.app-shell .identity-copy strong {
+  font-size: var(--fs-ui);
+  line-height: var(--lh-ui);
+  font-weight: 700;
+}
+.app-shell .identity-copy small {
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+  color: #aeb5bb;
+}
+.app-shell .user-chip {
+  max-width: 240px;
+}
+.app-shell .user-chip small {
+  text-transform: capitalize;
+}
+.app-shell .user-avatar {
+  display: grid;
+  place-items: center;
+  flex: 0 0 var(--brand-md);
+  width: var(--brand-md);
+  height: var(--brand-md);
+  border-radius: var(--r-pill);
+  background: var(--workbench-navy);
+  color: var(--workbench-yellow);
+  font-size: var(--fs-ui);
+  font-weight: 700;
+}
+.app-shell .privacy-badge {
+  gap: var(--s-4);
+  margin-left: auto;
+  flex-shrink: 0;
+}
+.app-shell .workspace-private {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+  font-size: var(--fs-caption);
+}
+.app-shell .crew-only-heading {
+  padding: 0 0 var(--s-5);
+}
+.app-shell .crew-only-heading > .business-identity {
+  margin-bottom: var(--s-5);
+}
+.app-shell .crew-only-heading p {
+  margin-top: var(--s-2);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+}
+.app-shell .team-list {
+  gap: var(--s-2);
+  margin-top: var(--s-5);
+}
+.app-shell .agent-card {
+  grid-template-columns: var(--brand-md) minmax(0, 1fr);
+  min-height: var(--h-lg);
+  padding: var(--s-3);
+  gap: var(--s-3);
+  border-radius: var(--r-sm);
+}
+.app-shell .agent-icon {
+  width: var(--brand-md);
+  height: var(--brand-md);
+  border-radius: var(--r-sm);
+}
+.app-shell .agent-dot {
+  display: none;
+}
+.app-shell .crew-agent-copy strong {
+  font-size: var(--fs-ui);
+  line-height: var(--lh-ui);
+}
+.app-shell .crew-agent-copy small {
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+  margin-top: var(--s-1);
+  white-space: normal;
+}
+.app-shell .flow-chip {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+  margin-top: var(--s-3);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-caption);
+}
+.app-shell .flow-business {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+.app-shell .flow-destination {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+}
+
+.app-shell .workspace-switcher {
+  padding: var(--s-4) var(--gutter);
+  gap: var(--s-2);
+}
+.app-shell .workspace-switcher > span {
+  font-size: var(--fs-caption);
+}
+.app-shell .workspace-simple-nav {
+  gap: 0;
+  padding: 0 var(--gutter);
+}
+.app-shell .workspace-simple-nav button {
+  min-height: var(--h-lg);
+  padding: var(--s-2) var(--s-1);
+  gap: var(--s-1);
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  flex-direction: column;
+  font-size: var(--fs-ui);
+  line-height: var(--lh-ui);
+}
+.app-shell .workspace-simple-nav button.active {
+  border-bottom-color: var(--workbench-yellow-strong);
+  background: transparent;
+}
+.app-shell .workspace-view-body {
+  min-width: 0;
+  padding: var(--s-5) var(--gutter);
+}
+.app-shell .workspace-content-layout {
+  min-width: 0;
+}
+.app-shell
+  :is(
+    .action-card,
+    .connection-card,
+    .archive-policy-card,
+    .archive-row,
+    .audit-item,
+    .case-receipt,
+    .empty-actions
+  ) {
+  border-radius: var(--r-md);
+  padding: var(--s-4);
+}
+.app-shell :is(.action-card, .archive-row, .empty-actions) p {
+  font-size: var(--fs-ui);
+  line-height: var(--lh-ui);
+}
+.app-shell .action-details {
+  padding: var(--s-3);
+  border-radius: var(--r-sm);
+  font-size: var(--fs-ui);
+  line-height: var(--lh-ui);
+}
+.app-shell .action-buttons,
+.app-shell .provider-connection-heading {
+  flex-wrap: wrap;
+  gap: var(--s-2);
+}
+.app-shell .connected-resource {
+  margin-top: var(--s-4);
+  padding: var(--s-3);
+  border-radius: var(--r-sm);
+}
+.app-shell .settings-back {
+  margin: 0 0 var(--s-3) calc(-1 * var(--s-3));
+}
+.app-shell .workspace-settings-nav {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  padding: var(--s-5);
+  border-right: 1px solid var(--border);
+}
+.app-shell .workspace-settings-nav button {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  min-height: var(--h-lg);
+  padding: var(--s-3);
+  border-radius: var(--r-sm);
+  border: 0;
+  text-align: left;
+  font-size: var(--fs-ui);
+  line-height: var(--lh-ui);
+  color: var(--workbench-steel);
+  cursor: pointer;
+}
+.app-shell .workspace-settings-nav button:hover {
+  background: var(--secondary);
+}
+.app-shell .workspace-settings-nav button.active {
+  background: var(--accent);
+  color: var(--workbench-ink);
+  box-shadow: inset 2px 0 var(--workbench-yellow-strong);
+  font-weight: 700;
+}
+.app-shell .workspace-grid[data-settings='true'] {
+  grid-template-columns: minmax(0, 1fr);
+}
+.app-shell
+  .workspace-grid[data-settings='true']
+  :is(.team-panel, .conversation-panel) {
+  display: none;
+}
+.app-shell .workspace-grid[data-settings='true'] .actions-panel {
+  border-left: 0;
+}
+.app-shell .workspace-grid[data-settings='true'] .workspace-content-layout {
+  display: grid;
+  grid-template-columns: 240px minmax(0, 1fr);
+  align-items: start;
+}
+.app-shell .workspace-grid[data-settings='true'] .workspace-view-body {
+  width: 100%;
+  max-width: 960px;
+}
+.app-shell .workspace-grid[data-settings='true'] .workspace-simple-nav {
+  grid-template-columns: repeat(4, minmax(0, 140px));
+}
+.app-shell .settings-section-heading {
+  margin: 0 0 var(--s-5);
+  font-size: var(--fs-heading);
+  line-height: var(--lh-heading);
+}
+.app-shell .chat-loading {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-4);
+  margin-block: auto;
+}
+.app-shell .chat-loading-bubble {
+  width: 88%;
+  height: calc(var(--s-7) * 2);
+  background: var(--secondary);
+  border-radius: var(--r-md);
+}
+.app-shell .chat-loading-bubble.user {
+  align-self: flex-end;
+}
+.app-shell .chat-empty-state {
+  margin-block: auto;
+  padding-block: var(--s-5);
+}
+.app-shell .chat-empty-mark {
+  display: grid;
+  place-items: center;
+  width: var(--s-7);
+  height: var(--s-7);
+  padding: var(--s-2);
+  margin-bottom: var(--s-4);
+  background: var(--workbench-ink);
+  border-radius: var(--r-md);
+}
+.app-shell .chat-empty-state p {
+  color: var(--muted-foreground);
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+}
+.app-shell .starter-grid {
+  gap: var(--s-3);
+  margin-top: var(--s-5);
+}
+.app-shell .starter {
+  min-height: var(--h-lg);
+  height: auto !important;
+  padding: var(--s-3) !important;
+  font-size: var(--fs-ui) !important;
+  line-height: var(--lh-ui);
+  white-space: normal;
+  text-align: left;
+  justify-content: flex-start;
+}
+
+.app-shell .chat-expand-control {
+  margin-left: auto;
+}
+.app-shell .crew-collapse-control {
+  margin: 0 0 var(--s-3);
+}
+@media (min-width: 1025px) {
+  .app-shell
+    .workspace-grid[data-crew-collapsed='true']:not([data-settings='true']) {
+    grid-template-columns: 80px minmax(0, 1fr) 360px;
+  }
+  .app-shell [data-crew-collapsed='true'] .team-panel {
+    padding: var(--s-4);
+  }
+  .app-shell [data-crew-collapsed='true'] .crew-only-heading {
+    padding: 0;
+    border: 0;
+  }
+  .app-shell
+    [data-crew-collapsed='true']
+    .crew-only-heading
+    > :not(.crew-collapse-control),
+  .app-shell [data-crew-collapsed='true'] .crew-agent-copy {
+    display: none;
+  }
+  .app-shell [data-crew-collapsed='true'] .agent-card {
+    grid-template-columns: var(--brand-md);
+    gap: 0;
+    padding: var(--s-2);
+    justify-content: center;
+  }
+  .app-shell [data-crew-collapsed='true'] .team-list {
+    margin-top: var(--s-2);
+  }
+  .app-shell
+    .workspace-grid[data-chat-expanded='true']:not([data-settings='true']) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .app-shell
+    [data-chat-expanded='true']:not([data-settings='true'])
+    :is(.team-panel, .actions-panel) {
+    display: none;
+  }
+  .app-shell .conversation-toolbar {
+    flex-wrap: nowrap;
+  }
+  .app-shell .conversation-toolbar .workspace-select {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+  .app-shell .panel-heading {
+    padding-block: var(--s-4);
+  }
+}
+@media (max-width: 1280px) {
+  .app-shell .workspace-grid {
+    grid-template-columns: 224px minmax(0, 1fr) 336px;
+  }
+  .app-shell .workspace-private > span {
+    display: none;
+  }
+  .app-shell .user-chip .identity-copy {
+    display: none;
+  }
+}
+@media (max-width: 1024px) {
+  .app-shell .crew-collapse-control,
+  .app-shell .chat-expand-control {
+    display: none;
+  }
+  .app-shell {
+    --topbar-height: calc(var(--h-lg) + var(--s-4));
+  }
+  .app-shell .topbar {
+    gap: var(--s-4);
+  }
+  .app-shell .brand {
+    width: 160px;
+  }
+  .app-shell .workbench-lockup {
+    width: 160px;
+  }
+  .app-shell .workspace-grid {
+    display: flex;
+    flex-direction: column;
+  }
+  .app-shell .mobile-tabs {
+    display: flex;
+    gap: var(--s-2);
+    padding: var(--s-2) var(--gutter);
+    background: var(--workbench-ink);
+  }
+  .app-shell .mobile-tabs button {
+    flex: 1;
+    min-height: var(--h-lg);
+    color: var(--workbench-paper);
+  }
+  .app-shell .mobile-tabs button[aria-current='page'] {
+    background: var(--workbench-yellow);
+    color: var(--workbench-ink);
+  }
+  .app-shell .team-panel,
+  .app-shell .actions-panel {
+    display: none;
+  }
+  .app-shell .conversation-panel {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  .app-shell .workspace-grid[data-mobile='team'] .team-panel {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+  }
+  .app-shell .workspace-grid[data-mobile='actions'] .actions-panel {
+    display: block;
+    flex: 1;
+    min-height: 0;
+  }
+  .app-shell .workspace-grid[data-mobile='team'] .conversation-panel,
+  .app-shell .workspace-grid[data-mobile='actions'] .conversation-panel {
+    display: none;
+  }
+  .app-shell [data-slot='button'],
+  .app-shell select.workbench-select {
+    min-height: var(--h-lg);
+  }
+  .app-shell [data-control-size^='icon'] {
+    width: var(--h-lg);
+    height: var(--h-lg);
+    min-width: var(--h-lg);
+  }
+  .app-shell .composer textarea {
+    min-height: var(--h-md);
+    max-height: min(120px, 25cqh);
+  }
+  .app-shell .workspace-grid[data-settings='true'] .workspace-content-layout {
+    grid-template-columns: 200px minmax(0, 1fr);
+  }
+  /* Preserve keyboard-aware compaction across the tablet breakpoint as well. */
+  @container workspace (max-height: 500px) {
+    .app-shell
+      .conversation-panel:has(.composer:focus-within)
+      :is(.panel-heading, .conversation-toolbar) {
+      display: none;
+    }
+    .app-shell
+      .conversation-panel:has(.composer:focus-within)
+      .message-history {
+      padding-block: var(--s-2);
+    }
+  }
+  @container workspace (max-height: 300px) {
+    .app-shell:has(.composer:focus-within) :is(.topbar, .mobile-tabs) {
+      display: none;
+    }
+    .app-shell:has(.composer:focus-within) .workspace-grid {
+      height: 100%;
+    }
+    .app-shell:has(.composer:focus-within) .composer {
+      margin-top: var(--s-1);
+    }
+    .app-shell:has(.composer:focus-within) .composer-caption {
+      margin-block: var(--s-1);
+    }
+  }
+}
+@media (max-width: 640px) {
+  .app-shell {
+    --gutter: var(--s-4);
+  }
+  .app-shell .brand {
+    width: var(--brand-md);
+  }
+  .app-shell .workbench-lockup {
+    display: none;
+  }
+  .app-shell .workbench-mobile-mark {
+    display: block;
+    width: var(--brand-md);
+    height: var(--brand-md);
+    object-fit: contain;
+  }
+  .app-shell .topbar-business {
+    padding-left: 0;
+    border: 0;
+  }
+  .app-shell .topbar-business .brand-mark {
+    display: none;
+  }
+  .app-shell .topbar-business .identity-copy small {
+    display: none;
+  }
+  .app-shell .privacy-badge {
+    gap: var(--s-2);
+  }
+  .app-shell .workspace-private {
+    display: none;
+  }
+  .app-shell .team-panel,
+  .app-shell .panel-heading,
+  .app-shell .workspace-panel-intro {
+    padding-block: var(--s-4);
+  }
+  .app-shell .panel-heading h1 {
+    font-size: var(--fs-subhead);
+    line-height: var(--lh-subhead);
+  }
+  .app-shell .message-history {
+    padding-block: var(--s-4);
+  }
+  .app-shell article.message,
+  .app-shell article.message.user,
+  .app-shell article.message.assistant {
+    width: 94%;
+    max-width: 94%;
+    padding: var(--s-3);
+  }
+  .app-shell .conversation-toolbar .workspace-select {
+    width: 100%;
+    max-width: 100%;
+    flex-basis: 100%;
+  }
+  .app-shell .conversation-toolbar [data-slot='button'] {
+    flex: 1;
+  }
+  .app-shell .starter-grid {
+    grid-template-columns: 1fr;
+  }
+  .app-shell .workspace-grid[data-settings='true'] .workspace-content-layout {
+    display: block;
+  }
+  .app-shell .workspace-settings-nav {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    padding: var(--s-4) var(--gutter);
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .app-shell .workspace-settings-nav button {
+    padding: var(--s-2);
+    gap: var(--s-2);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .app-shell [data-slot='skeleton'] {
+    animation: none;
+  }
+}
+@media (forced-colors: active) {
+  .app-shell .workbench-checkbox,
+  .app-shell select.workbench-select {
+    appearance: auto;
+    background-image: none;
+  }
+  .app-shell .workspace-simple-nav button.active {
+    border-bottom-color: Highlight;
+  }
+}

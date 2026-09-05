@@ -201,10 +201,11 @@ export const api = endpoint(async (request) => {
         .maybeSingle(),
       db
         .from('business_profiles')
-        .select('onboarding_status')
+        .select('onboarding_status,base_location,services')
         .eq('workspace_id', workspaceId)
         .maybeSingle(),
     ]);
+    const profile = checked(businessProfile);
     return json({
       workspaces,
       workspace,
@@ -226,7 +227,13 @@ export const api = endpoint(async (request) => {
       })),
       runs: checked(runs),
       calendarConnected: !!checked(connection),
-      onboardingStatus: checked(businessProfile)?.onboarding_status || null,
+      onboardingStatus: profile?.onboarding_status || null,
+      businessProfile: profile
+        ? {
+            base_location: profile.base_location,
+            services: profile.services || [],
+          }
+        : null,
     });
   }
   if (path === 'workspaces' && method === 'POST') {

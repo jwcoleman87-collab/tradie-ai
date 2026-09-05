@@ -269,6 +269,10 @@ export type Action = {
   execution_result: Record<string, unknown> | null;
   superseded_by?: string | null;
   replaces_action_id?: string | null;
+  approved_at?: string | null;
+  executed_at?: string | null;
+  lease_until?: string | null;
+  attempts?: number;
   created_at: string;
 };
 export type ChatMessage = {
@@ -324,6 +328,7 @@ export type BusinessRecord = {
   created_at: string;
 };
 export type Snapshot = {
+  businessProfile?: { base_location: string | null; services: string[] } | null;
   workspaces: WorkspaceData[];
   workspace: WorkspaceData;
   role: string;
