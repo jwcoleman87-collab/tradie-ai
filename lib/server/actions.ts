@@ -28,6 +28,22 @@ export async function cancelAction(actionId: string, userId: string) {
   );
 }
 
+export async function reviseFacebookAction(
+  actionId: string,
+  userId: string,
+  message: string,
+  link: string | null,
+) {
+  return publicAction(
+    await rpc<Action>(adminDb(), 'revise_facebook_action', {
+      p_action: actionId,
+      p_user: userId,
+      p_message: message,
+      p_link: link,
+    }),
+  );
+}
+
 export async function executeAction(
   actionId: string,
   userId: string,

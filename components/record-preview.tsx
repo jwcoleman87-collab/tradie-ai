@@ -127,8 +127,8 @@ export function RecordPreview({
           </strong>
           <p>
             {draft
-              ? 'Accept saves it here. Nothing is published or sent.'
-              : 'Accept adds this record to your business memory.'}
+              ? 'Save draft keeps it here. Nothing is published or sent.'
+              : 'Save record adds this to your business memory.'}
           </p>
         </div>
       </footer>

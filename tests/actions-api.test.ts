@@ -1,4 +1,4 @@
-import { beforeEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { createApi } from '../lib/server/api';
 import { AppError } from '../lib/server/errors';
 import { memoryDb } from './fixtures/memory-db';
@@ -44,6 +44,7 @@ beforeEach(() => {
     execution_result: { url: 'https://www.facebook.com/123_456' },
   });
 });
+afterEach(() => vi.unstubAllEnvs());
 const request = (signal?: AbortSignal, decision = 'accept') =>
   new Request(`https://example.test/api/actions/${id}/decision`, {
     method: 'POST',
@@ -115,4 +116,63 @@ it('checks owner authority before recording approval or executing', async () => 
   } finally {
     logging.mockRestore();
   }
+});
+
+it('keeps a blocked Facebook proposal waiting for review when a stale browser tries to approve it', async () => {
+  vi.stubEnv('FACEBOOK_PUBLISHING_ENABLED', 'false');
+  mocks.db = memoryDb({
+    proposed_actions: [
+      {
+        ...approved,
+        action_type: 'facebook.publish',
+        status: 'waiting_approval',
+      },
+    ],
+  }).db;
+  const response = await createApi()(request());
+  expect(response.status).toBe(409);
+  expect(await response.json()).toMatchObject({
+    error: { code: 'PUBLISHING_DISABLED' },
+  });
+  expect(mocks.rpc).not.toHaveBeenCalled();
+  expect(mocks.execute).not.toHaveBeenCalled();
+});
+
+it('allows denial of a Facebook proposal while publishing is switched off', async () => {
+  vi.stubEnv('FACEBOOK_PUBLISHING_ENABLED', 'false');
+  mocks.db = memoryDb({
+    proposed_actions: [
+      {
+        ...approved,
+        action_type: 'facebook.publish',
+        status: 'waiting_approval',
+      },
+    ],
+  }).db;
+  mocks.rpc.mockResolvedValue({ ...approved, status: 'denied' });
+  const response = await createApi()(request(undefined, 'deny'));
+  expect(response.status).toBe(200);
+  expect(mocks.rpc).toHaveBeenCalledExactlyOnceWith(mocks.db, 'decide_action', {
+    p_action: id,
+    p_user: 'owner',
+    p_decision: 'deny',
+  });
+  expect(mocks.execute).not.toHaveBeenCalled();
+});
+
+it('allows one approval and execution request when Facebook publishing is enabled', async () => {
+  vi.stubEnv('FACEBOOK_PUBLISHING_ENABLED', 'true');
+  mocks.db = memoryDb({
+    proposed_actions: [
+      {
+        ...approved,
+        action_type: 'facebook.publish',
+        status: 'waiting_approval',
+      },
+    ],
+  }).db;
+  const response = await createApi()(request());
+  expect(response.status).toBe(200);
+  expect(mocks.rpc).toHaveBeenCalledOnce();
+  expect(mocks.execute).toHaveBeenCalledExactlyOnceWith(id, 'owner');
 });

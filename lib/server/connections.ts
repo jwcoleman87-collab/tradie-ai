@@ -12,6 +12,7 @@ import { env } from './config';
 import { providerReady, googleAdsClient } from './provider-config';
 import { AppError, requireValue, timedFetch } from './errors';
 import { googleRefreshFailure } from './provider-http';
+import { facebookPublishingUnavailableReason } from '../facebook-readiness';
 export const ProviderSchema = z.enum(providers);
 export const AdditionalProviderSchema = z.enum(['facebook', 'google_ads']);
 export const StoredCredentials = z
@@ -55,7 +56,7 @@ export async function connectionList(
             env('APP_ORIGIN')
           )
         : providerReady(provider);
-    return {
+    const connection: ConnectionInfo = {
       provider,
       configured,
       connectionId: row?.connection_id || null,
@@ -76,6 +77,10 @@ export async function connectionList(
               : ['calendar.create']
           : [],
     };
+    if (provider === 'facebook')
+      connection.publishingUnavailableReason =
+        facebookPublishingUnavailableReason(connection);
+    return connection;
   });
 }
 export async function providerCredentials(

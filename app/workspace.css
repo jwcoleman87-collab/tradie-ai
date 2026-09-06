@@ -1562,3 +1562,17 @@
     transform: none;
   }
 }
+.facebook-post-editor {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.facebook-post-editor label {
+  font-weight: 600;
+}
+
+.facebook-post-editor textarea {
+  min-height: 10rem;
+  resize: vertical;
+}

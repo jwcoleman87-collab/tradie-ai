@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Button, Select } from './workbench-controls';
 import { AISettings } from './ai-settings';
 import { BrandMark } from './brand';
+import { facebookPublishingBlockReason } from '@/lib/facebook-readiness';
 import { requestApi, type ClientConfig } from '@/lib/client';
 import type { Snapshot } from '@/lib/contracts';
 import { integrationBrands } from '@/lib/brands';
@@ -268,7 +269,10 @@ export function ConnectionsPanel({
                 : checkDelayed
                   ? 'Connection check delayed'
                   : isReady
-                    ? 'Connected and ready'
+                    ? c.provider === 'facebook' &&
+                      facebookPublishingBlockReason(c)
+                      ? 'Connected · publishing unavailable'
+                      : 'Connected and ready'
                     : needsCheck
                       ? 'Saved connection — check needed'
                       : 'Not connected';
@@ -315,11 +319,8 @@ export function ConnectionsPanel({
               {c.provider === 'google_calendar'
                 ? 'Create bookings only after you approve the exact event details.'
                 : c.provider === 'facebook'
-                  ? c.capabilities.includes('facebook.publish')
-                    ? 'Ready to publish approved text, links or one photo to this Page.'
-                    : !c.connectionId || needsAttention || needsCheck
-                      ? 'Verify Page access before publishing approved text, links or one photo.'
-                      : 'The Page is paired. Publishing will unlock after the operator completes Meta approval.'
+                  ? facebookPublishingBlockReason(c) ||
+                    'Approve publishes the exact text, link or selected photo to this Page immediately.'
                   : 'Read-only campaign reporting. Workbench cannot create ads, change budgets or spend money.'}
             </p>
             {!c.configured && (

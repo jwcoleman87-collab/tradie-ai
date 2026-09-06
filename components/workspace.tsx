@@ -27,6 +27,14 @@ import { MessageCopy } from './message-copy';
 import { RecordPreview } from './record-preview';
 import { proposalImage } from '@/lib/proposal-presentation';
 import { ActionOutcome, ActionStatusChip } from './action-status';
+import {
+  FacebookPostEditor,
+  type FacebookPostEdit,
+} from './facebook-post-editor';
+import {
+  facebookPreparationAvailable,
+  facebookPublishingBlockReason,
+} from '@/lib/facebook-readiness';
 import { actionState, canReplaceAction } from '@/lib/action-state';
 import { BrandMark, BrandMentions } from './brand';
 import { eligibleAIProviders, aiProviderLabel } from '@/lib/ai-settings';
@@ -1856,6 +1864,33 @@ export default function Workspace() {
                           snapshot?.workspace.status === 'archived'
                         }
                         onDecision={(d) => decide(a, d)}
+                        facebookConnection={
+                          connectionState.workspaceId === workspaceId
+                            ? connectionState.connections.find(
+                                (c) => c.provider === 'facebook',
+                              )
+                            : undefined
+                        }
+                        onRevise={async (edit) => {
+                          const revised = await requestApi<Action>(
+                            token,
+                            `actions/${a.id}/revise`,
+                            'POST',
+                            edit,
+                          );
+                          try {
+                            window.localStorage.setItem(
+                              `workbench:action-card:${revised.id}:open`,
+                              'true',
+                            );
+                          } catch {
+                            /* The revised post is still available for review. */
+                          }
+                          setNotice(
+                            'Changes saved. Review the updated post, then Approve to publish.',
+                          );
+                          await refresh();
+                        }}
                         onRetry={() =>
                           perform(async () => {
                             try {
@@ -2588,7 +2623,7 @@ export default function Workspace() {
   );
 }
 
-function ActionCard({
+export function ActionCard({
   action: a,
   timeZone,
   businessName,
@@ -2601,6 +2636,8 @@ function ActionCard({
   connectionChanged,
   onReplace,
   onCancel,
+  facebookConnection,
+  onRevise,
 }: {
   action: Action;
   timeZone?: string;
@@ -2614,11 +2651,14 @@ function ActionCard({
   connectionChanged: boolean;
   onReplace: () => void;
   onCancel: () => void;
+  facebookConnection?: ConnectionInfo;
+  onRevise: (edit: FacebookPostEdit) => Promise<void>;
 }) {
   const storageKey = `workbench:action-card:${a.id}:open`;
   const [open, setOpen] = useState(
     a.status === 'approved' || a.status === 'failed',
   );
+  const [editing, setEditing] = useState(false);
 
   useEffect(() => {
     try {
@@ -2634,6 +2674,13 @@ function ActionCard({
   const state = actionState(a);
   const calendar = a.action_type === 'calendar.create',
     facebook = a.action_type === 'facebook.publish',
+    publishingBlocked = facebook
+      ? facebookPublishingBlockReason(facebookConnection)
+      : null,
+    editUnavailable =
+      facebook &&
+      (!facebookPreparationAvailable(facebookConnection) ||
+        !facebookConnection?.verifiedAt),
     obsolete = connectionChanged || a.error_code === 'CONNECTION_CHANGED',
     expired = Date.parse(a.expires_at) <= Date.now(),
     imageFileId =
@@ -2702,8 +2749,14 @@ function ActionCard({
           ) : facebook ? (
             <>
               <dl>
-                <dt>Facebook Page ID</dt>
-                <dd>{String(a.payload.pageId)}</dd>
+                <dt>Facebook Page</dt>
+                <dd>
+                  {facebookConnection &&
+                  facebookConnection.externalId === a.payload.pageId &&
+                  facebookConnection.displayName
+                    ? `${facebookConnection.displayName} (${String(a.payload.pageId)})`
+                    : String(a.payload.pageId)}
+                </dd>
                 <dt>Exact post</dt>
                 <dd className="whitespace-pre-wrap">
                   {String(a.payload.message)}
@@ -2729,9 +2782,9 @@ function ActionCard({
                 />
               )}
               <p className="auth-hint">
-                Approve publishes this exact caption
-                {imageFileId ? ' and selected photo' : '/link'} immediately to
-                the selected Page. It is not a private draft.
+                Approve publishes this exact post
+                {imageFileId ? ' and selected photo' : ''} immediately to the
+                selected Facebook Page.
               </p>
             </>
           ) : (
@@ -2759,30 +2812,63 @@ function ActionCard({
         </div>
         {a.status === 'waiting_approval' && (
           <>
+            {facebook && publishingBlocked && (
+              <output className="action-connection-error">
+                {publishingBlocked} Your post is ready for review; approval is
+                unavailable until publishing is ready.
+              </output>
+            )}
             <p className="auth-hint">
               {expired
                 ? 'This proposal has expired.'
                 : `Expires ${expiryLabel}.`}
             </p>
-            <div className="action-buttons">
-              <Button
-                variant="outline"
-                disabled={disabled || expired}
-                onClick={() => setOpen(false)}
-                title="Leave this proposal waiting for your approval"
-              >
-                Not yet
-              </Button>
-              <Button
-                disabled={disabled || expired || obsolete}
-                onClick={() => onDecision('accept')}
-              >
-                <Check size={14} /> {facebook ? 'Approve & publish' : 'Approve'}
-              </Button>
-            </div>
+            {editing ? (
+              <FacebookPostEditor
+                payload={a.payload}
+                disabled={disabled || expired || obsolete || editUnavailable}
+                onSave={onRevise}
+                onCancel={() => setEditing(false)}
+              />
+            ) : (
+              <div className="action-buttons">
+                <Button
+                  variant="outline"
+                  disabled={disabled || expired}
+                  onClick={() => setOpen(false)}
+                  title="Leave this proposal waiting for your approval"
+                >
+                  Not yet
+                </Button>
+                {facebook && (
+                  <Button
+                    variant="outline"
+                    disabled={
+                      disabled || expired || obsolete || editUnavailable
+                    }
+                    onClick={() => setEditing(true)}
+                  >
+                    Edit
+                  </Button>
+                )}
+                <Button
+                  disabled={
+                    disabled || expired || obsolete || !!publishingBlocked
+                  }
+                  onClick={() => onDecision('accept')}
+                >
+                  <Check size={14} />{' '}
+                  {a.action_type === 'draft.save'
+                    ? 'Save draft'
+                    : a.action_type === 'record.create'
+                      ? 'Save record'
+                      : 'Approve'}
+                </Button>
+              </div>
+            )}
             <Button
               variant="ghost"
-              disabled={disabled || expired}
+              disabled={disabled || expired || editing}
               onClick={() => onDecision('deny')}
             >
               Decline proposal
@@ -2791,8 +2877,8 @@ function ActionCard({
         )}
         {a.replaces_action_id && (
           <p className="auth-hint">
-            This replacement uses the newly verified connection and requires
-            your fresh approval.
+            This updated proposal requires your approval before anything is
+            sent.
           </p>
         )}
         {obsolete &&
@@ -2815,16 +2901,16 @@ function ActionCard({
         {a.error_code === 'PUBLISHING_DISABLED' && (
           <div className="action-connection-error">
             <p>
-              Facebook publishing is not available for this workspace. Check the
-              Facebook connection, then this approved post can be retried.
+              {publishingBlocked ||
+                'Publishing is now available. Retry this approved post to execute it.'}
             </p>
             <Button variant="outline" disabled={disabled} onClick={onReconnect}>
-              Reconnect Facebook
+              View connection
             </Button>
           </div>
         )}
         {state.retry &&
-          a.error_code !== 'PUBLISHING_DISABLED' &&
+          (a.error_code !== 'PUBLISHING_DISABLED' || !publishingBlocked) &&
           !obsolete &&
           ['approved', 'failed', 'executing'].includes(a.status) && (
             <Button variant="outline" disabled={disabled} onClick={onRetry}>

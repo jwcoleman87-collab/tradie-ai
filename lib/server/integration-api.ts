@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { Uuid } from '../contracts';
+import { FacebookPayload, Uuid } from '../contracts';
 import { body, json } from './http';
 import { adminDb, checked, membership, rpc } from './db';
 import {
@@ -17,13 +17,46 @@ import {
 import { googleAdsReport } from './google-ads';
 import { verifyProviderConnection } from './connection-health';
 import { AppError, requireValue } from './errors';
-import { cancelAction, replaceConnectionAction } from './actions';
+import {
+  cancelAction,
+  replaceConnectionAction,
+  reviseFacebookAction,
+} from './actions';
 export async function integrationApi(
   request: Request,
   path: string,
   db: SupabaseClient,
   userId: string,
 ): Promise<Response | null> {
+  const revision = path.match(/^actions\/([^/]+)\/revise$/);
+  if (revision && request.method === 'POST') {
+    const actionId = Uuid.parse(revision[1]);
+    const input = z
+      .object({ message: z.string(), link: z.string().nullable() })
+      .strict()
+      .parse(await body(request));
+    const action = checked(
+      await db
+        .from('proposed_actions')
+        .select('workspace_id,action_type,payload')
+        .eq('id', actionId)
+        .maybeSingle(),
+    );
+    requireValue(action, 'NOT_FOUND', 404);
+    await membership(db, userId, action.workspace_id, true);
+    requireValue(action.action_type === 'facebook.publish', 'CONFLICT', 409);
+    // Only the caption/link may change. Page, photo and connection stay bound
+    // to the stored proposal; the transaction checks its current review state.
+    const payload = FacebookPayload.parse({ ...action.payload, ...input });
+    return json(
+      await reviseFacebookAction(
+        actionId,
+        userId,
+        payload.message,
+        payload.link,
+      ),
+    );
+  }
   const recovery = path.match(/^actions\/([^/]+)\/(replace|cancel)$/);
   if (recovery && request.method === 'POST') {
     const actionId = Uuid.parse(recovery[1]);
