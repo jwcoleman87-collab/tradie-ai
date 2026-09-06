@@ -9,13 +9,19 @@ existing Tradie AI identifiers until they can be migrated safely.
 
 ## Delivery status
 
+The 5 September connector and Chat audit repairs are documented in
+[the repair report](docs/CONNECTOR-CHAT-REPAIR.md). This source update requires
+the new lifecycle migration before deployment; that report distinguishes local
+verification from the historical hosted checkpoints below.
+
 Supabase Auth/Postgres/Storage and all five migrations are live. The private
 hosted app includes the approved Workbench identity, OpenAI + Claude backup,
 Facebook Page connections, approved single-photo publishing and read-only Google
 Ads reporting.
 
 The native Next.js production deployment is live on Vercel at
-[tradie-ai-nine.vercel.app](https://tradie-ai-nine.vercel.app). The existing
+[tradie-ai-efuf.vercel.app](https://tradie-ai-efuf.vercel.app), the canonical origin
+verified on 5 September 2026. The previous Vercel alias is unavailable. The existing
 ChatGPT Sites deployment remains untouched. The Vercel URL is public, while all
 customer workspace data and actions remain behind Supabase authentication and
 the existing row-level security policies.
@@ -105,7 +111,7 @@ standard Next.js build and stores production configuration as encrypted project
 environment variables. Deployments must keep `APP_ORIGIN` set to the exact
 production origin:
 
-`https://tradie-ai-nine.vercel.app`
+`https://tradie-ai-efuf.vercel.app`
 
 For a fresh Vercel project, add every populated variable from `.env.example` in
 the Vercel project settings, then deploy from the repository root. Never upload
@@ -115,9 +121,9 @@ Before creating or reconnecting accounts on the Vercel domain, also allow the
 Vercel origin in Supabase Auth and register these exact production callbacks in
 their provider dashboards:
 
-- `https://tradie-ai-nine.vercel.app/api/google/callback`
-- `https://tradie-ai-nine.vercel.app/api/integrations/facebook/callback`
-- `https://tradie-ai-nine.vercel.app/api/integrations/google_ads/callback`
+- `https://tradie-ai-efuf.vercel.app/api/google/callback`
+- `https://tradie-ai-efuf.vercel.app/api/integrations/facebook/callback`
+- `https://tradie-ai-efuf.vercel.app/api/integrations/google_ads/callback`
 
 ### Supabase
 

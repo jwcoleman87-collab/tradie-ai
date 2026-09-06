@@ -52,6 +52,7 @@ it('records a real adapter switch between routing and generation', async () => {
                   agents: ['social'],
                   reason: 'post draft',
                   webSearch: false,
+                  calendarContext: false,
                   searchQuery: null,
                 }),
               },
@@ -170,6 +171,117 @@ describe('privacy-first provider selection', () => {
   });
 });
 describe('bounded availability fallback', () => {
+  for (const method of ['structured', 'research'] as const) {
+    const makeResearch = (name: AIProviderName) => ({
+      ...make(name),
+      research: vi.fn().mockResolvedValue({
+        summary: 'current notes',
+        sources: [],
+        searchedAt: '2026-09-02T00:00:00.000Z',
+        provider: name,
+      }),
+    });
+    it(`${method} cannot start a backup once the shared deadline signal aborts, even before the wall-clock boundary`, async () => {
+      const a = makeResearch('openai'),
+        b = makeResearch('anthropic');
+      const clock = vi.spyOn(Date, 'now').mockReturnValue(1000);
+      vi.stubEnv('AI_REQUEST_TIMEOUT_MS', '30000');
+      const timers: { milliseconds: number; controller: AbortController }[] =
+        [];
+      vi.spyOn(AbortSignal, 'timeout').mockImplementation((milliseconds) => {
+        const controller = new AbortController();
+        timers.push({ milliseconds, controller });
+        return controller.signal;
+      });
+      a[method].mockImplementation(() => new Promise(() => {}));
+      const provider = new FallbackProvider([a, b]);
+      const options = { deadlineAt: 1015 };
+      const pending =
+        method === 'structured'
+          ? provider.structured(schema, '', [], options)
+          : provider.research('public update', 'Australia/Sydney', options);
+      const assertion = expect(pending).rejects.toMatchObject({
+        code: 'AI_TIMEOUT',
+      });
+      const deadlineTimer = timers.find((timer) => timer.milliseconds === 15);
+      expect(deadlineTimer).toBeDefined();
+      const primarySignal: AbortSignal =
+        a[method].mock.calls[0][method === 'structured' ? 3 : 2].signal;
+      expect(primarySignal.aborted).toBe(false);
+      // Timer expiry is authoritative even when Date.now() still reads one
+      // millisecond before the deadline (or the system clock moves backwards).
+      clock.mockReturnValue(1014);
+      deadlineTimer!.controller.abort();
+      expect(primarySignal.aborted).toBe(true);
+      await assertion;
+      expect(a[method]).toHaveBeenCalledTimes(1);
+      expect(b[method]).not.toHaveBeenCalled();
+      expect(provider.attempts).toHaveLength(1);
+      expect(provider.attempts[0]).toMatchObject({
+        status: 'failed',
+        step: method === 'structured' ? 'routing' : 'research',
+        errorCode: 'AI_TIMEOUT',
+      });
+    });
+    it(`${method} can use the consented backup after a per-attempt timeout while shared budget remains`, async () => {
+      const a = makeResearch('openai'),
+        b = makeResearch('anthropic');
+      const clock = vi.spyOn(Date, 'now').mockReturnValue(1000);
+      vi.stubEnv('AI_REQUEST_TIMEOUT_MS', '1000');
+      const timers: { milliseconds: number; controller: AbortController }[] =
+        [];
+      vi.spyOn(AbortSignal, 'timeout').mockImplementation((milliseconds) => {
+        const controller = new AbortController();
+        timers.push({ milliseconds, controller });
+        return controller.signal;
+      });
+      a[method].mockImplementation(() => new Promise(() => {}));
+      const provider = new FallbackProvider([a, b]);
+      const options = { deadlineAt: 61_000 };
+      const pending =
+        method === 'structured'
+          ? provider.structured(schema, '', [], options)
+          : provider.research('public update', 'Australia/Sydney', options);
+      const attemptTimer = timers.find((timer) => timer.milliseconds === 1000);
+      expect(attemptTimer).toBeDefined();
+      clock.mockReturnValue(2000);
+      attemptTimer!.controller.abort();
+      await expect(pending).resolves.toMatchObject(
+        method === 'structured' ? { ok: true } : { provider: 'anthropic' },
+      );
+      expect(a[method]).toHaveBeenCalledTimes(1);
+      expect(b[method]).toHaveBeenCalledTimes(1);
+      expect(
+        a[method].mock.calls[0][method === 'structured' ? 3 : 2].signal.aborted,
+      ).toBe(true);
+      expect(
+        b[method].mock.calls[0][method === 'structured' ? 3 : 2].signal.aborted,
+      ).toBe(false);
+      expect(
+        provider.attempts.map((attempt) => ({
+          provider: attempt.provider,
+          status: attempt.status,
+          errorCode: attempt.errorCode,
+        })),
+      ).toEqual([
+        { provider: 'openai', status: 'failed', errorCode: 'AI_TIMEOUT' },
+        { provider: 'anthropic', status: 'completed', errorCode: undefined },
+      ]);
+    });
+  }
+  it('does not send any request when the run has already been cancelled', async () => {
+    const a = make('openai'),
+      b = make('anthropic');
+    const cancellation = new AbortController();
+    cancellation.abort();
+    await expect(
+      new FallbackProvider([a, b]).structured(schema, '', [], {
+        signal: cancellation.signal,
+      }),
+    ).rejects.toMatchObject({ code: 'AI_TIMEOUT' });
+    expect(a.structured).not.toHaveBeenCalled();
+    expect(b.structured).not.toHaveBeenCalled();
+  });
   it('switches providers for research while retaining a bounded audit trace', async () => {
     const a = {
         ...make('openai'),
@@ -192,8 +304,9 @@ describe('bounded availability fallback', () => {
       provider.research('current public update', 'Australia/Sydney'),
     ).resolves.toMatchObject({ provider: 'anthropic' });
     await provider.structured(schema, 'response', []);
-    expect(provider.attempts).toHaveLength(3);
+    expect(provider.attempts).toHaveLength(4);
     expect(provider.attempts.map((attempt) => attempt.step)).toEqual([
+      'routing',
       'research',
       'research',
       'response',
@@ -349,6 +462,7 @@ describe('Claude structured output and files', () => {
               agents: ['social'],
               reason: 'draft',
               webSearch: false,
+              calendarContext: false,
               searchQuery: null,
             }),
           },

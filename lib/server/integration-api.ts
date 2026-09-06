@@ -7,6 +7,7 @@ import {
   AdditionalProviderSchema,
   ProviderSchema,
   connectionList,
+  disconnectIntegration,
 } from './connections';
 import {
   startProvider,
@@ -16,12 +17,40 @@ import {
 import { googleAdsReport } from './google-ads';
 import { verifyProviderConnection } from './connection-health';
 import { AppError, requireValue } from './errors';
+import { cancelAction, replaceConnectionAction } from './actions';
 export async function integrationApi(
   request: Request,
   path: string,
   db: SupabaseClient,
   userId: string,
 ): Promise<Response | null> {
+  const recovery = path.match(/^actions\/([^/]+)\/(replace|cancel)$/);
+  if (recovery && request.method === 'POST') {
+    const actionId = Uuid.parse(recovery[1]);
+    const input = (
+      recovery[2] === 'replace'
+        ? z.object({ connectionId: Uuid }).strict()
+        : z.object({}).strict()
+    ).parse(await body(request));
+    const action = checked(
+      await db
+        .from('proposed_actions')
+        .select('workspace_id')
+        .eq('id', actionId)
+        .maybeSingle(),
+    );
+    requireValue(action, 'NOT_FOUND', 404);
+    await membership(db, userId, action.workspace_id, true);
+    return json(
+      'connectionId' in input
+        ? await replaceConnectionAction(
+            actionId,
+            userId,
+            input.connectionId as string,
+          )
+        : await cancelAction(actionId, userId),
+    );
+  }
   if (!path.startsWith('integrations')) return null;
   const url = new URL(request.url),
     method = request.method;
@@ -94,7 +123,21 @@ export async function integrationApi(
         input.connectionId,
       );
     } catch (error) {
-      if (!(error instanceof AppError && error.code === 'RECONNECT_REQUIRED'))
+      if (
+        !(
+          error instanceof AppError &&
+          [
+            'RECONNECT_REQUIRED',
+            'GOOGLE_ADS_ACCOUNT_ACCESS_REQUIRED',
+            'GOOGLE_ADS_ACCOUNT_DISABLED',
+            'GOOGLE_ADS_CONFIGURATION_REQUIRED',
+            'GOOGLE_ADS_CHECK_FAILED',
+            'GOOGLE_CALENDAR_CONFIGURATION_REQUIRED',
+            'GOOGLE_CALENDAR_CHECK_FAILED',
+            'FACEBOOK_CHECK_FAILED',
+          ].includes(error.code)
+        )
+      )
         throw error;
     }
     const connection = (await connectionList(input.workspaceId)).find(
@@ -113,27 +156,11 @@ export async function integrationApi(
       .strict()
       .parse(await body(request));
     await membership(db, userId, input.workspaceId, true);
-    checked(
-      await adminDb()
-        .from('integration_credentials')
-        .delete()
-        .eq('workspace_id', input.workspaceId)
-        .eq('provider', input.provider)
-        .eq('connection_id', input.connectionId),
-    );
-    checked(
-      await adminDb()
-        .from('integration_candidates')
-        .delete()
-        .eq('workspace_id', input.workspaceId)
-        .eq('provider', input.provider),
-    );
-    checked(
-      await adminDb()
-        .from('oauth_states')
-        .delete()
-        .eq('workspace_id', input.workspaceId)
-        .eq('provider', input.provider),
+    await disconnectIntegration(
+      input.workspaceId,
+      input.provider,
+      userId,
+      input.connectionId,
     );
     return json({ ok: true });
   }

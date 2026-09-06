@@ -5,6 +5,10 @@ browser code, chat, Git, screenshots or a customer-facing key entry field.
 See `.env.example` for the complete variable list. The server is this Vinext
 application, not a second service that needs a separate deployment.
 
+The canonical production origin was verified on 5 September 2026 as
+`https://tradie-ai-efuf.vercel.app`. Use this origin for `APP_ORIGIN` and the
+provider callbacks below; the previous Vercel alias is unavailable.
+
 ## 0. Database setup is complete for this project
 
 The selected project is [Tradie Ai](https://supabase.com/dashboard/project/gjrhukwqagaawdklnvxd).
@@ -115,7 +119,7 @@ The following steps describe repeat setup; steps 1–4 are complete here.
 1. In [Google Cloud Console](https://console.cloud.google.com/), select the
    intended project, enable Google Calendar API and configure Google Auth Platform.
 2. Create a Web Application OAuth client. Add the hosted redirect exactly:
-   `https://tradie-ai-nine.vercel.app/api/google/callback`.
+   `https://tradie-ai-efuf.vercel.app/api/google/callback`.
    For local testing add `http://localhost:3000/api/google/callback` separately.
 3. Set `GOOGLE_CLIENT_ID`, secret `GOOGLE_CLIENT_SECRET`, and the exact
    `APP_ORIGIN`. Preserve the existing secret `TOKEN_ENCRYPTION_KEY`.
@@ -167,7 +171,7 @@ customer consent.
    Page access. Set `META_LOGIN_CONFIG_ID` and `META_APP_ID` plus secret
    `META_APP_SECRET`.
 3. Add the exact OAuth redirect:
-   `https://tradie-ai-nine.vercel.app/api/integrations/facebook/callback`.
+   `https://tradie-ai-efuf.vercel.app/api/integrations/facebook/callback`.
 4. Complete Meta’s required app review/business verification for the intended
    external users. Permission eligibility/version details still require dashboard
    verification; successful unit tests are not Meta approval.
@@ -218,7 +222,7 @@ until those policies are accurate and hosted on a GreenVac-controlled domain.
    Access. Set secret `GOOGLE_ADS_DEVELOPER_TOKEN`.
 3. Google Ads can reuse the Calendar OAuth client, but needs this additional
    redirect exactly:
-   `https://tradie-ai-nine.vercel.app/api/integrations/google_ads/callback`.
+   `https://tradie-ai-efuf.vercel.app/api/integrations/google_ads/callback`.
    Optional separate credentials: `GOOGLE_ADS_CLIENT_ID` / `GOOGLE_ADS_CLIENT_SECRET`.
 4. Consent scope is `https://www.googleapis.com/auth/adwords`. Although Google’s
    scope permits broad access, this server exposes only fixed read queries. The

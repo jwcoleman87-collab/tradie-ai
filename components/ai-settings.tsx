@@ -1,6 +1,6 @@
 'use client';
 import { useState } from 'react';
-import { Button } from './ui/button';
+import { Button, Checkbox, Select } from './workbench-controls';
 import { BrandMark } from './brand';
 import {
   aiProviderNames,
@@ -58,9 +58,13 @@ export function AISettings({
           Workspace AI privacy and backup settings
         </legend>
         {aiProviderNames.map((name) => (
-          <label key={name} className="checkbox-label">
-            <input
-              type="checkbox"
+          <label
+            key={name}
+            className="checkbox-label"
+            htmlFor={`allow-provider-${name}`}
+          >
+            <Checkbox
+              id={`allow-provider-${name}`}
               checked={allowed.includes(name)}
               onChange={(e) =>
                 setAllowed(
@@ -83,9 +87,10 @@ export function AISettings({
             </span>
           </label>
         ))}
-        <label>
+        <label htmlFor="primary-provider">
           First choice
-          <select
+          <Select
+            id="primary-provider"
             aria-label="Primary AI provider"
             value={primary}
             onChange={(e) => setPrimary(e.target.value as AIProviderName)}
@@ -95,11 +100,11 @@ export function AISettings({
                 {aiProviderLabel(name)}
               </option>
             ))}
-          </select>
+          </Select>
         </label>
-        <label className="checkbox-label">
-          <input
-            type="checkbox"
+        <label className="checkbox-label" htmlFor="allow-provider-fallback">
+          <Checkbox
+            id="allow-provider-fallback"
             checked={fallback}
             onChange={(e) => setFallback(e.target.checked)}
           />
@@ -108,9 +113,9 @@ export function AISettings({
             API quota.
           </span>
         </label>
-        <label className="checkbox-label">
-          <input
-            type="checkbox"
+        <label className="checkbox-label" htmlFor="allow-ai-processing">
+          <Checkbox
+            id="allow-ai-processing"
             checked={enabled}
             onChange={(e) => setEnabled(e.target.checked)}
           />

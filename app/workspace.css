@@ -210,10 +210,10 @@
   color: #8a5ebf;
   margin: 5px 0 22px;
 }
-.message-history > h2 {
+.message-content > h2 {
   font-size: 27px;
 }
-.message-history > .muted {
+.message-content > .muted {
   font-size: 13px;
 }
 .starter-grid {
@@ -1318,4 +1318,247 @@
   margin-top: 3px;
   accent-color: #7c4ba2;
   flex-shrink: 0;
+}
+
+/* Workbench activity and draft controls share the existing compact shell. */
+.app-shell .conversation-panel .panel-heading {
+  flex-wrap: nowrap;
+  gap: 10px;
+}
+.app-shell .chat-activity {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+.app-shell .agent-cluster {
+  display: flex;
+  gap: 4px;
+}
+.app-shell .agent-cluster button {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  border: 1px solid var(--workbench-line);
+  border-radius: 50%;
+  background: var(--workbench-paper);
+  color: var(--workbench-steel);
+  cursor: pointer;
+}
+.app-shell .agent-cluster button[aria-pressed='true'] {
+  outline: 2px solid var(--workbench-navy);
+  outline-offset: 1px;
+}
+.app-shell .agent-cluster button.is-working {
+  background: var(--workbench-yellow);
+  color: var(--workbench-ink);
+  border-color: var(--workbench-yellow-strong);
+}
+.app-shell .activity-ribbon {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--workbench-steel);
+  font-size: 12px;
+  line-height: 18px;
+}
+.app-shell .activity-ribbon.is-working::before {
+  content: '';
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 5px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: workbench-activity 1.4s ease-in-out infinite;
+}
+@keyframes workbench-activity {
+  50% {
+    opacity: 0.35;
+  }
+}
+.app-shell .composer .composer-footer .composer-send {
+  width: auto;
+  min-width: 72px;
+  padding-inline: 8px;
+  gap: 4px;
+}
+.app-shell .composer .voice-controls {
+  display: flex;
+  gap: 4px;
+}
+.app-shell .composer .voice-controls [data-slot='button'] {
+  width: auto;
+  min-width: 56px;
+  padding-inline: 8px;
+  font-size: 14px;
+}
+.app-shell .composer[data-listening='true'] {
+  border-color: var(--workbench-navy);
+}
+.app-shell .action-filters {
+  display: flex;
+  gap: 4px;
+  min-width: 0;
+  margin: 12px 0 0;
+  padding: 0;
+  border: 0;
+}
+.app-shell .action-filters button {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+  min-height: 44px;
+  padding: 6px;
+  border: 1px solid var(--workbench-line);
+  border-radius: 8px;
+  color: var(--workbench-ink);
+  background: white;
+  font-size: 14px;
+  cursor: pointer;
+}
+.app-shell .action-filters button[aria-pressed='true'] {
+  background: var(--workbench-yellow);
+  border-color: var(--workbench-yellow-strong);
+  font-weight: 650;
+}
+.app-shell .action-filters button span {
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+}
+.app-shell :is(.agent-cluster, .action-filters) button:focus-visible {
+  outline: 2px solid var(--workbench-navy);
+  outline-offset: 2px;
+}
+@media (max-width: 1024px) {
+  .app-shell .conversation-panel .panel-heading {
+    padding-block: 6px;
+  }
+  .app-shell .agent-cluster button {
+    width: 26px;
+    height: 26px;
+  }
+  @container workspace (max-height: 400px) {
+    .app-shell .chat-activity {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .app-shell .activity-ribbon {
+      flex: 1;
+    }
+    .app-shell .agent-cluster {
+      gap: 2px;
+    }
+    .app-shell .agent-cluster button {
+      width: 24px;
+      height: 24px;
+    }
+    .app-shell .conversation-panel .message-history {
+      padding-block: 4px;
+    }
+    .app-shell .conversation-panel .composer textarea {
+      max-height: 64px;
+    }
+    .app-shell .conversation-panel .composer:has(.agent-tags) textarea {
+      height: 44px;
+      max-height: 44px;
+    }
+    .app-shell .conversation-panel .composer .agent-tags {
+      max-height: 24px;
+      flex-wrap: nowrap;
+      overflow: auto;
+    }
+    .app-shell .conversation-panel .composer .agent-tags button {
+      flex-shrink: 0;
+      white-space: nowrap;
+    }
+    .app-shell .conversation-panel .composer-caption {
+      max-height: 2lh;
+      overflow-y: auto;
+    }
+  }
+  @container workspace (max-height: 400px) and (min-width: 540px) {
+    .app-shell
+      .workspace-grid[data-mobile='chat']:not([data-settings='true'])
+      section.conversation-panel {
+      grid-template-columns: minmax(220px, 1fr) minmax(0, 1.25fr);
+    }
+  }
+  /* On very short landscape keyboards, share the remaining height instead of
+     stacking the composer underneath a message area only one pixel tall. */
+  @container workspace (max-height: 260px) and (min-width: 540px) {
+    .app-shell
+      .workspace-grid[data-mobile='chat']:not([data-settings='true'])
+      section.conversation-panel {
+      grid-template-rows: auto minmax(0, 1fr) auto;
+    }
+    .app-shell .workspace-grid .conversation-panel .message-history {
+      grid-column: 1;
+      grid-row: 2 / 4;
+      padding-inline: 8px;
+    }
+    .app-shell .workspace-grid .conversation-panel .composer {
+      grid-column: 2;
+      grid-row: 2;
+      margin-inline: 8px;
+      align-self: end;
+    }
+    .app-shell .workspace-grid .conversation-panel .composer-caption {
+      grid-column: 2;
+      grid-row: 3;
+      margin-inline: 8px;
+    }
+    .app-shell .workspace-grid .conversation-panel .chat-activity {
+      display: grid;
+      gap: 0;
+    }
+    .app-shell
+      .workspace-grid
+      .conversation-panel:has(.composer .agent-tags)
+      .composer {
+      grid-row: 2 / 4;
+      grid-template-columns: minmax(0, 1fr) auto;
+    }
+    .app-shell
+      .workspace-grid
+      .conversation-panel:has(.composer .agent-tags)
+      .message-history {
+      grid-row: 2;
+    }
+    .app-shell
+      .workspace-grid
+      .conversation-panel:has(.composer .agent-tags)
+      .composer-caption {
+      grid-column: 1;
+    }
+    .app-shell .workspace-grid .conversation-panel .composer .agent-tags {
+      grid-column: 1 / -1;
+      grid-row: 1;
+      max-height: 24px;
+    }
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .app-shell *,
+  .app-shell *::before,
+  .app-shell *::after,
+  body:has(.app-shell) [data-slot='dialog-overlay'],
+  body:has(.app-shell) [data-slot='dialog-content'] {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+  .app-shell .agent-card:hover,
+  .app-shell .agent-card:focus-visible,
+  .app-shell .workspace-summary-grid button:hover {
+    transform: none;
+  }
 }

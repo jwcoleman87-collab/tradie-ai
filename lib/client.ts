@@ -29,9 +29,11 @@ export async function requestApi<T>(
   path: string,
   method = 'GET',
   data?: unknown,
+  signal?: AbortSignal,
 ): Promise<T> {
   const response = await fetch(`/api/${path}`, {
     method,
+    signal,
     headers: {
       Authorization: `Bearer ${token}`,
       ...(data === undefined ? {} : { 'Content-Type': 'application/json' }),

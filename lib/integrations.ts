@@ -35,6 +35,7 @@ export type PendingConnection = {
   expiresAt: string;
   resources: ResourceChoice[];
   limited: boolean;
+  incomplete?: boolean;
 };
 export type AdsReport = {
   account: ResourceChoice;

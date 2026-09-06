@@ -125,6 +125,7 @@ export const RouteOutput = z
     agents: z.array(Agent).min(1).max(5),
     reason: z.string().max(500),
     webSearch: z.boolean(),
+    calendarContext: z.boolean(),
     searchQuery: z.string().trim().min(3).max(300).nullable(),
   })
   .strict();
@@ -250,7 +251,9 @@ export type ActionStatus =
   | 'executing'
   | 'completed'
   | 'failed'
-  | 'expired';
+  | 'expired'
+  | 'superseded'
+  | 'cancelled';
 export type Action = {
   id: string;
   workspace_id: string;
@@ -264,6 +267,20 @@ export type Action = {
   expires_at: string;
   error_code: string | null;
   execution_result: Record<string, unknown> | null;
+  superseded_by?: string | null;
+  replaces_action_id?: string | null;
+  approved_at?: string | null;
+  executed_at?: string | null;
+  lease_until?: string | null;
+  attempts?: number;
+  publication_receipt?: { url: string } | null;
+  publication_confirmed_at?: string | null;
+  publication_status?:
+    | 'sending'
+    | 'uncertain'
+    | 'confirmed'
+    | 'rejected'
+    | null;
   created_at: string;
 };
 export type ChatMessage = {
@@ -319,6 +336,7 @@ export type BusinessRecord = {
   created_at: string;
 };
 export type Snapshot = {
+  businessProfile?: { base_location: string | null; services: string[] } | null;
   workspaces: WorkspaceData[];
   workspace: WorkspaceData;
   role: string;
@@ -326,6 +344,12 @@ export type Snapshot = {
   conversationId: string | null;
   messages: ChatMessage[];
   actions: Action[];
+  actionCoverage?: {
+    outstandingReturned: number;
+    outstandingTotal: number | null;
+    historyReturned: number;
+    historyTotal: number | null;
+  };
   uploads: Upload[];
   cases: Escalation[];
   records: BusinessRecord[];
@@ -338,6 +362,7 @@ export type Snapshot = {
   }[];
   runs: {
     id: string;
+    request_id?: string;
     agents: AgentName[];
     status: string;
     model: string | null;

@@ -1,30 +1,53 @@
 import { brands, findBrandIdsInText, type BrandId } from '@/lib/brands';
+import Image from 'next/image';
 
 export function BrandMark({
   brand,
+  src,
+  alt,
+  initials,
   showLabel = false,
   compact = false,
+  size = compact ? 'sm' : 'md',
 }: {
-  brand: BrandId;
+  brand?: BrandId;
+  src?: string;
+  alt?: string;
+  initials?: string;
   showLabel?: boolean;
   compact?: boolean;
+  size?: 'sm' | 'md';
 }) {
-  const value = brands[brand];
+  const value = brand ? brands[brand] : undefined;
+  const label = alt || value?.label || 'Business';
+  const asset = src || value?.asset;
   return (
     <span
       className={`brand-mark ${compact ? 'compact' : ''}`}
       data-brand={brand}
-      title={`${value.label} branding`}
-      aria-label={showLabel ? value.label : undefined}
+      data-brand-size={size}
+      title={label}
+      aria-label={label}
     >
-      <span className={`brand-logo-box ${value.format}`}>
-        {/* Curated local trademark assets do not need Next image transformation. */}
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={value.asset} alt="" aria-hidden="true" />
+      <span
+        className={`brand-logo-box ${value?.format || 'icon'} ${asset ? '' : 'brand-initials'}`}
+      >
+        {asset ? (
+          <Image
+            src={asset}
+            alt=""
+            aria-hidden="true"
+            width={32}
+            height={32}
+            unoptimized
+          />
+        ) : (
+          <span aria-hidden="true">
+            {initials || label.slice(0, 2).toUpperCase()}
+          </span>
+        )}
       </span>
-      {showLabel && !value.imageIncludesLabel && (
-        <span className="brand-label">{value.label}</span>
-      )}
+      {showLabel && <span className="brand-label">{label}</span>}
     </span>
   );
 }

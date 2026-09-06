@@ -222,7 +222,7 @@ describe('provider consent and multi-connection safety', () => {
     );
     const expired = id();
     await db.query(
-      "insert into integration_candidates(id,workspace_id,user_id,provider,ciphertext,expires_at) values($1,$2,$3,'google_ads','private-cipher',now()-interval '1 minute')",
+      "insert into integration_candidates(id,workspace_id,user_id,provider,ciphertext,expires_at,generation) values($1,$2,$3,'google_ads','private-cipher',now()-interval '1 minute',public.lock_integration_generation($2,'google_ads'))",
       [expired, wA, ownerA],
     );
     await expect(
@@ -1023,7 +1023,7 @@ describe('chat transaction and escalation privacy', () => {
         'test',
         [],
         [],
-        Array(4).fill({ provider: 'openai' }),
+        Array(9).fill({ provider: 'openai' }),
       ]),
     ).rejects.toThrow('INVALID_INPUT');
     expect(

@@ -4,6 +4,7 @@ import './globals.css';
 import './workspace.css';
 import './workbench.css';
 import './public.css';
+import './setout.css';
 
 const inter = Inter({
   variable: '--font-inter',

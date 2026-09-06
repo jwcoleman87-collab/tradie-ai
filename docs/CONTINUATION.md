@@ -1,5 +1,28 @@
 # Workbench — continuation checkpoint for Claude or another engineer
 
+> **CI deadline correction, 5 September 2026:** The later CI run exposed a retry
+> race at stage expiry. See [CI-DEADLINE-FIX.md](CI-DEADLINE-FIX.md). Shared deadline
+> cancellation now remains terminal across provider retries, with deterministic
+> regression coverage. Local validation: 286 tests, lint, typecheck and build pass.
+> The workflow's checkout/setup-node actions now use their Node.js 24 versions.
+
+> **Mobile composer repair, 5 September 2026:** See
+> [MOBILE-COMPOSER-FIX.md](MOBILE-COMPOSER-FIX.md). The Chat field now uses at least
+> 16px text and the shell follows the space above the mobile keyboard. Compact
+> typing layouts keep Send visible, including short landscape views; manual zoom
+> remains enabled. Validation: 283 tests and 28 browser layout cases passed.
+
+> **Connector and Chat repair, 5 September 2026:** See
+> [CONNECTOR-CHAT-REPAIR.md](CONNECTOR-CHAT-REPAIR.md) for the repaired source,
+> lease/deadline policy, applied migrations and production verification.
+> Current production address: `https://tradie-ai-efuf.vercel.app`. Both required
+> migrations are applied and the repaired build is live. Deployment/schema
+> checks and both signed-in Chat tests passed (17s caption, 13s disconnected
+> Calendar, including reload recovery). The old private Sites app now redirects
+> to this app and its obsolete API is disabled. Live provider health checks remain
+> unverified because the selected workspace has no connected accounts.
+> Older deployment statements below are historical, not verification of this repair.
+
 > **Current next-build handover (2 September 2026):** Read
 > [`HANDOVER-LANDING-ONBOARDING.md`](./HANDOVER-LANDING-ONBOARDING.md) before
 > starting new work. It contains James's locked-aesthetic direction and the

@@ -6,11 +6,12 @@ import {
   type ResourceChoice,
   type AdditionalProvider,
 } from '../integrations';
-import { adminDb, checked } from './db';
+import { adminDb, checked, rpc } from './db';
 import { decrypt } from './crypto';
 import { env } from './config';
 import { providerReady, googleAdsClient } from './provider-config';
 import { AppError, requireValue, timedFetch } from './errors';
+import { googleRefreshFailure } from './provider-http';
 export const ProviderSchema = z.enum(providers);
 export const AdditionalProviderSchema = z.enum(['facebook', 'google_ads']);
 export const StoredCredentials = z
@@ -65,7 +66,7 @@ export async function connectionList(
       lastErrorCode: row?.last_error_code || null,
       lastErrorAt: row?.last_error_at || null,
       capabilities:
-        row?.status === 'connected' && configured
+        row?.status === 'connected' && !row?.last_error_code && configured
           ? provider === 'facebook'
             ? env('FACEBOOK_PUBLISHING_ENABLED') === 'true'
               ? ['facebook.publish']
@@ -81,19 +82,40 @@ export async function providerCredentials(
   workspaceId: string,
   provider: AdditionalProvider,
   connectionId?: string,
+  options: { allowReadOnlyRecheck?: boolean } = {},
 ) {
   let query = adminDb()
     .from('integration_credentials')
     .select(
-      'connection_id,external_id,encrypted_refresh_token,credential_kind,status',
+      'connection_id,external_id,encrypted_refresh_token,credential_kind,status,last_error_code',
     )
     .eq('workspace_id', workspaceId)
     .eq('provider', provider);
   if (connectionId) query = query.eq('connection_id', connectionId);
   const row = checked(await query.maybeSingle());
+  if (row?.last_error_code === 'FACEBOOK_PERMISSIONS_REQUIRED')
+    throw new AppError(
+      'FACEBOOK_PERMISSIONS_REQUIRED',
+      409,
+      'Reconnect Facebook and grant the required publishing permissions.',
+    );
+  if (
+    row?.status === 'connected' &&
+    row.last_error_code &&
+    !(options.allowReadOnlyRecheck === true && connectionId)
+  )
+    throw new AppError(
+      row.last_error_code,
+      409,
+      'Resolve the saved connection issue in Connections, then check the connection again.',
+    );
   requireValue(
     row &&
-      row.status === 'connected' &&
+      ((row.status === 'connected' && !row.last_error_code) ||
+        (options.allowReadOnlyRecheck === true &&
+          !!connectionId &&
+          ['connected', 'reconnect_required'].includes(row.status) &&
+          row.last_error_code !== 'FACEBOOK_PERMISSIONS_REQUIRED')) &&
       row.credential_kind === 'provider_json_v1',
     'RECONNECT_REQUIRED',
     409,
@@ -126,16 +148,7 @@ export async function googleAdsAccess(refreshToken: string) {
     }),
     redirect: 'manual',
   });
-  if (!response.ok)
-    throw new AppError(
-      [400, 401].includes(response.status)
-        ? 'RECONNECT_REQUIRED'
-        : 'UPSTREAM_UNAVAILABLE',
-      [400, 401].includes(response.status) ? 409 : 503,
-      [400, 401].includes(response.status)
-        ? 'Reconnect Google Ads to restore reporting access.'
-        : 'Google Ads could not be checked right now. Your saved connection was not removed.',
-    );
+  if (!response.ok) throw await googleRefreshFailure(response, 'google_ads');
   return z
     .object({ access_token: z.string().min(1) })
     .parse(await response.json()).access_token;
@@ -183,8 +196,45 @@ export async function markConnectionReconnectRequired(
       .eq('connection_id', connectionId),
   );
 }
+export async function recordConnectionIssue(
+  workspaceId: string,
+  provider: Provider,
+  connectionId: string,
+  errorCode: string,
+) {
+  checked(
+    await adminDb()
+      .from('integration_credentials')
+      .update({
+        verified_at: null,
+        last_error_code: errorCode,
+        last_error_at: new Date().toISOString(),
+      })
+      .eq('workspace_id', workspaceId)
+      .eq('provider', provider)
+      .eq('connection_id', connectionId),
+  );
+}
+export async function disconnectIntegration(
+  workspaceId: string,
+  provider: Provider,
+  userId: string,
+  connectionId?: string,
+) {
+  await rpc(adminDb(), 'disconnect_integration', {
+    p_workspace: workspaceId,
+    p_provider: provider,
+    p_user: userId,
+    p_connection: connectionId || null,
+  });
+  if (provider === 'google_calendar') {
+    const { invalidateCalendarTokenCache } = await import('./calendar');
+    invalidateCalendarTokenCache(workspaceId);
+  }
+}
 export type CandidateSecrets = {
   resources: (ResourceChoice & { token: string })[];
   scopes: string[];
   limited: boolean;
+  incomplete?: boolean;
 };

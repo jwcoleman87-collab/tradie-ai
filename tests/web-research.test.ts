@@ -184,6 +184,7 @@ it('researches only after routing and gives every selected agent cited context',
             agents: ['marketing', 'website'],
             reason: 'current competitor research',
             webSearch: true,
+            calendarContext: false,
             searchQuery: 'current Australian trade services marketing trends',
           }
         : {
