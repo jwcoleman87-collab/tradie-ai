@@ -8,9 +8,10 @@ import {
 } from '../contracts';
 import { adminDb, authenticate, checked, membership, rpc } from './db';
 import { body, endpoint, json, noStore } from './http';
-import { publicConfig } from './config';
+import { env, publicConfig } from './config';
 import { AppError, requireValue } from './errors';
 import { runTeam } from './ai';
+import { facebookPreparationAvailable } from '../facebook-readiness';
 import { createAIProvider } from './ai-provider';
 import { AIConsentInput, type AIPreferences } from '../ai-settings';
 import { executeAction } from './actions';
@@ -755,11 +756,7 @@ async function handleApi(
           409,
           'Connect Google Calendar first, then ask your team to prepare the booking.',
         );
-        const facebook = integrations.find(
-          (c) =>
-            c.provider === 'facebook' &&
-            c.capabilities.includes('facebook.publish'),
-        );
+        const facebook = integrations.find(facebookPreparationAvailable);
         requireValue(
           !result.proposals.some(
             (p) =>
@@ -768,7 +765,7 @@ async function handleApi(
           ),
           'FACEBOOK_NOT_CONNECTED',
           409,
-          'Connect and select a Facebook Page with publishing enabled first.',
+          'Connect and select a Facebook Page with valid access before preparing the post.',
         );
         for (const proposal of result.proposals) {
           if (
@@ -1083,12 +1080,23 @@ async function handleApi(
     const action = checked(
       await db
         .from('proposed_actions')
-        .select('workspace_id')
+        .select('workspace_id,action_type,status')
         .eq('id', actionId)
         .maybeSingle(),
     );
     requireValue(action, 'NOT_FOUND', 404);
     await membership(db, user.id, action.workspace_id, true);
+    if (
+      input.decision === 'accept' &&
+      action.action_type === 'facebook.publish' &&
+      action.status === 'waiting_approval'
+    )
+      requireValue(
+        env('FACEBOOK_PUBLISHING_ENABLED') === 'true',
+        'PUBLISHING_DISABLED',
+        409,
+        'Facebook publishing is switched off in Workbench. This post remains ready for review; no approval or publication was recorded.',
+      );
     const decided = await rpc<Action>(admin, 'decide_action', {
       p_action: actionId,
       p_user: user.id,
