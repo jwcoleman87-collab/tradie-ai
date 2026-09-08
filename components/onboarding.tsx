@@ -96,6 +96,10 @@ export default function Onboarding() {
     crypto.randomUUID(),
   );
   const chatRef = useRef<HTMLDivElement>(null);
+  const pendingRequest = state?.requests?.find(
+    (receipt) => receipt.status === 'queued' || receipt.status === 'working',
+  );
+  const [pollPaused, setPollPaused] = useState(false);
 
   const load = useCallback(
     async (requestedWorkspaceId?: string) => {
@@ -136,6 +140,46 @@ export default function Onboarding() {
     }
     void load();
   }, [authLoading, load, router, session]);
+
+  useEffect(() => {
+    if (
+      !session ||
+      !state?.workspaceId ||
+      !pendingRequest ||
+      busy ||
+      pollPaused
+    )
+      return;
+    let cancelled = false;
+    const timer = window.setTimeout(async () => {
+      try {
+        const next = await requestApi<OnboardingSnapshot>(
+          session.access_token,
+          'onboarding/turn',
+          'POST',
+          {
+            workspaceId: state.workspaceId,
+            requestId: pendingRequest.requestId,
+            answer: pendingRequest.answer,
+            allowAI: pendingRequest.allowAI,
+          },
+        );
+        if (!cancelled) setState(next);
+      } catch (caught) {
+        if (!cancelled) {
+          setError(messageOf(caught));
+          // Refresh the saved receipt once; don't repeatedly dispatch on an
+          // unknown network/authentication error. Resume is an explicit action.
+          setPollPaused(true);
+          void load(state.workspaceId!);
+        }
+      }
+    }, 1500);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [session, state?.workspaceId, pendingRequest, busy, pollPaused, load]);
 
   useEffect(() => {
     if (!state) return;
@@ -198,21 +242,44 @@ export default function Onboarding() {
       return;
     }
     await perform(async () => {
-      const next = await requestApi<OnboardingSnapshot>(
-        session.access_token,
-        'onboarding/turn',
-        'POST',
-        {
-          workspaceId: state?.workspaceId || null,
-          requestId: answerRequestId,
-          answer: answer.trim(),
-          allowAI: state?.aiConsentRequired ? allowAI : false,
-        },
-      );
-      setState(next);
-      setAnswer('');
-      setAllowAI(false);
-      setAnswerRequestId(crypto.randomUUID());
+      setPollPaused(false);
+      try {
+        const next = await requestApi<OnboardingSnapshot>(
+          session.access_token,
+          'onboarding/turn',
+          'POST',
+          {
+            workspaceId: state?.workspaceId || null,
+            requestId: answerRequestId,
+            answer: answer.trim(),
+            allowAI:
+              state?.requests?.find(
+                (receipt) => receipt.requestId === answerRequestId,
+              )?.allowAI ?? (state?.aiConsentRequired ? allowAI : false),
+          },
+        );
+        setState(next);
+        if (
+          next.requests?.some(
+            (receipt) =>
+              receipt.requestId === answerRequestId &&
+              receipt.status === 'failed',
+          )
+        ) {
+          setError(
+            'This saved request already failed and was not sent again. Use “Review and send a new request” below its saved answer to try again.',
+          );
+          return;
+        }
+        setAnswer('');
+        setAllowAI(false);
+        setAnswerRequestId(crypto.randomUUID());
+      } catch (caught) {
+        // A lost response may still have saved the answer. Preserve the draft
+        // and same ID while retrieving its durable receipt before recovery.
+        await load(state?.workspaceId || undefined);
+        throw caught;
+      }
     });
   }
 
@@ -389,6 +456,29 @@ export default function Onboarding() {
                   className={`onboarding-message ${message.role}`}
                 >
                   <MessageCopy text={message.content} />
+                  {state.requests?.find(
+                    (receipt) => receipt.requestId === message.id,
+                  )?.status === 'failed' && (
+                    <output>
+                      <span>
+                        This answer is saved, but its reply could not be
+                        completed. It will not be sent again automatically.
+                      </span>
+                      <Button
+                        variant="outline"
+                        disabled={busy}
+                        onClick={() => {
+                          setAnswer(message.content);
+                          setAnswerRequestId(crypto.randomUUID());
+                          setError(
+                            'Review this saved answer, then Send to Chat to make a new request. This may use AI again.',
+                          );
+                        }}
+                      >
+                        Review and send a new request
+                      </Button>
+                    </output>
+                  )}
                 </div>
               ))}
               {busy && (
@@ -404,6 +494,31 @@ export default function Onboarding() {
                 void sendAnswer();
               }}
             >
+              {pendingRequest && (
+                <output>
+                  Your answer is saved.{' '}
+                  {pendingRequest.status === 'queued'
+                    ? 'It is waiting for the earlier reply.'
+                    : 'Chat is preparing its reply.'}
+                </output>
+              )}
+              {pollPaused && pendingRequest && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setPollPaused(false);
+                    setError('');
+                  }}
+                >
+                  Check saved request
+                </Button>
+              )}
+              {error && (
+                <div className="form-alert" role="alert">
+                  {error}
+                </div>
+              )}
               <Textarea
                 aria-label="Message Chat"
                 placeholder="Ask Chat anything or tell me about your business…"
@@ -583,11 +698,6 @@ export default function Onboarding() {
                   </Button>
                 </div>
               )}
-            </div>
-          )}
-          {error && (
-            <div className="form-alert" role="alert">
-              {error}
             </div>
           )}
         </section>

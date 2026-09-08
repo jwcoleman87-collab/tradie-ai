@@ -5,15 +5,61 @@ permissions:
 jobs:
   verify:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:18.4
+        env:
+          POSTGRES_PASSWORD: synthetic-local-e2e-postgres
+        ports:
+          - '127.0.0.1:55439:5432'
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      NEXT_TELEMETRY_DISABLED: '1'
+      E2E_ISOLATED_POSTGRES: '1'
+      E2E_INFRA_CONFIG: ${{ github.workspace }}/tmp/review-ci/infra-config.json
+      E2E_TOOLING_ROOT: ${{ github.workspace }}/scripts/review/tooling
+      E2E_EVIDENCE_DIR: ${{ github.workspace }}/evidence/ci
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            scripts/review/tooling/package-lock.json
       - run: npm ci
+      - run: npm run format -- --check
       - run: npm run typecheck
       - run: npm run lint
       - run: npm test
       - run: npm run build
       - run: npm audit --audit-level=high
+      - name: Install locked isolated test tools
+        run: npm ci --prefix scripts/review/tooling
+      - name: Audit isolated test tools
+        run: npm audit --prefix scripts/review/tooling --audit-level=high
+      - name: Install mandatory Chromium
+        run: node scripts/review/tooling/node_modules/playwright/cli.js install --with-deps chromium
+      - name: Download checksum-pinned PostgREST
+        run: node scripts/review/download-postgrest.mjs
+      - name: Verify native database, HTTP and browser flows
+        run: node scripts/review/run-critical-e2e.mjs
+      - name: Preserve sanitized verification evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: critical-e2e-${{ github.sha }}
+          if-no-files-found: warn
+          retention-days: 14
+          path: |
+            evidence/ci/**/*.json
+            evidence/ci/**/*.png
+            evidence/ci/**/browser-trace.zip
+            evidence/ci/diagnostics/**/*.log
+            !evidence/ci/**/runtime/**

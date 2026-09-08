@@ -1,17 +1,23 @@
-import { chromium } from '../../../e2e-tooling-20260908/node_modules/playwright/index.mjs';
+import {
+  chromium,
+  appOrigin,
+  gatewayOrigin,
+  evidenceRoot,
+  browserLaunchOptions,
+} from './review-env.mjs';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
-const phase = process.argv[2] || 'baseline';
-const origin = 'http://127.0.0.1:3108';
-const gateway = 'http://127.0.0.1:55441';
-mkdirSync(`evidence/${phase}`, { recursive: true });
+const phase = process.argv[2] || 'final';
+mkdirSync(`${evidenceRoot}/runtime`, { recursive: true });
+const origin = appOrigin;
+const gateway = gatewayOrigin;
+mkdirSync(`${evidenceRoot}/${phase}`, { recursive: true });
 const checks = [];
 const errors = [];
+const pageErrors = [];
+let signingOut = false;
 const requests = [];
-const browser = await chromium.launch({
-  executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe',
-  headless: true,
-});
+const browser = await chromium.launch(browserLaunchOptions());
 const context = await browser.newContext({
   viewport: { width: 1440, height: 1000 },
 });
@@ -27,7 +33,10 @@ await context.tracing.start({
 });
 const page = await context.newPage();
 page.setDefaultTimeout(12000);
-page.on('pageerror', (error) => errors.push(error.message));
+page.on('pageerror', (error) => {
+  pageErrors.push(error.message);
+  errors.push(error.message);
+});
 page.on('console', (message) => {
   if (message.type() === 'error') errors.push(message.text());
 });
@@ -36,6 +45,7 @@ page.on('response', (response) => {
     requests.push({
       path: new URL(response.url()).pathname,
       status: response.status(),
+      afterSignOut: signingOut,
     });
 });
 async function check(name, run) {
@@ -46,13 +56,13 @@ async function check(name, run) {
     checks.push({ name, status: 'failed', error: error.message });
     await page
       .screenshot({
-        path: `evidence/${phase}/${checks.length}-failure.png`,
+        path: `${evidenceRoot}/${phase}/${checks.length}-failure.png`,
         fullPage: true,
       })
       .catch(() => {});
   }
   writeFileSync(
-    `evidence/${phase}/browser-results.json`,
+    `${evidenceRoot}/${phase}/browser-results.json`,
     JSON.stringify({ checks, errors, requests }, null, 2),
   );
 }
@@ -100,7 +110,7 @@ await check(
       .first()
       .waitFor();
     await page.screenshot({
-      path: `evidence/${phase}/landing-desktop.png`,
+      path: `${evidenceRoot}/${phase}/landing-desktop.png`,
       fullPage: true,
     });
     return { headers: await response.allHeaders(), title: await page.title() };
@@ -117,7 +127,7 @@ await check('Cross-origin browser framing is refused', async () => {
         .catch(() => '')
     : '';
   await page.screenshot({
-    path: `evidence/${phase}/cross-origin-frame.png`,
+    path: `${evidenceRoot}/${phase}/cross-origin-frame.png`,
     fullPage: true,
   });
   if (readable.includes('Open your Workbench'))
@@ -192,7 +202,7 @@ await check(
     )
       throw Error('First submitted answer absent in persisted HTTP snapshot');
     await page.screenshot({
-      path: `evidence/${phase}/onboarding-first-answer.png`,
+      path: `${evidenceRoot}/${phase}/onboarding-first-answer.png`,
       fullPage: true,
     });
     return { workspaceId, aiCalls: (await modelEvents()).length };
@@ -246,7 +256,7 @@ await check(
     const state = await api(`state?workspaceId=${workspaceId}`);
     conversationId = state.data.conversationId;
     await page.screenshot({
-      path: `evidence/${phase}/workspace-after-onboarding.png`,
+      path: `${evidenceRoot}/${phase}/workspace-after-onboarding.png`,
       fullPage: true,
     });
     return {
@@ -276,7 +286,7 @@ await check(
     if (!events.some((e) => e.hasConfirmedProfile))
       throw Error('Confirmed business profile missing at provider boundary');
     await page.screenshot({
-      path: `evidence/${phase}/chat-desktop.png`,
+      path: `${evidenceRoot}/${phase}/chat-desktop.png`,
       fullPage: true,
     });
     return { events };
@@ -329,7 +339,7 @@ await check(
       };
     });
     await page.screenshot({
-      path: `evidence/${phase}/chat-mobile.png`,
+      path: `${evidenceRoot}/${phase}/chat-mobile.png`,
       fullPage: true,
     });
     if (metrics.scrollWidth > metrics.viewport)
@@ -409,7 +419,7 @@ await check(
     )
       throw Error('Denied proposal executed or was not denied');
     await page.screenshot({
-      path: `evidence/${phase}/denied-mobile.png`,
+      path: `${evidenceRoot}/${phase}/denied-mobile.png`,
       fullPage: true,
     });
     return { records: state.data.records.length };
@@ -433,7 +443,7 @@ await check(
       .getByRole('button', { name: 'Save record', exact: true })
       .waitFor();
     await page.screenshot({
-      path: `evidence/${phase}/approval-mobile.png`,
+      path: `${evidenceRoot}/${phase}/approval-mobile.png`,
       fullPage: true,
     });
     const before = await api(
@@ -520,7 +530,7 @@ await check(
     )
       throw Error('Failed run or submitted message not durable');
     await page.screenshot({
-      path: `evidence/${phase}/provider-failure.png`,
+      path: `${evidenceRoot}/${phase}/provider-failure.png`,
       fullPage: true,
     });
     await control({ mode: 'success' });
@@ -549,7 +559,7 @@ await check(
     )
       throw Error('Expected durable timeout receipt absent');
     await page.screenshot({
-      path: `evidence/${phase}/provider-timeout.png`,
+      path: `${evidenceRoot}/${phase}/provider-timeout.png`,
       fullPage: true,
     });
     const events = await modelEvents();
@@ -562,6 +572,7 @@ await check(
 await check(
   'Sign out hides private data and invalid sessions fail closed',
   async () => {
+    signingOut = true;
     await page.getByRole('button', { name: 'Sign out', exact: true }).click();
     await page.waitForTimeout(400);
     const body = await page.locator('body').innerText();
@@ -585,7 +596,7 @@ await check(
     )
       throw Error('Private content after signed-out reload');
     await page.screenshot({
-      path: `evidence/${phase}/signed-out.png`,
+      path: `${evidenceRoot}/${phase}/signed-out.png`,
       fullPage: true,
     });
     return {
@@ -595,16 +606,49 @@ await check(
     };
   },
 );
+await check(
+  'No unexpected page exceptions or failed application requests',
+  async () => {
+    if (pageErrors.length)
+      throw Error(`Uncaught page errors: ${pageErrors.join('; ')}`);
+    const unexpected = requests.filter(
+      (r) =>
+        !(r.afterSignOut && r.status === 401 && r.path === '/api/integrations'),
+    );
+    if (unexpected.length)
+      throw Error(`Unexpected failed requests: ${JSON.stringify(unexpected)}`);
+    const unexpectedConsole = errors.filter(
+      (message) =>
+        !message.includes(
+          'violates the following Content Security Policy directive',
+        ) &&
+        !(
+          message.includes('401 (Unauthorized)') &&
+          requests.some((r) => r.afterSignOut && r.status === 401)
+        ),
+    );
+    if (unexpectedConsole.length)
+      throw Error(`Unexpected console errors: ${unexpectedConsole.join('; ')}`);
+    return {
+      uncaughtPageErrors: 0,
+      unexpectedFailedRequests: 0,
+      expectedFramingDenial: true,
+      allowedPostLogoutDenials: requests.length,
+    };
+  },
+);
 await context.storageState({
-  path: `evidence/runtime/${phase}-browser-state.json`,
+  path: `${evidenceRoot}/runtime/${phase}-browser-state.json`,
 });
 writeFileSync(
-  `evidence/runtime/${phase}-session.json`,
+  `${evidenceRoot}/runtime/${phase}-session.json`,
   JSON.stringify({ token, workspaceId, conversationId }),
 );
-await context.tracing.stop({ path: `evidence/runtime/${phase}-raw-trace.zip` });
+await context.tracing.stop({
+  path: `${evidenceRoot}/runtime/${phase}-raw-trace.zip`,
+});
 writeFileSync(
-  `evidence/${phase}/browser-results.json`,
+  `${evidenceRoot}/${phase}/browser-results.json`,
   JSON.stringify({ checks, errors, requests }, null, 2),
 );
 console.log(JSON.stringify({ checks, errors, requests }, null, 2));

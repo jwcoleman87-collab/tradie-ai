@@ -7,6 +7,7 @@ import {
   type OnboardingMessage,
 } from '../contracts';
 import type { ModelProvider } from './ai';
+import type { ModelCallOptions } from './chat-budget';
 import { env } from './config';
 import { AppError } from './errors';
 import { appendWebSources, type WebResearch } from './web-research';
@@ -309,6 +310,7 @@ export async function runOnboardingMagic(
     existingFacts: Pick<OnboardingFact, 'field_path' | 'value'>[];
     timeZone: string;
   },
+  options?: ModelCallOptions,
 ): Promise<
   OnboardingTurnResult & { researchUsed: boolean; identityChanged: boolean }
 > {
@@ -338,13 +340,23 @@ export async function runOnboardingMagic(
     OnboardingTurn,
     magicInstructions({ webSearchAvailable, profileProgress }),
     modelInput,
+    options,
   );
   let research: WebResearch | undefined;
   let researchError = '';
   if (webSearchAvailable && turn.webSearch && turn.searchQuery) {
     try {
-      research = await provider.research!(turn.searchQuery, input.timeZone);
+      research = await provider.research!(
+        turn.searchQuery,
+        input.timeZone,
+        options,
+      );
     } catch (error) {
+      if (
+        options?.signal?.aborted ||
+        (options?.deadlineAt !== undefined && Date.now() >= options.deadlineAt)
+      )
+        throw error;
       researchError =
         error instanceof AppError ? error.code : 'AI_RESEARCH_UNAVAILABLE';
     }
@@ -357,6 +369,7 @@ export async function runOnboardingMagic(
         researchError,
       }),
       modelInput,
+      options,
     );
   }
   const latestUserMessage = [...input.messages]

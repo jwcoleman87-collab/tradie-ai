@@ -275,6 +275,33 @@
   justify-content: space-between;
   padding: 0 4px;
 }
+.app-shell .composer .composer-error {
+  grid-column: 1 / -1;
+  grid-row: 1;
+  min-width: 0;
+  max-width: 100%;
+  margin: 0 0 8px;
+  padding: 10px 12px;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+.app-shell .composer .composer-error p {
+  margin: 0;
+}
+.app-shell .composer-error-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+.app-shell .composer-error-actions [data-slot='button'] {
+  max-width: 100%;
+  white-space: normal;
+}
+.app-shell .composer:has(.composer-error) .agent-tags {
+  grid-row: 2;
+}
 .composer-footer > span {
   margin-left: auto;
   margin-right: 16px;

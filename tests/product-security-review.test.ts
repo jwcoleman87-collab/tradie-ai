@@ -43,15 +43,152 @@ async function atomicRpc(name: string, params: Row) {
   };
   const workspace = params.p_workspace;
   try {
-    if (name === 'commit_onboarding_turn') {
+    if (name === 'accept_onboarding_request') {
+      let receipt = tables.onboarding_requests.find(
+        (row) =>
+          row.request_id === params.p_request && row.user_id === params.p_user,
+      );
+      if (
+        receipt &&
+        (receipt.answer !== params.p_answer ||
+          receipt.allow_ai !== params.p_allow_ai ||
+          receipt.workspace_id !== workspace)
+      )
+        throw Error('TAI:ONBOARDING_REQUEST_MISMATCH');
+      const workspaceRow = tables.workspaces.find(
+        (row) => row.id === workspace,
+      )!;
+      if (!receipt) {
+        if (!workspaceRow.ai_consent_at && !params.p_allow_ai)
+          throw Error('TAI:AI_CONSENT_REQUIRED');
+        rateCalls++;
+        workspaceRow.ai_consent_at ||= new Date().toISOString();
+        let stored = tables.onboarding_sessions.find(
+          (row) => row.workspace_id === workspace,
+        );
+        if (!stored) {
+          stored = {
+            id: crypto.randomUUID(),
+            user_id: params.p_user,
+            workspace_id: workspace,
+            messages: [
+              {
+                id: crypto.randomUUID(),
+                role: 'assistant',
+                content: params.p_opening,
+                createdAt: new Date().toISOString(),
+              },
+            ],
+            status: 'in_progress',
+            information_goals: [],
+            current_goal: 'identity_anchor',
+            discovery_status: params.p_discovery,
+          };
+          tables.onboarding_sessions.push(stored);
+        }
+        (stored.messages as Row[]).push({
+          id: params.p_request,
+          role: 'user',
+          content: params.p_answer,
+          createdAt: new Date().toISOString(),
+        });
+        receipt = {
+          user_id: params.p_user,
+          workspace_id: workspace,
+          request_id: params.p_request,
+          answer: params.p_answer,
+          allow_ai: params.p_allow_ai,
+          status: 'queued',
+        };
+        tables.onboarding_requests.push(receipt);
+      }
+      const queue = tables.onboarding_requests.filter(
+        (row) => row.workspace_id === workspace && row.status === 'queued',
+      );
+      if (
+        receipt.status !== 'queued' ||
+        tables.onboarding_requests.some(
+          (row) => row.workspace_id === workspace && row.status === 'working',
+        ) ||
+        queue[0] !== receipt
+      )
+        return {
+          data: { dispatch: false, status: receipt.status },
+          error: null,
+        };
+      const stored = tables.onboarding_sessions.find(
+        (row) => row.workspace_id === workspace,
+      )!;
+      const messages = stored.messages as Row[];
+      receipt.status = 'working';
+      receipt.execution_token = crypto.randomUUID();
+      receipt.input_messages = structuredClone(
+        messages.slice(
+          0,
+          messages.findIndex((row) => row.id === params.p_request) + 1,
+        ),
+      );
+      return {
+        data: {
+          dispatch: true,
+          status: 'working',
+          token: receipt.execution_token,
+          deadlineAt: new Date(Date.now() + 110000).toISOString(),
+          session: {
+            ...structuredClone(stored),
+            messages: receipt.input_messages,
+          },
+          profile: structuredClone(
+            tables.business_profiles.find(
+              (row) => row.workspace_id === workspace,
+            ) || null,
+          ),
+          facts: structuredClone(
+            tables.business_profile_facts.filter(
+              (row) => row.workspace_id === workspace,
+            ),
+          ),
+        },
+        error: null,
+      };
+    } else if (name === 'fail_onboarding_request') {
+      const receipt = tables.onboarding_requests.find(
+        (row) =>
+          row.request_id === params.p_request &&
+          row.execution_token === params.p_token &&
+          row.status === 'working',
+      );
+      if (receipt)
+        Object.assign(receipt, {
+          status: 'failed',
+          error_code: params.p_uncertain
+            ? 'ONBOARDING_UNCERTAIN'
+            : 'ONBOARDING_FAILED',
+        });
+    } else if (name === 'finish_onboarding_request') {
       const session = params.p_session as Row;
       const stored = tables.onboarding_sessions.find(
         (row) => row.workspace_id === workspace,
       );
+      const receipt = tables.onboarding_requests.find(
+        (row) =>
+          row.request_id === params.p_request && row.workspace_id === workspace,
+      );
+      if (
+        !receipt ||
+        receipt.status !== 'working' ||
+        receipt.execution_token !== params.p_token
+      )
+        throw Error('TAI:CONFLICT');
+      if (!stored || !Array.isArray(stored.messages))
+        throw Error('TAI:NOT_FOUND');
+      const storedMessages = stored.messages as Row[];
+      const prefix = receipt.input_messages as Row[];
+      const tail = storedMessages.slice(prefix.length);
       if (
         JSON.stringify((session.messages as Row[]).slice(0, -1)) !==
-          JSON.stringify(stored?.messages) ||
-        (stored?.status === 'completed' && session.status !== 'completed')
+          JSON.stringify(storedMessages.slice(0, prefix.length)) ||
+        (stored.status === 'completed' && session.status !== 'completed')
       )
         throw Error('TAI:CONFLICT');
       if (params.p_identity_changed)
@@ -95,6 +232,12 @@ async function atomicRpc(name: string, params: Row) {
           metadata: params.p_metadata,
         }),
       );
+      (
+        tables.onboarding_sessions.find(
+          (row) => row.workspace_id === workspace,
+        )!.messages as Row[]
+      ).push(...tail);
+      receipt.status = 'completed';
     } else if (name === 'correct_onboarding_profile') {
       await apply(
         mocks.db
@@ -328,6 +471,7 @@ beforeEach(() => {
       { workspace_id: workspaceId, user_id: userId, role: 'owner' },
     ],
     onboarding_sessions: [],
+    onboarding_requests: [],
     business_profiles: [],
     business_profile_facts: [],
     audit_logs: [],
@@ -341,6 +485,20 @@ beforeEach(() => {
 });
 
 describe('independent onboarding API review with explicit storage and AI fakes', () => {
+  it('rejects a missing stable request ID before quota, persistence, or provider work', async () => {
+    await expect(
+      request('onboarding/turn', {
+        workspaceId,
+        answer: 'Cached client without an ID',
+        allowAI: true,
+      }),
+    ).rejects.toMatchObject({ name: 'ZodError' });
+    expect(rateCalls).toBe(0);
+    expect(writes).toEqual([]);
+    expect(tables.onboarding_requests).toHaveLength(0);
+    expect(mocks.provider).not.toHaveBeenCalled();
+    expect(mocks.magic).not.toHaveBeenCalled();
+  });
   it('blocks AI and persistence without consent on an existing unconsented workspace', async () => {
     tables.workspaces[0].ai_consent_at = null;
     await expect(send('Synthetic first answer')).rejects.toMatchObject({
@@ -508,6 +666,116 @@ describe('independent onboarding API review with explicit storage and AI fakes',
     // Controlled application request interleaving, not a database race test.
     expect(mocks.magic).toHaveBeenCalledOnce();
     expect(rateCalls).toBe(1);
+  });
+
+  it('saves a different overlapping answer and processes it after the first reply without losing either', async () => {
+    let started!: () => void, release!: () => void;
+    const entered = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    const barrier = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    mocks.magic.mockImplementationOnce(async () => {
+      started();
+      await barrier;
+      return { ...normalTurn(), reply: 'First reply' };
+    });
+    const a = crypto.randomUUID(),
+      b = crypto.randomUUID();
+    const first = send('First saved input', a);
+    await entered;
+    try {
+      const queued = await send('Second saved input', b);
+      expect(queued?.status).toBe(202);
+      expect(
+        storedMessages()
+          ?.filter((message) => message.role === 'user')
+          .map((message) => message.id),
+      ).toEqual([a, b]);
+      expect(mocks.magic).toHaveBeenCalledOnce();
+    } finally {
+      release();
+      await first;
+    }
+    expect(
+      storedMessages()
+        ?.map((message) => message.content)
+        .slice(1),
+    ).toEqual(['First saved input', 'First reply', 'Second saved input']);
+    expect((await send('Second saved input', b))?.status).toBe(200);
+    expect(mocks.magic).toHaveBeenCalledTimes(2);
+    expect(rateCalls).toBe(2);
+    expect(
+      storedMessages()
+        ?.map((message) => message.content)
+        .slice(1),
+    ).toEqual([
+      'First saved input',
+      'First reply',
+      'Second saved input',
+      'Synthetic saved answer.',
+    ]);
+  });
+
+  it('aborts bounded work, retains a terminal receipt, and cannot commit a late result or redispatch the ID', async () => {
+    let started!: () => void, release!: () => void;
+    const entered = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    const barrier = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const controller = new AbortController();
+    let suppliedOptions:
+      | { signal: AbortSignal; deadlineAt: number }
+      | undefined;
+    mocks.magic.mockImplementationOnce(async (_provider, _input, options) => {
+      suppliedOptions = options;
+      started();
+      await barrier;
+      return normalTurn();
+    });
+    const id = crypto.randomUUID();
+    const before = Date.now();
+    const first = onboardingApi(
+      new Request('https://example.test/api/onboarding/turn', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        signal: controller.signal,
+        body: JSON.stringify({
+          workspaceId,
+          requestId: id,
+          answer: 'Saved interrupted input',
+          allowAI: false,
+        }),
+      }),
+      'onboarding/turn',
+      mocks.db,
+      userId,
+    );
+    await entered;
+    expect(suppliedOptions?.deadlineAt).toBeGreaterThan(before + 100000);
+    expect(suppliedOptions?.deadlineAt).toBeLessThanOrEqual(
+      Date.now() + 110000,
+    );
+    controller.abort();
+    await expect(first).rejects.toMatchObject({ code: 'AI_TIMEOUT' });
+    expect(suppliedOptions?.signal.aborted).toBe(true);
+    const replay = await send('Saved interrupted input', id);
+    expect(replay?.status).toBe(200);
+    expect((await replay!.json()).requests[0]).toMatchObject({
+      requestId: id,
+      status: 'failed',
+      errorCode: 'ONBOARDING_UNCERTAIN',
+    });
+    release();
+    await barrier;
+    await Promise.resolve();
+    expect(mocks.magic).toHaveBeenCalledOnce();
+    expect(rateCalls).toBe(1);
+    expect(tables.audit_logs).toHaveLength(0);
+    expect(storedMessages()?.at(-1)?.content).toBe('Saved interrupted input');
   });
 });
 

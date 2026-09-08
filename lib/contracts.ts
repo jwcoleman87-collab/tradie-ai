@@ -177,7 +177,7 @@ export const OnboardingFactValue = z.union([
 export const OnboardingTurnInput = z
   .object({
     workspaceId: Uuid.nullable().default(null),
-    requestId: Uuid.default(() => crypto.randomUUID()),
+    requestId: Uuid,
     answer: z.string().trim().min(2).max(4000),
     allowAI: z.boolean().default(false),
   })
@@ -224,6 +224,13 @@ export type OnboardingMessage = {
   createdAt: string;
 };
 export type OnboardingSnapshot = {
+  requests?: {
+    requestId: string;
+    answer: string;
+    allowAI: boolean;
+    status: 'queued' | 'working' | 'completed' | 'failed';
+    errorCode: string | null;
+  }[];
   workspaceId: string | null;
   workspaces: {
     id: string;

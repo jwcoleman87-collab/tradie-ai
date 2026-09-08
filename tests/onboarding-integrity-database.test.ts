@@ -1,6 +1,7 @@
 import { PGlite } from '@electric-sql/pglite';
 import { readFileSync, readdirSync } from 'node:fs';
 import { afterAll, afterEach, beforeAll, beforeEach, expect, it } from 'vitest';
+import { configureTestAccountQuotas } from './fixtures/account-quota-policy';
 
 // Real migrations and PostgreSQL transaction rollback in PGlite. This does not
 // exercise the HTTP/authentication boundary or independent SQL connections.
@@ -34,6 +35,7 @@ beforeAll(async () => {
   const dir = new URL('../supabase/migrations/', import.meta.url);
   for (const file of readdirSync(dir).sort())
     await db.exec(readFileSync(new URL(file, dir), 'utf8'));
+  await configureTestAccountQuotas(db);
   await db.query('insert into auth.users(id) values($1)', [owner]);
   workspace = await db.transaction(async (tx) => {
     await tx.exec(

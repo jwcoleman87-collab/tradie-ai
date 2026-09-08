@@ -3,6 +3,7 @@ export class AppError extends Error {
     public code: string,
     public status = 400,
     message = 'The request could not be completed.',
+    public retryAfterSeconds?: number,
   ) {
     super(message);
   }

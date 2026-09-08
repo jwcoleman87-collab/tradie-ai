@@ -314,6 +314,7 @@ describe('continuous Magic onboarding', () => {
     expect(research).toHaveBeenCalledWith(
       'current steps connect Facebook Ads account',
       'Australia/Sydney',
+      undefined,
     );
     expect(result.reply).toContain('Meta Business Settings');
     expect(result.reply).toContain(
@@ -363,14 +364,81 @@ describe('continuous Magic onboarding', () => {
       workspaceId: null,
       answer: 'A valid answer from a cached client',
     });
-    expect(legacyInput.success).toBe(true);
-    if (legacyInput.success)
-      expect(legacyInput.data.requestId).toHaveLength(36);
+    // A server-generated ID cannot deduplicate a cached client's retry.
+    expect(legacyInput.success).toBe(false);
     expect(
       OnboardingCorrectionInput.safeParse({
         workspaceId: crypto.randomUUID(),
         facts: [{ fieldPath: 'insurance_status', value: 'covered' }],
       }).success,
     ).toBe(false);
+  });
+
+  it('shares one absolute deadline through model, research and final response calls', async () => {
+    vi.stubEnv('WEB_SEARCH_ENABLED', 'true');
+    const options = {
+      signal: new AbortController().signal,
+      deadlineAt: Date.now() + 10000,
+    };
+    const turn = {
+      reply: 'Synthetic response',
+      facts: [],
+      goalsCovered: [],
+      nextGoal: 'identity_anchor',
+      reviewReady: false,
+      webSearch: true,
+      searchQuery: 'Synthetic public guidance',
+    };
+    const structured = vi.fn().mockResolvedValue(turn);
+    const research = vi.fn().mockResolvedValue({
+      provider: 'openai',
+      summary: 'Synthetic source',
+      searchedAt: new Date().toISOString(),
+      sources: [],
+    });
+    await runOnboardingMagic(
+      { model: 'synthetic', structured, research } as ModelProvider,
+      {
+        messages: [{ role: 'user', content: 'Synthetic setup question' }],
+        existingFacts: [],
+        timeZone: 'Australia/Sydney',
+      },
+      options,
+    );
+    expect(structured).toHaveBeenCalledTimes(2);
+    expect(structured.mock.calls[0][3]).toBe(options);
+    expect(research.mock.calls[0][2]).toBe(options);
+    expect(structured.mock.calls[1][3]).toBe(options);
+  });
+
+  it('does not start a second model call after research is cancelled', async () => {
+    vi.stubEnv('WEB_SEARCH_ENABLED', 'true');
+    const controller = new AbortController();
+    const structured = vi.fn().mockResolvedValue({
+      reply: 'Checking',
+      facts: [],
+      goalsCovered: [],
+      nextGoal: 'identity_anchor',
+      reviewReady: false,
+      webSearch: true,
+      searchQuery: 'Synthetic search',
+    });
+    const research = vi.fn().mockImplementation(async () => {
+      controller.abort();
+      throw Error('Synthetic cancellation');
+    });
+    await expect(
+      runOnboardingMagic(
+        { model: 'synthetic', structured, research } as ModelProvider,
+        {
+          messages: [{ role: 'user', content: 'Synthetic question' }],
+          existingFacts: [],
+          timeZone: 'Australia/Sydney',
+        },
+        { signal: controller.signal, deadlineAt: Date.now() + 10000 },
+      ),
+    ).rejects.toThrow('Synthetic cancellation');
+    expect(structured).toHaveBeenCalledOnce();
+    expect(research).toHaveBeenCalledOnce();
   });
 });

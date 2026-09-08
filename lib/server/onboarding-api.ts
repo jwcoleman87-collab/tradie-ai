@@ -12,14 +12,14 @@ import {
 import type { AIPreferences } from '../ai-settings';
 import { adminDb, checked, membership, rpc } from './db';
 import { body, json } from './http';
-import { requireValue } from './errors';
+import { AppError, requireValue } from './errors';
+import { withinBudget } from './chat-budget';
 import { createAIProvider } from './ai-provider';
 import { env } from './config';
 import { preferredWorkspace } from '../workspace-selection';
 import {
   factValueForProfile,
   firstOnboardingPrompt,
-  prepareOnboardingAnswer,
   provisionalBusinessName,
   runOnboardingMagic,
   type OnboardingGoalName,
@@ -42,6 +42,15 @@ type OnboardingWorkspace = AIPreferences & {
   workspace_type: 'business' | 'sandbox';
   status: 'active' | 'archived';
   created_at: string;
+};
+type OnboardingClaim = {
+  dispatch: boolean;
+  status: 'queued' | 'working' | 'completed' | 'failed';
+  token: string;
+  deadlineAt: string;
+  session: StoredSession;
+  profile: { display_name: string; onboarding_status: string } | null;
+  facts: OnboardingFact[];
 };
 
 const factSelect =
@@ -123,26 +132,33 @@ async function snapshot(
       discovery: onboardingDiscovery(),
     };
   await membership(db, userId, workspace.id);
-  const [profileResult, sessionResult, factsResult] = await Promise.all([
-    db
-      .from('business_profiles')
-      .select('onboarding_status')
-      .eq('workspace_id', workspace.id)
-      .maybeSingle(),
-    db
-      .from('onboarding_sessions')
-      .select(
-        'id,messages,information_goals,current_goal,discovery_status,prompt_count,status',
-      )
-      .eq('workspace_id', workspace.id)
-      .eq('user_id', userId)
-      .maybeSingle(),
-    db
-      .from('business_profile_facts')
-      .select(factSelect)
-      .eq('workspace_id', workspace.id)
-      .order('observed_at'),
-  ]);
+  const [profileResult, sessionResult, factsResult, requestsResult] =
+    await Promise.all([
+      db
+        .from('business_profiles')
+        .select('onboarding_status')
+        .eq('workspace_id', workspace.id)
+        .maybeSingle(),
+      db
+        .from('onboarding_sessions')
+        .select(
+          'id,messages,information_goals,current_goal,discovery_status,prompt_count,status',
+        )
+        .eq('workspace_id', workspace.id)
+        .eq('user_id', userId)
+        .maybeSingle(),
+      db
+        .from('business_profile_facts')
+        .select(factSelect)
+        .eq('workspace_id', workspace.id)
+        .order('observed_at'),
+      db
+        .from('onboarding_requests')
+        .select('request_id,answer,allow_ai,status,error_code')
+        .eq('workspace_id', workspace.id)
+        .eq('user_id', userId)
+        .order('sequence'),
+    ]);
   const profile = checked(profileResult);
   const session = checked(sessionResult) as StoredSession | null;
   const facts = (checked(factsResult) || []) as OnboardingFact[];
@@ -177,6 +193,13 @@ async function snapshot(
           ? session.messages.at(-1)!.content
           : firstOnboardingPrompt,
     messages: session?.messages || [],
+    requests: (checked(requestsResult) || []).map((receipt) => ({
+      requestId: receipt.request_id,
+      answer: receipt.answer,
+      allowAI: receipt.allow_ai,
+      status: receipt.status,
+      errorCode: receipt.error_code,
+    })),
     facts,
     discovery: onboardingDiscovery(session?.discovery_status),
   };
@@ -231,68 +254,31 @@ export async function onboardingApi(
     requireValue(workspace, 'DATABASE_ERROR', 503);
     await membership(db, userId, workspace.id, true);
     const admin = adminDb();
-    const [sessionResult, profileResult, factsResult] = await Promise.all([
-      admin
-        .from('onboarding_sessions')
-        .select(
-          'id,messages,information_goals,current_goal,discovery_status,prompt_count,status',
-        )
-        .eq('workspace_id', workspace.id)
-        .eq('user_id', userId)
-        .maybeSingle(),
-      admin
-        .from('business_profiles')
-        .select('display_name,onboarding_status')
-        .eq('workspace_id', workspace.id)
-        .maybeSingle(),
-      admin
-        .from('business_profile_facts')
-        .select(factSelect)
-        .eq('workspace_id', workspace.id),
-    ]);
-    const session = checked(sessionResult) as StoredSession | null;
-    const profile = checked(profileResult);
-    const existingFacts = (checked(factsResult) || []) as OnboardingFact[];
-    const profileWasConfirmed = profile?.onboarding_status === 'confirmed';
-    requireValue(
-      (session?.messages || []).filter((message) => message.role === 'user')
-        .length < 200,
-      'ONBOARDING_REVIEW_REQUIRED',
-      409,
-      'This setup conversation is full. Review the profile before continuing.',
+    const claim = await rpc<OnboardingClaim>(
+      admin,
+      'accept_onboarding_request',
+      {
+        p_workspace: workspace.id,
+        p_user: userId,
+        p_request: input.requestId,
+        p_answer: input.answer,
+        p_allow_ai: input.allowAI,
+        p_opening: firstOnboardingPrompt,
+        p_discovery:
+          env('WEB_SEARCH_ENABLED') === 'true' ? 'ready' : 'unavailable',
+      },
     );
-    if (!workspace.ai_consent_at) {
-      requireValue(
-        input.allowAI,
-        'AI_CONSENT_REQUIRED',
-        403,
-        'Allow Chat to process your setup answers before continuing.',
+    if (!claim.dispatch)
+      return json(
+        await snapshot(db, userId, workspace.id),
+        ['queued', 'working'].includes(claim.status) ? 202 : 200,
       );
-      const consentedAt = new Date().toISOString();
-      checked(
-        await admin
-          .from('workspaces')
-          .update({ ai_consent_at: consentedAt })
-          .eq('id', workspace.id),
-      );
-      workspace.ai_consent_at = consentedAt;
-    }
-    const sessionId = session?.id || crypto.randomUUID();
+    const { session, profile } = claim;
+    const existingFacts = claim.facts;
+    const profileWasConfirmed = profile?.onboarding_status === 'confirmed';
+    const sessionId = session.id;
     const now = new Date().toISOString();
-    const preparedAnswer = prepareOnboardingAnswer(session?.messages || [], {
-      requestId: input.requestId,
-      answer: input.answer,
-      createdAt: now,
-    });
-    if (preparedAnswer.alreadyInterpreted)
-      return json(await snapshot(db, userId, workspace.id));
-    await rpc(admin, 'consume_rate', {
-      p_workspace: workspace.id,
-      p_user: userId,
-      p_operation: 'onboarding',
-      p_limit: 10,
-    });
-    const conversationBeforeReply = preparedAnswer.messages;
+    const conversationBeforeReply = session.messages;
     const turnNumber = conversationBeforeReply.filter(
       (message) => message.role === 'user',
     ).length;
@@ -300,133 +286,147 @@ export async function onboardingApi(
     // database constraint. Conversation history, not this legacy counter,
     // drives Chat and continues beyond five turns.
     const promptCount = Math.min(turnNumber, 5);
-    if (preparedAnswer.isNew)
-      checked(
-        await admin.from('onboarding_sessions').upsert(
-          {
-            id: sessionId,
-            user_id: userId,
-            workspace_id: workspace.id,
-            messages: conversationBeforeReply,
-            information_goals: session?.information_goals || [],
-            current_goal: session?.current_goal || 'identity_anchor',
-            unresolved_questions: [],
-            discovery_status:
-              session?.discovery_status ||
-              (env('WEB_SEARCH_ENABLED') === 'true' ? 'ready' : 'unavailable'),
-            prompt_count: promptCount,
-            status: profileWasConfirmed
-              ? 'completed'
-              : session?.status || 'in_progress',
-            updated_at: now,
-          },
-          { onConflict: 'workspace_id', ignoreDuplicates: false },
-        ),
+    const deadlineAt = new Date(claim.deadlineAt).getTime();
+    const deadline = AbortSignal.timeout(Math.max(0, deadlineAt - Date.now()));
+    const signal = AbortSignal.any([request.signal, deadline]);
+    try {
+      requireValue(
+        !signal.aborted && deadlineAt > Date.now(),
+        'AI_TIMEOUT',
+        503,
       );
-    const provider = createAIProvider(workspace);
-    const turn = await runOnboardingMagic(provider, {
-      messages: conversationBeforeReply.map(({ role, content }) => ({
-        role,
-        content,
-      })),
-      existingFacts,
-      timeZone: workspace.time_zone,
-    });
-    const messages: OnboardingMessage[] = [
-      ...conversationBeforeReply,
-      {
-        id: crypto.randomUUID(),
-        role: 'assistant',
-        content: turn.reply,
-        createdAt: now,
-      },
-    ];
-    const sourceReference = `owner://onboarding/${sessionId}/${turnNumber}`;
-    const patch = profilePatch(turn.facts);
-    const reviewReady = turn.identityChanged
-      ? turn.reviewReady
-      : session?.status === 'review' || turn.reviewReady;
-    const discoveryStatus = turn.researchUsed
-      ? 'complete'
-      : env('WEB_SEARCH_ENABLED') === 'true'
-        ? 'ready'
-        : 'unavailable';
-    // The submitted answer was saved before AI processing. Commit the
-    // interpretation together so a later failure cannot erase old facts or
-    // leave the profile ahead of its reply and audit receipt.
-    await rpc(admin, 'commit_onboarding_turn', {
-      p_workspace: workspace.id,
-      p_user: userId,
-      p_identity_changed: turn.identityChanged,
-      p_profile: {
-        ...(turn.identityChanged
-          ? {
-              website_url: null,
-              base_location: null,
-              service_areas: [],
-              services: [],
-              preferred_job_types: [],
-              enquiry_channels: [],
-              primary_goal: null,
-              admin_bottleneck: null,
-              brand_summary: null,
-            }
-          : {}),
-        display_name:
-          typeof patch.display_name === 'string'
-            ? patch.display_name
-            : profile?.display_name || workspace.name,
-        ...patch,
-        onboarding_status: profileWasConfirmed
-          ? 'confirmed'
-          : reviewReady
-            ? 'review'
-            : 'in_progress',
-        updated_at: now,
-      },
-      p_facts: turn.facts.map((fact) => ({
-        field_path: fact.fieldPath,
-        value: fact.value,
-        source_type: 'owner_message',
-        source_label: `Your onboarding message ${turnNumber}`,
-        source_url: sourceReference,
-        confidence: fact.confidence,
-        fact_state: fact.factState,
-        observed_at: now,
-        confirmed_at: null,
-      })),
-      p_session: {
-        id: sessionId,
-        messages,
-        information_goals: [
-          ...new Set([
-            ...(session?.information_goals || []),
-            ...turn.goalsCovered,
-          ]),
-        ],
-        current_goal: turn.nextGoal,
-        unresolved_questions: [],
-        discovery_status: discoveryStatus,
-        prompt_count: promptCount,
-        status: profileWasConfirmed
-          ? 'completed'
-          : reviewReady
-            ? 'review'
-            : 'in_progress',
-        updated_at: now,
-      },
-      p_metadata: {
-        prompt_count: promptCount,
-        turn_number: turnNumber,
-        goals_covered: turn.goalsCovered,
-        discovery_status: discoveryStatus,
-        model: provider.model,
-        provider_trace: provider.attempts || [],
-        web_research_used: turn.researchUsed,
-        identity_changed: turn.identityChanged,
-      },
-    });
-    return json(await snapshot(db, userId, workspace.id));
+      const provider = createAIProvider(workspace);
+      const turn = await withinBudget(
+        runOnboardingMagic(
+          provider,
+          {
+            messages: conversationBeforeReply.map(({ role, content }) => ({
+              role,
+              content,
+            })),
+            existingFacts,
+            timeZone: workspace.time_zone,
+          },
+          { signal, deadlineAt },
+        ),
+        signal,
+      );
+      const messages: OnboardingMessage[] = [
+        ...conversationBeforeReply,
+        {
+          id: crypto.randomUUID(),
+          role: 'assistant',
+          content: turn.reply,
+          createdAt: now,
+        },
+      ];
+      const sourceReference = `owner://onboarding/${sessionId}/${turnNumber}`;
+      const patch = profilePatch(turn.facts);
+      const reviewReady = turn.identityChanged
+        ? turn.reviewReady
+        : session?.status === 'review' || turn.reviewReady;
+      const discoveryStatus = turn.researchUsed
+        ? 'complete'
+        : env('WEB_SEARCH_ENABLED') === 'true'
+          ? 'ready'
+          : 'unavailable';
+      // The submitted answer was saved before AI processing. Commit the
+      // interpretation together so a later failure cannot erase old facts or
+      // leave the profile ahead of its reply and audit receipt.
+      await rpc(admin, 'finish_onboarding_request', {
+        p_workspace: workspace.id,
+        p_user: userId,
+        p_request: input.requestId,
+        p_token: claim.token,
+        p_identity_changed: turn.identityChanged,
+        p_profile: {
+          ...(turn.identityChanged
+            ? {
+                website_url: null,
+                base_location: null,
+                service_areas: [],
+                services: [],
+                preferred_job_types: [],
+                enquiry_channels: [],
+                primary_goal: null,
+                admin_bottleneck: null,
+                brand_summary: null,
+              }
+            : {}),
+          display_name:
+            typeof patch.display_name === 'string'
+              ? patch.display_name
+              : profile?.display_name || workspace.name,
+          ...patch,
+          onboarding_status: profileWasConfirmed
+            ? 'confirmed'
+            : reviewReady
+              ? 'review'
+              : 'in_progress',
+          updated_at: now,
+        },
+        p_facts: turn.facts.map((fact) => ({
+          field_path: fact.fieldPath,
+          value: fact.value,
+          source_type: 'owner_message',
+          source_label: `Your onboarding message ${turnNumber}`,
+          source_url: sourceReference,
+          confidence: fact.confidence,
+          fact_state: fact.factState,
+          observed_at: now,
+          confirmed_at: null,
+        })),
+        p_session: {
+          id: sessionId,
+          messages,
+          information_goals: [
+            ...new Set([
+              ...(session?.information_goals || []),
+              ...turn.goalsCovered,
+            ]),
+          ],
+          current_goal: turn.nextGoal,
+          unresolved_questions: [],
+          discovery_status: discoveryStatus,
+          prompt_count: promptCount,
+          status: profileWasConfirmed
+            ? 'completed'
+            : reviewReady
+              ? 'review'
+              : 'in_progress',
+          updated_at: now,
+        },
+        p_metadata: {
+          prompt_count: promptCount,
+          turn_number: turnNumber,
+          goals_covered: turn.goalsCovered,
+          discovery_status: discoveryStatus,
+          model: provider.model,
+          provider_trace: provider.attempts || [],
+          web_research_used: turn.researchUsed,
+          identity_changed: turn.identityChanged,
+        },
+      });
+      return json(await snapshot(db, userId, workspace.id));
+    } catch (error) {
+      // A timed-out/aborted transport may have reached the provider. Keep its
+      // lease occupied through the safety interval and never replay this ID.
+      // If this cleanup fails, the existing working lease expires terminally.
+      try {
+        await rpc(admin, 'fail_onboarding_request', {
+          p_workspace: workspace.id,
+          p_user: userId,
+          p_request: input.requestId,
+          p_token: claim.token,
+          p_uncertain:
+            signal.aborted ||
+            (error instanceof AppError && error.code === 'AI_TIMEOUT'),
+        });
+      } catch {
+        /* Recovery is driven by the durable lease, not this response. */
+      }
+      throw error;
+    }
   }
   if (path === 'onboarding/profile' && method === 'PATCH') {
     const input = OnboardingCorrectionInput.parse(await body(request));

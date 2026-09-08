@@ -1,24 +1,21 @@
-import { readFileSync, writeFileSync } from 'node:fs';
+import { writeFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
-import path from 'node:path';
-import { pathToFileURL } from 'node:url';
+import {
+  pg,
+  appOrigin,
+  gatewayOrigin,
+  evidenceRoot,
+  readInfraConfig,
+} from './review-env.mjs';
 
 const phase =
   process.argv.find((arg) => arg.startsWith('--phase='))?.slice(8) ||
   'baseline';
 if (!['baseline', 'final'].includes(phase))
   throw Error('Unsupported review phase');
-const app = 'http://127.0.0.1:3108';
-const gateway = 'http://127.0.0.1:55441';
-const tooling = path.resolve('../e2e-tooling-20260908');
-const config = JSON.parse(
-  readFileSync(path.join(tooling, 'infra-config.json'), 'utf8'),
-);
-if (!['localhost', '127.0.0.1', '::1'].includes(config.database.host))
-  throw Error('This review requires the isolated loopback database');
-const { default: pg } = await import(
-  pathToFileURL(path.join(tooling, 'node_modules/pg/lib/index.js'))
-);
+const app = appOrigin,
+  gateway = gatewayOrigin;
+const config = readInfraConfig();
 const pool = new pg.Pool(config.database);
 const evidence = {
   phase,
@@ -28,9 +25,10 @@ const evidence = {
     'Built production HTTP application and native PostgreSQL/PostgREST. Synthetic authentication, storage and AI gateway. No live external services. Fault triggers are scoped to newly-created synthetic workspace IDs. Concurrent HTTP requests are not claimed as independent-transaction SQL race tests.',
   checks: [],
 };
-async function api(token, endpoint, data) {
+async function api(token, endpoint, data, signal) {
   const response = await fetch(`${app}/api/${endpoint}`, {
     method: data ? 'POST' : 'GET',
+    signal,
     headers: {
       Authorization: `Bearer ${token}`,
       ...(data ? { 'Content-Type': 'application/json' } : {}),
@@ -88,7 +86,7 @@ async function stored(workspace) {
     (select onboarding_status from business_profiles where workspace_id=$1) profile_status,
     (select jsonb_agg(jsonb_build_object('field',field_path,'value',value,'state',fact_state) order by field_path) from business_profile_facts where workspace_id=$1) facts,
     (select count(*)::integer from audit_logs where workspace_id=$1 and event='onboarding.turn_saved') saved_turns,
-    (select requests from rate_limits where workspace_id=$1 and operation='onboarding') rate_requests`,
+    (select count(*)::integer from account_ai_requests q join onboarding_requests r on r.user_id=q.user_id and r.request_id=q.request_id where r.workspace_id=$1 and q.operation='onboarding') rate_requests`,
       [workspace],
     )
   ).rows[0];
@@ -194,19 +192,108 @@ try {
       requestId: randomUUID(),
       answer: `Synthetic paired duplicate answer ${iteration}: plumbing maintenance.`,
     };
+    const providerBefore = (
+      await (await fetch(`${gateway}/review/control`)).json()
+    ).events.length;
     const first = api(duplicate.token, 'onboarding/turn', body);
     const second = api(duplicate.token, 'onboarding/turn', body);
     const results = await Promise.all([first, second]);
     const after = await stored(duplicate.workspace);
+    const providerDelta =
+      (await (await fetch(`${gateway}/review/control`)).json()).events.length -
+      providerBefore;
     evidence.checks.push({
       name: `paired duplicate submission ${iteration + 1}`,
       statuses: results.map((result) => result.status),
+      providerCalls: providerDelta,
       completedTurnDelta: after.saved_turns - before.saved_turns,
       rateRequestDelta: after.rate_requests - before.rate_requests,
       pass:
+        results.every((r) => [200, 202].includes(r.status)) &&
+        providerDelta === 1 &&
         after.saved_turns - before.saved_turns === 1 &&
         after.rate_requests - before.rate_requests === 1,
     });
+  }
+  const interrupted = await account();
+  const interruptedBody = {
+    workspaceId: interrupted.workspace,
+    requestId: randomUUID(),
+    answer: 'Synthetic saved answer during an actual disconnect.',
+    allowAI: false,
+  };
+  const abort = new AbortController();
+  const control = (body) =>
+    fetch(`${gateway}/review/control`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+  const events = async () =>
+    (await (await fetch(`${gateway}/review/control`)).json()).events;
+  const until = async (probe) => {
+    for (let i = 0; i < 70; i++) {
+      const result = await probe();
+      if (result) return result;
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    throw Error('Timed out observing the interrupted onboarding claim');
+  };
+  await control({ reset: true, mode: 'success', delayMs: 2500 });
+  try {
+    const active = api(
+      interrupted.token,
+      'onboarding/turn',
+      interruptedBody,
+      abort.signal,
+    ).catch((error) => ({ aborted: error.name }));
+    await until(async () => (await events()).some((event) => !event.endedAt));
+    abort.abort();
+    await active;
+    const receipt = await until(async () => {
+      const row = (
+        await pool.query(
+          'select status,error_code,lease_expires_at>clock_timestamp() as lease_held from onboarding_requests where user_id=(select user_id from onboarding_sessions where workspace_id=$1) and request_id=$2',
+          [interrupted.workspace, interruptedBody.requestId],
+        )
+      ).rows[0];
+      return row?.status === 'failed' ? row : null;
+    });
+    await until(async () => (await events()).some((event) => event.aborted));
+    const beforeReplay = (await events()).length;
+    const replay = await api(
+      interrupted.token,
+      'onboarding/turn',
+      interruptedBody,
+    );
+    const later = await api(interrupted.token, 'onboarding/turn', {
+      ...interruptedBody,
+      requestId: randomUUID(),
+      answer: 'A later answer stays queued until the uncertain lease expires.',
+    });
+    const saved = await state(interrupted);
+    evidence.checks.push({
+      name: 'Actual onboarding disconnect aborts local transport; terminal replay cannot dispatch and uncertain lease holds later work',
+      pass:
+        receipt.error_code === 'ONBOARDING_UNCERTAIN' &&
+        receipt.lease_held &&
+        replay.status === 200 &&
+        later.status === 202 &&
+        (await events()).length === beforeReplay &&
+        saved.messages.some(
+          (message) =>
+            message.id === interruptedBody.requestId &&
+            message.content === interruptedBody.answer,
+        ),
+      receipt,
+      replayStatus: replay.status,
+      queuedStatus: later.status,
+      providerCallsAfterReplay: (await events()).length - beforeReplay,
+      exactInterruptedAnswerSaved: true,
+      boundary:
+        'Actual HTTP disconnect and local provider transport; native lease was not manually changed. Independent SQL expiry tests separately prove later recovery; real remote billing cancellation remains mocked.',
+    });
+  } finally {
+    await control({ mode: 'success', delayMs: 0 });
   }
 } catch (error) {
   evidence.error = error.message;
@@ -216,7 +303,7 @@ try {
   evidence.finishedAt = new Date().toISOString();
   evidence.failed = evidence.checks.filter((check) => !check.pass).length;
   writeFileSync(
-    `evidence/http-onboarding-${phase}.json`,
+    `${evidenceRoot}/http-onboarding-${phase}.json`,
     JSON.stringify(evidence, null, 2),
   );
   console.log(

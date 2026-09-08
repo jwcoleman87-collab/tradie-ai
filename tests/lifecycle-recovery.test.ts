@@ -1,6 +1,7 @@
 import { PGlite } from '@electric-sql/pglite';
 import { readFileSync, readdirSync } from 'node:fs';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { configureTestAccountQuotas } from './fixtures/account-quota-policy';
 
 let db: PGlite;
 const owner = crypto.randomUUID(),
@@ -80,6 +81,7 @@ beforeAll(async () => {
   const dir = new URL('../supabase/migrations/', import.meta.url);
   for (const file of readdirSync(dir).sort())
     await db.exec(readFileSync(new URL(file, dir), 'utf8'));
+  await configureTestAccountQuotas(db);
   await db.query('insert into auth.users(id) values($1),($2),($3)', [
     owner,
     other,

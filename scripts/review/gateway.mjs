@@ -1,16 +1,17 @@
 import http from 'node:http';
-import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { writeFileSync, mkdirSync } from 'node:fs';
 import { createHmac, randomUUID } from 'node:crypto';
-import path from 'node:path';
-import { pathToFileURL } from 'node:url';
+import {
+  pg,
+  appOrigin,
+  gatewayOrigin,
+  evidenceRoot,
+  readInfraConfig,
+  loopbackOrigin,
+} from './review-env.mjs';
 
-const tooling = path.resolve('../e2e-tooling-20260908');
-const config = JSON.parse(
-  readFileSync(path.join(tooling, 'infra-config.json'), 'utf8'),
-);
-const { default: pg } = await import(
-  pathToFileURL(path.join(tooling, 'node_modules/pg/lib/index.js'))
-);
+const config = readInfraConfig();
+const restOrigin = loopbackOrigin(config.postgrestUrl);
 const pool = new pg.Pool(config.database);
 const jwtSecret = config.jwtSecret;
 const users = new Map();
@@ -85,7 +86,7 @@ async function bytes(req) {
 function send(res, status, data, extra = {}) {
   res.writeHead(status, {
     'content-type': 'application/json',
-    'access-control-allow-origin': 'http://127.0.0.1:3108',
+    'access-control-allow-origin': appOrigin,
     'access-control-allow-headers': '*',
     'access-control-allow-methods': 'GET,POST,PUT,PATCH,DELETE,OPTIONS',
     ...extra,
@@ -120,12 +121,12 @@ function facts(name, review) {
 }
 const server = http.createServer(async (req, res) => {
   try {
-    const url = new URL(req.url, 'http://127.0.0.1:55441');
+    const url = new URL(req.url, gatewayOrigin);
     if (req.method === 'OPTIONS') return send(res, 200, {});
     if (url.pathname === '/review/frame') {
       res.writeHead(200, { 'content-type': 'text/html' });
       return res.end(
-        '<!doctype html><title>Synthetic cross-origin framing test</title><h1>Untrusted origin framing test</h1><iframe src="http://127.0.0.1:3108/sign-in" width="1000" height="700"></iframe>',
+        `<!doctype html><title>Synthetic cross-origin framing test</title><h1>Untrusted origin framing test</h1><iframe src="${appOrigin}/sign-in" width="1000" height="700"></iframe>`,
       );
     }
     if (url.pathname === '/review/control') {
@@ -148,7 +149,7 @@ const server = http.createServer(async (req, res) => {
       delete headers.host;
       delete headers['content-length'];
       const reply = await fetch(
-        `http://127.0.0.1:55440${url.pathname.slice(8)}${url.search}`,
+        `${restOrigin}${url.pathname.slice(8)}${url.search}`,
         {
           method: req.method,
           headers,
@@ -385,20 +386,23 @@ const server = http.createServer(async (req, res) => {
     send(res, 500, { error: 'Review harness error' });
   }
 });
-mkdirSync('evidence/runtime', { recursive: true });
+mkdirSync(`${evidenceRoot}/runtime`, { recursive: true });
 writeFileSync(
-  'evidence/runtime/local-config.json',
+  `${evidenceRoot}/runtime/local-config.json`,
   JSON.stringify({
-    supabaseUrl: 'http://127.0.0.1:55441',
+    supabaseUrl: gatewayOrigin,
     anonKey: jwt({ role: 'anon' }),
     serviceKey: jwt({ role: 'service_role' }),
-    port: 3108,
+    port: Number(new URL(appOrigin).port),
   }),
 );
-server.listen(55441, '127.0.0.1', () =>
-  console.log(
-    'Synthetic auth/storage/provider gateway listening on loopback 55441',
-  ),
+server.listen(
+  Number(new URL(gatewayOrigin).port),
+  new URL(gatewayOrigin).hostname,
+  () =>
+    console.log(
+      `Synthetic auth/storage/provider gateway listening on ${gatewayOrigin}`,
+    ),
 );
 process.on('SIGINT', async () => {
   server.close();

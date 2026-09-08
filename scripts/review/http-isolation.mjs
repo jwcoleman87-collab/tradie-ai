@@ -1,19 +1,20 @@
 import assert from 'node:assert/strict';
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { createHash, randomUUID } from 'node:crypto';
-import path from 'node:path';
-import { pathToFileURL } from 'node:url';
+import {
+  pg,
+  appOrigin,
+  gatewayOrigin,
+  evidenceRoot,
+  readInfraConfig,
+} from './review-env.mjs';
 
-const base = 'http://127.0.0.1:3108';
-const gateway = 'http://127.0.0.1:55441';
-const tooling = path.resolve('../e2e-tooling-20260908');
-const infrastructure = JSON.parse(
-  readFileSync(path.join(tooling, 'infra-config.json'), 'utf8'),
-);
+const base = appOrigin,
+  gateway = gatewayOrigin;
+const infrastructure = readInfraConfig();
 const local = JSON.parse(
-  readFileSync('evidence/runtime/local-config.json', 'utf8'),
+  readFileSync(`${evidenceRoot}/runtime/local-config.json`, 'utf8'),
 );
-const { default: pg } = await import(pathToFileURL(infrastructure.pgModule));
 const db = new pg.Client(infrastructure.database);
 await db.connect();
 const label =
@@ -804,9 +805,9 @@ try {
     blocked: report.findings.filter((x) => x.status === 'blocked').length,
   };
   report.tenantSnapshot = await snapshot();
-  mkdirSync('evidence', { recursive: true });
+  mkdirSync(evidenceRoot, { recursive: true });
   writeFileSync(
-    `evidence/http-isolation-${label}.json`,
+    `${evidenceRoot}/http-isolation-${label}.json`,
     JSON.stringify(report, null, 2),
   );
   await db.end();
@@ -814,7 +815,7 @@ try {
     JSON.stringify({
       label,
       totals: report.totals,
-      evidence: `evidence/http-isolation-${label}.json`,
+      evidence: `${evidenceRoot}/http-isolation-${label}.json`,
     }),
   );
   if (report.totals.failed || report.totals.blocked) process.exitCode = 1;

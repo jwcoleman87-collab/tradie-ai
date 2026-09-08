@@ -3,6 +3,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { rpc } from '../lib/server/db';
+import { configureTestAccountQuotas } from './fixtures/account-quota-policy';
 
 // Runs the actual migrations in PGlite. This is SQL/RLS evidence, not an HTTP,
 // Supabase-auth, storage-download, or independent-connection race test.
@@ -141,6 +142,7 @@ beforeAll(async () => {
   const dir = new URL('../supabase/migrations/', import.meta.url);
   for (const file of readdirSync(dir).sort())
     await db.exec(readFileSync(new URL(file, dir), 'utf8'));
+  await configureTestAccountQuotas(db);
   for (const label of ['A', 'B']) {
     const base = await workspace(await owner(), `Synthetic tenant ${label}`);
     const file = id();
@@ -527,8 +529,8 @@ describe('configured limits and request accounting in PGlite', () => {
     expect(
       (
         await db.query(
-          'select requests from rate_limits where workspace_id=$1 and operation=$2',
-          [t.workspace, 'chat'],
+          'select count(*)::integer requests from account_ai_requests where user_id=$1 and operation=$2',
+          [t.user, 'chat'],
         )
       ).rows,
     ).toEqual([{ requests: 1 }]);
@@ -549,14 +551,14 @@ describe('configured limits and request accounting in PGlite', () => {
     expect(
       (
         await db.query(
-          'select requests from rate_limits where workspace_id=$1 and operation=$2',
-          [t.workspace, 'chat'],
+          'select count(*)::integer requests from account_ai_requests where user_id=$1 and operation=$2',
+          [t.user, 'chat'],
         )
       ).rows,
     ).toEqual([{ requests: 1 }]);
   });
 
-  it('enforces chat 12/minute and onboarding 10/minute with rollback and fixed-minute reset', async () => {
+  it('preserves legacy operation-counter rollback and fixed-minute reset independently of account admission', async () => {
     const t = await workspace(await owner());
     // Keep all checks in one transaction so crossing a wall-clock minute cannot
     // make this deterministic counter-boundary test flaky.
@@ -612,7 +614,7 @@ describe('configured limits and request accounting in PGlite', () => {
     });
   });
 
-  it('documents baseline accounting scope: separate workspaces and conversations accept simultaneous unfinished work', async () => {
+  it('accounts for accepted requests across workspaces with an explicit high synthetic concurrency policy', async () => {
     const user = await owner();
     const a = await workspace(user),
       b = await workspace(user),
@@ -641,11 +643,11 @@ describe('configured limits and request accounting in PGlite', () => {
     expect(
       (
         await db.query(
-          'select requests from rate_limits where user_id=$1 and operation=$2 order by workspace_id',
+          'select count(*)::integer requests from account_ai_requests where user_id=$1 and operation=$2',
           [user, 'chat'],
         )
       ).rows,
-    ).toEqual([{ requests: 3 }, { requests: 3 }]);
+    ).toEqual([{ requests: 6 }]);
     expect(
       (
         await db.query(
@@ -663,10 +665,10 @@ describe('configured limits and request accounting in PGlite', () => {
     for (let count = 0; count < 20; count++) await workspace(user);
     await expect(
       call('create_workspace', ['Over limit', user]),
-    ).rejects.toThrow('WORKSPACE_LIMIT');
+    ).rejects.toThrow('WORKSPACE_ACTIVE_LIMIT');
     await expect(
       call('set_workspace_status', [first.workspace, user, 'active']),
-    ).rejects.toThrow('WORKSPACE_LIMIT');
+    ).rejects.toThrow('WORKSPACE_ACTIVE_LIMIT');
     expect(
       (
         await db.query(
@@ -688,14 +690,14 @@ describe('configured limits and request accounting in PGlite', () => {
     const client = {
       rpc: async () => ({
         data: null,
-        error: { message: 'TAI:WORKSPACE_LIMIT' },
+        error: { message: 'TAI:WORKSPACE_ACTIVE_LIMIT' },
       }),
     } as unknown as SupabaseClient;
     await expect(rpc(client, 'create_workspace', {})).rejects.toMatchObject({
-      code: 'WORKSPACE_LIMIT',
+      code: 'WORKSPACE_ACTIVE_LIMIT',
       status: 429,
       message:
-        'This account has 20 active workspaces. Archive a workspace before creating or restoring another.',
+        'This account has reached its active workspace limit. Archive a workspace before creating or restoring another.',
     });
   });
 });

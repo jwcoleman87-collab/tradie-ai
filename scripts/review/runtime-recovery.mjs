@@ -1,11 +1,15 @@
 import { randomUUID } from 'node:crypto';
-import { readFileSync, writeFileSync } from 'node:fs';
-import pg from '../../../e2e-tooling-20260908/node_modules/pg/lib/index.js';
-const origin = 'http://127.0.0.1:3108',
-  gateway = 'http://127.0.0.1:55441';
-const config = JSON.parse(
-  readFileSync('../e2e-tooling-20260908/infra-config.json', 'utf8'),
-);
+import { writeFileSync } from 'node:fs';
+import {
+  pg,
+  appOrigin,
+  gatewayOrigin,
+  evidenceRoot,
+  readInfraConfig,
+} from './review-env.mjs';
+const origin = appOrigin,
+  gateway = gatewayOrigin;
+const config = readInfraConfig();
 const db = new pg.Client(config.database);
 await db.connect();
 const results = [];
@@ -33,7 +37,7 @@ async function step(name, run) {
     results.push({ name, status: 'failed', error: error.message });
   }
   writeFileSync(
-    'evidence/runtime-recovery.json',
+    `${evidenceRoot}/runtime-recovery.json`,
     JSON.stringify(
       {
         boundaries:
@@ -55,11 +59,11 @@ const signup = await (
   })
 ).json();
 const token = signup.access_token;
-async function api(path, method = 'GET', body) {
+async function api(path, method = 'GET', body, authToken = token) {
   const response = await fetch(`${origin}/api/${path}`, {
     method,
     headers: {
-      authorization: `Bearer ${token}`,
+      authorization: `Bearer ${authToken}`,
       'content-type': 'application/json',
       origin,
     },
@@ -217,26 +221,39 @@ await step(
   },
 );
 await step(
-  'Chat burst rejection never reaches provider; second workspace has an independent bucket',
+  'Account Chat burst rejects across workspaces without provider work while another account remains independent',
   async () => {
     await control({ reset: true, mode: 'success', delayMs: 0 });
+    const quotaSession = await (
+      await fetch(`${gateway}/auth/v1/signup`, {
+        method: 'POST',
+        body: JSON.stringify({
+          email: `quota-${randomUUID()}@example.invalid`,
+          password: randomUUID(),
+        }),
+      })
+    ).json();
+    if (!quotaSession.access_token) throw Error('Fresh account signup failed');
+    const quotaApi = (path, method = 'GET', body) =>
+      api(path, method, body, quotaSession.access_token);
+    if (new Date().getSeconds() > 50) await pause(60100 - (Date.now() % 60000));
     const fresh = (
-      await api('workspaces', 'POST', {
+      await quotaApi('workspaces', 'POST', {
         name: 'Synthetic quota workspace',
         workspaceType: 'sandbox',
       })
     ).body.id;
-    await api('consent', 'POST', {
+    await quotaApi('consent', 'POST', {
       workspaceId: fresh,
       allowAI: true,
       allowFallback: false,
     });
-    const conversation = (await api(`state?workspaceId=${fresh}`)).body
+    const conversation = (await quotaApi(`state?workspaceId=${fresh}`)).body
       .conversationId;
     const startMinute = Math.floor(Date.now() / 60000);
     const accepted = [];
     for (let i = 0; i < 12; i++) {
-      const r = await api('chat', 'POST', {
+      const r = await quotaApi('chat', 'POST', {
         workspaceId: fresh,
         conversationId: conversation,
         requestId: randomUUID(),
@@ -248,7 +265,7 @@ await step(
         throw Error(`Request ${i} failed: ${JSON.stringify(r)}`);
     }
     const before = (await events()).length;
-    const rejected = await api('chat', 'POST', {
+    const rejected = await quotaApi('chat', 'POST', {
       workspaceId: fresh,
       conversationId: conversation,
       requestId: randomUUID(),
@@ -262,33 +279,74 @@ await step(
     if (rejected.status !== 429 || (await events()).length !== before)
       throw Error('Burst ceiling bypass or provider called on rejection');
     const second = (
-      await api('workspaces', 'POST', {
+      await quotaApi('workspaces', 'POST', {
         name: 'Synthetic second quota workspace',
         workspaceType: 'sandbox',
       })
     ).body.id;
-    await api('consent', 'POST', {
+    await quotaApi('consent', 'POST', {
       workspaceId: second,
       allowAI: true,
       allowFallback: false,
     });
-    const c2 = (await api(`state?workspaceId=${second}`)).body.conversationId;
-    const other = await api('chat', 'POST', {
+    const c2 = (await quotaApi(`state?workspaceId=${second}`)).body
+      .conversationId;
+    const other = await quotaApi('chat', 'POST', {
       workspaceId: second,
       conversationId: c2,
       requestId: randomUUID(),
       text: 'Synthetic same account second bucket',
       attachmentIds: [],
     });
-    if (other.body.status !== 'completed')
-      throw Error('Independent workspace bucket did not accept');
+    if (
+      other.status !== 429 ||
+      other.body.error?.code !== 'CHAT_BURST_LIMIT' ||
+      (await events()).length !== before
+    )
+      throw Error(
+        'Another workspace bypassed the account ceiling or reached the provider',
+      );
+    const independentSession = await (
+      await fetch(`${gateway}/auth/v1/signup`, {
+        method: 'POST',
+        body: JSON.stringify({
+          email: `independent-${randomUUID()}@example.invalid`,
+          password: randomUUID(),
+        }),
+      })
+    ).json();
+    const independentApi = (path, method = 'GET', body) =>
+      api(path, method, body, independentSession.access_token);
+    const independentWorkspace = (
+      await independentApi('bootstrap', 'POST', {
+        name: 'Synthetic independent account',
+      })
+    ).body.workspaceId;
+    await independentApi('consent', 'POST', {
+      workspaceId: independentWorkspace,
+      allowAI: true,
+      allowFallback: false,
+    });
+    const independentConversation = (
+      await independentApi(`state?workspaceId=${independentWorkspace}`)
+    ).body.conversationId;
+    const independentResult = await independentApi('chat', 'POST', {
+      workspaceId: independentWorkspace,
+      conversationId: independentConversation,
+      requestId: randomUUID(),
+      text: 'Synthetic independent allowance',
+      attachmentIds: [],
+    });
+    if (independentResult.body.status !== 'completed')
+      throw Error('The other account lost its independent allowance');
     return {
       accepted: accepted.length,
       rejectedStatus: rejected.status,
       rejectedMessage: rejected.body.error?.message,
       providerCallsOnRejection: 0,
-      sameAccountOtherWorkspaceAccepted: true,
-      accountWideCeiling: 'Absent',
+      sameAccountOtherWorkspaceRejected: true,
+      anotherAccountAccepted: true,
+      accountWideCeiling: 'Enforced',
       rejectedDraft: 'Client responsibility; browser draft assertion separate',
     };
   },

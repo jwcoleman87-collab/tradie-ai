@@ -1,6 +1,7 @@
 import { PGlite } from '@electric-sql/pglite';
 import { readFileSync, readdirSync } from 'node:fs';
 import { beforeAll, afterAll, describe, it, expect } from 'vitest';
+import { configureTestAccountQuotas } from './fixtures/account-quota-policy';
 
 let db: PGlite, wA: string, wB: string, cA: string, cB: string;
 const ownerA = '10000000-0000-4000-8000-000000000001',
@@ -61,6 +62,7 @@ beforeAll(async () => {
   const dir = new URL('../supabase/migrations/', import.meta.url);
   for (const file of readdirSync(dir).sort())
     await db.exec(readFileSync(new URL(file, dir), 'utf8'));
+  await configureTestAccountQuotas(db);
   for (const user of [ownerA, ownerB, member, support])
     await db.query('insert into auth.users(id) values($1)', [user]);
   wA = (

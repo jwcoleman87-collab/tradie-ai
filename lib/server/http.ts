@@ -33,7 +33,13 @@ export function endpoint(handler: (request: Request) => Promise<Response>) {
       console.error(
         JSON.stringify({ event: 'request_failed', requestId, code, status }),
       );
-      return json(
+      const retryAfterSeconds =
+        known &&
+        Number.isSafeInteger(error.retryAfterSeconds) &&
+        error.retryAfterSeconds! >= 0
+          ? error.retryAfterSeconds
+          : undefined;
+      const response = json(
         {
           error: {
             code,
@@ -43,10 +49,14 @@ export function endpoint(handler: (request: Request) => Promise<Response>) {
                 ? 'Please check the information and try again.'
                 : 'Something went wrong. Your private data was not included in the error report.',
             requestId,
+            ...(retryAfterSeconds === undefined ? {} : { retryAfterSeconds }),
           },
         },
         status,
       );
+      if (retryAfterSeconds !== undefined)
+        response.headers.set('Retry-After', String(retryAfterSeconds));
+      return response;
     }
   };
 }

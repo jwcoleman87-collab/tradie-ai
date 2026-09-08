@@ -1,7 +1,11 @@
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import path from 'node:path';
-const origin = 'http://127.0.0.1:3108';
+import {
+  appOrigin as origin,
+  evidenceRoot,
+  repository,
+} from './review-env.mjs';
 const results = [];
 for (const route of [
   '/',
@@ -42,7 +46,10 @@ for (const route of [
   });
   await response.body?.cancel();
 }
-const tracePath = '.next/server/app/api/[...path]/route.js.nft.json';
+const tracePath = path.join(
+  repository,
+  '.next/server/app/api/[...path]/route.js.nft.json',
+);
 const paths = [
   ...new Set(
     JSON.parse(readFileSync(tracePath, 'utf8')).files.filter(
@@ -61,14 +68,17 @@ const skills = paths.map((file) => {
   };
 });
 const report = {
-  buildId: readFileSync('.next/BUILD_ID', 'utf8'),
+  buildId: readFileSync(path.join(repository, '.next/BUILD_ID'), 'utf8'),
   results,
   skills,
   skillTracePass: skills.length === 5 && skills.every((s) => s.exists),
   runtimeLoadEvidence:
     'Actual completed Chat requests load the traced skill instructions from the built API runtime',
 };
-writeFileSync('evidence/build-security.json', JSON.stringify(report, null, 2));
+writeFileSync(
+  path.join(evidenceRoot, 'build-security.json'),
+  JSON.stringify(report, null, 2),
+);
 console.log(JSON.stringify(report, null, 2));
 process.exitCode =
   results.every((r) => r.pass) && report.skillTracePass ? 0 : 1;

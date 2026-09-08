@@ -1,27 +1,24 @@
-import { chromium } from '../../../e2e-tooling-20260908/node_modules/playwright/index.mjs';
+import {
+  chromium,
+  pg,
+  appOrigin,
+  gatewayOrigin,
+  evidenceRoot,
+  browserLaunchOptions,
+  readInfraConfig,
+} from './review-env.mjs';
 import assert from 'node:assert/strict';
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { randomUUID, createHmac } from 'node:crypto';
-import { createRequire } from 'node:module';
 
-const origin = 'http://127.0.0.1:3108';
-const gateway = 'http://127.0.0.1:55441';
-const config = JSON.parse(
-  readFileSync(
-    new URL('../../../e2e-tooling-20260908/infra-config.json', import.meta.url),
-    'utf8',
-  ),
-);
-assert.equal(config.synthetic, true);
-assert.equal(config.database.host, '127.0.0.1');
-const { Client } = createRequire(import.meta.url)(config.pgModule);
+const origin = appOrigin;
+const gateway = gatewayOrigin;
+const config = readInfraConfig();
+const { Client } = pg;
 const db = new Client(config.database);
 await db.connect();
-mkdirSync('evidence/browser-edge-cases', { recursive: true });
-const browser = await chromium.launch({
-  executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe',
-  headless: true,
-});
+mkdirSync(`${evidenceRoot}/browser-edge-cases`, { recursive: true });
+const browser = await chromium.launch(browserLaunchOptions());
 const context = await browser.newContext({
   viewport: { width: 1440, height: 1000 },
 });
@@ -46,6 +43,7 @@ page.on('response', (response) => {
     });
 });
 let token, workspaceId, conversationId, userId;
+let quotaRetry;
 const password = randomUUID();
 const events = async () =>
   (await (await fetch(`${gateway}/review/control`)).json()).events.length;
@@ -85,7 +83,7 @@ async function check(name, run) {
     checks.push({ name, status: 'failed', error: message });
     await page
       .screenshot({
-        path: `evidence/browser-edge-cases/${checks.length}-failure.png`,
+        path: `${evidenceRoot}/browser-edge-cases/${checks.length}-failure.png`,
         fullPage: true,
       })
       .catch(() => {});
@@ -216,7 +214,7 @@ try {
       assert.equal(direct.status, 413);
       assert.equal(direct.data.error.code, 'FILE_TOO_LARGE');
       await page.screenshot({
-        path: 'evidence/browser-edge-cases/oversized-file.png',
+        path: `${evidenceRoot}/browser-edge-cases/oversized-file.png`,
         fullPage: true,
       });
       return {
@@ -284,7 +282,7 @@ try {
   );
 
   await check(
-    'Burst rejection preserves exact browser draft and saved history without another provider call',
+    'Burst feedback stays visible beside preserved draft/history on desktop and mobile without another provider call',
     async () => {
       // Make the twelve real requests and browser rejection in the same real
       // minute. This waits for a clock boundary; it never edits quota counters.
@@ -331,23 +329,69 @@ try {
         .click();
       const rejected = await pending;
       assert.equal(rejected.status(), 429);
-      await page
-        .getByText('Please wait a minute before trying again.', {
-          exact: false,
-        })
-        .first()
-        .waitFor();
-      const errorBox = await page
-        .getByText('Please wait a minute before trying again.', {
-          exact: false,
-        })
-        .first()
-        .boundingBox();
-      const rejectionMessageInViewport = Boolean(
-        errorBox &&
-        errorBox.y >= 0 &&
-        errorBox.y + errorBox.height <= page.viewportSize().height,
-      );
+      quotaRetry = {
+        request: rejected.request().postDataJSON(),
+        draft,
+        previousIds,
+      };
+      const rejection = await rejected.json();
+      assert.equal(rejection.error.code, 'CHAT_BURST_LIMIT');
+      assert.ok(rejection.error.retryAfterSeconds > 0);
+      const notice = page.locator('#composer-error');
+      await notice.waitFor();
+      assert.match(await notice.innerText(), /wait|minute|limit/i);
+      const viewportChecks = [];
+      for (const viewport of [
+        { width: 1440, height: 1000 },
+        { width: 390, height: 844 },
+      ]) {
+        await page.setViewportSize(viewport);
+        await page.getByLabel('Message Chat', { exact: true }).focus();
+        const errorBox = await notice.boundingBox();
+        const composerBox = await page
+          .getByLabel('Message Chat', { exact: true })
+          .boundingBox();
+        assert.ok(
+          errorBox &&
+            errorBox.x >= 0 &&
+            errorBox.y >= 0 &&
+            errorBox.x + errorBox.width <= viewport.width &&
+            errorBox.y + errorBox.height <= viewport.height,
+          `Quota feedback must remain fully visible at ${viewport.width}px`,
+        );
+        assert.ok(
+          composerBox &&
+            composerBox.y >= errorBox.y + errorBox.height &&
+            composerBox.y + composerBox.height <= viewport.height,
+          'The draft must stay reachable below its visible error',
+        );
+        assert.equal(
+          await page.evaluate(() => document.documentElement.scrollWidth),
+          viewport.width,
+          'No horizontal page overflow',
+        );
+        assert.equal(
+          await page.getByLabel('Message Chat', { exact: true }).inputValue(),
+          draft,
+        );
+        assert.equal(
+          await page
+            .getByRole('button', { name: 'Wait to retry', exact: true })
+            .isDisabled(),
+          true,
+        );
+        await page.screenshot({
+          path: `${evidenceRoot}/browser-edge-cases/quota-visible-${viewport.width}.png`,
+        });
+        viewportChecks.push({
+          viewport,
+          errorBox,
+          composerBox,
+          feedbackVisible: true,
+          draftPreserved: true,
+          horizontalOverflow: false,
+        });
+      }
       assert.equal(
         await page.getByLabel('Message Chat', { exact: true }).inputValue(),
         draft,
@@ -374,7 +418,7 @@ try {
         'All quota requests must stay in the same actual minute',
       );
       await page.screenshot({
-        path: 'evidence/browser-edge-cases/quota-draft-preserved.png',
+        path: `${evidenceRoot}/browser-edge-cases/quota-draft-preserved.png`,
         fullPage: true,
       });
       return {
@@ -382,12 +426,108 @@ try {
         actualComposerHttpStatus: 429,
         sameRealMinute: true,
         exactDraftPreserved: true,
-        rejectionMessageInViewport,
-        rejectionMessageBounds: errorBox,
-        viewport: page.viewportSize(),
+        viewportChecks,
         savedMessageIdsUnchanged: true,
         priorUserMessagesRetained: 12,
         providerCallsAddedByRejectedRequest: 0,
+      };
+    },
+  );
+
+  await check(
+    'Actual minute reset enables the visible mobile Retry action and charges the preserved request once',
+    async () => {
+      assert.ok(quotaRetry, 'The preceding actual quota rejection is required');
+      const retry = page.getByRole('button', {
+        name: 'Retry message',
+        exact: true,
+      });
+      await retry.waitFor({ timeout: 65000 });
+      assert.equal(await retry.isEnabled(), true);
+      assert.equal(
+        await page.getByLabel('Message Chat', { exact: true }).inputValue(),
+        quotaRetry.draft,
+      );
+      const providerBefore = await events();
+      const pending = page.waitForResponse(
+        (response) =>
+          new URL(response.url()).pathname === '/api/chat' &&
+          response.request().method() === 'POST',
+      );
+      await retry.click();
+      const response = await pending;
+      assert.equal(response.status(), 200);
+      assert.deepEqual(
+        response.request().postDataJSON(),
+        quotaRetry.request,
+        'Retry must reuse the exact request reference and payload',
+      );
+      let saved;
+      for (let attempt = 0; attempt < 40; attempt++) {
+        saved = (
+          await api(
+            `state?workspaceId=${workspaceId}&conversationId=${conversationId}`,
+          )
+        ).data;
+        if (
+          saved.runs.some(
+            (run) =>
+              run.request_id === quotaRetry.request.requestId &&
+              run.status === 'completed',
+          )
+        )
+          break;
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      }
+      assert.equal(
+        saved.runs.filter(
+          (run) =>
+            run.request_id === quotaRetry.request.requestId &&
+            run.status === 'completed',
+        ).length,
+        1,
+      );
+      assert.equal(
+        saved.messages.filter(
+          (message) =>
+            message.role === 'user' && message.content === quotaRetry.draft,
+        ).length,
+        1,
+      );
+      assert.ok(
+        quotaRetry.previousIds.every((id) =>
+          saved.messages.some((message) => message.id === id),
+        ),
+      );
+      assert.equal(
+        await page.getByLabel('Message Chat', { exact: true }).inputValue(),
+        '',
+      );
+      assert.equal(
+        (
+          await db.query(
+            "select count(*)::int n from account_ai_requests where user_id=$1 and operation='chat' and request_id=$2",
+            [userId, quotaRetry.request.requestId],
+          )
+        ).rows[0].n,
+        1,
+      );
+      assert.equal(
+        (await events()) - providerBefore,
+        2,
+        'One routing call and one response call within the same charged run',
+      );
+      await page.screenshot({
+        path: `${evidenceRoot}/browser-edge-cases/retry-after-reset-mobile.png`,
+      });
+      return {
+        realClockReset: true,
+        sameRequestAndPayload: true,
+        ledgerCharges: 1,
+        userMessagesAdded: 1,
+        priorHistoryPreserved: true,
+        draftClearedOnlyAfterReceipt: true,
+        viewport: page.viewportSize(),
       };
     },
   );
@@ -432,7 +572,7 @@ try {
     responses,
   };
   writeFileSync(
-    'evidence/browser-edge-cases.json',
+    `${evidenceRoot}/browser-edge-cases.json`,
     JSON.stringify(report, null, 2),
   );
   console.log(

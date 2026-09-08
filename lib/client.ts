@@ -17,6 +17,7 @@ export class ApiError extends Error {
     public status: number,
     public messageSaved = false,
     public runId?: string,
+    public retryAfterSeconds?: number,
   ) {
     super(message);
   }
@@ -41,7 +42,7 @@ export async function requestApi<T>(
     ...(data === undefined ? {} : { body: JSON.stringify(data) }),
   });
   const result = (await response.json()) as T & {
-    error?: { message: string; code: string };
+    error?: { message: string; code: string; retryAfterSeconds?: number };
     messageSaved?: boolean;
     runId?: string;
   };
@@ -52,6 +53,7 @@ export async function requestApi<T>(
       response.status,
       result.messageSaved === true,
       result.runId,
+      result.error?.retryAfterSeconds,
     );
   return result as T;
 }

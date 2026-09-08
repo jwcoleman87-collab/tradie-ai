@@ -3,6 +3,33 @@ import { chatBlockedReason, chatStatus, submitChat } from '../lib/chat-client';
 import { aiProblem } from '../lib/ai-diagnostics';
 afterEach(() => vi.restoreAllMocks());
 const input = { requestId: crypto.randomUUID(), text: 'A private test' };
+it('preserves the unsaved draft and exposes the server reset delay for a rejected account quota', async () => {
+  const onSaved = vi.fn();
+  const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async () =>
+    Response.json(
+      {
+        error: {
+          code: 'CHAT_BURST_LIMIT',
+          message: 'Wait until the next minute.',
+          retryAfterSeconds: 42,
+        },
+      },
+      { status: 429, headers: { 'Retry-After': '42' } },
+    ),
+  );
+  await expect(submitChat('test', input, onSaved)).rejects.toMatchObject({
+    code: 'CHAT_BURST_LIMIT',
+    status: 429,
+    retryAfterSeconds: 42,
+  });
+  await expect(submitChat('test', input, onSaved)).rejects.toMatchObject({
+    retryAfterSeconds: 42,
+  });
+  expect(onSaved).not.toHaveBeenCalled();
+  expect(fetchMock.mock.calls[0][1]?.body).toBe(
+    fetchMock.mock.calls[1][1]?.body,
+  );
+});
 for (const status of ['completed', 'failed', 'working']) {
   it(`clears a confirmed saved ${status} message, including failure receipts`, async () => {
     const onSaved = vi.fn();

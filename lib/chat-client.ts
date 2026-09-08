@@ -175,6 +175,7 @@ export async function submitChat(
           response.status,
           data.messageSaved === true,
           data.runId,
+          data.error?.retryAfterSeconds,
         );
       result = confirm(data);
     }

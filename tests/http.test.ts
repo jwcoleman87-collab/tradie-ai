@@ -1,6 +1,29 @@
 import { it, expect, vi } from 'vitest';
 import { endpoint, body } from '../lib/server/http';
 import { publicConfig } from '../lib/server/config';
+import { AppError } from '../lib/server/errors';
+it('returns the server quota reset delay without weakening private API headers', async () => {
+  const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+  try {
+    const response = await endpoint(async () => {
+      throw new AppError(
+        'CHAT_BURST_LIMIT',
+        429,
+        'Wait until the next minute.',
+        42,
+      );
+    })(new Request('https://example.test/api/chat'));
+    expect(response.status).toBe(429);
+    expect(response.headers.get('Retry-After')).toBe('42');
+    expect(response.headers.get('Cache-Control')).toBe('no-store');
+    expect(response.headers.get('Referrer-Policy')).toBe('no-referrer');
+    expect(await response.json()).toMatchObject({
+      error: { code: 'CHAT_BURST_LIMIT', retryAfterSeconds: 42 },
+    });
+  } finally {
+    spy.mockRestore();
+  }
+});
 it('rejects non-JSON requests', async () =>
   await expect(
     body(

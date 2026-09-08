@@ -79,7 +79,7 @@ import {
   Maximize2,
   Minimize2,
 } from 'lucide-react';
-import { requestApi } from '@/lib/client';
+import { ApiError, requestApi } from '@/lib/client';
 import { useWorkbenchAuth } from '@/lib/use-workbench-auth';
 import { workspaceNeedsOnboarding } from '@/lib/workspace-selection';
 import { supportPayload } from '@/lib/server/privacy';
@@ -204,6 +204,13 @@ export default function Workspace() {
   const [focusedAgent, setFocusedAgent] = useState<AgentName | null>(null);
   const [actionFilter, setActionFilter] = useState<ActionFilter>('needs-you');
   const [now, setNow] = useState(Date.now);
+  const [requestRetryAt, setRequestRetryAt] = useState<number | null>(null);
+  const retryWaiting = requestRetryAt !== null && requestRetryAt > now;
+  useEffect(() => {
+    if (!retryWaiting) return;
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [retryWaiting]);
   const [crewCollapsed, setCrewCollapsed] = useState(true);
   const [chatExpanded, setChatExpanded] = useState(false);
   const [mobile, setMobile] = useState('chat'),
@@ -473,6 +480,7 @@ export default function Workspace() {
   async function perform(fn: () => Promise<void>) {
     voice.cancel();
     setError('');
+    setRequestRetryAt(null);
     setBusy(true);
     try {
       await fn();
@@ -557,6 +565,7 @@ export default function Workspace() {
     event?.preventDefault();
     if (
       sending.current ||
+      retryWaiting ||
       voice.isActive() ||
       !canChat ||
       !text.trim() ||
@@ -575,6 +584,7 @@ export default function Workspace() {
       sendRequest.current = { key, id: crypto.randomUUID() };
     setError('');
     setNotice('');
+    setRequestRetryAt(null);
     try {
       await chat.send(
         {
@@ -593,6 +603,11 @@ export default function Workspace() {
       );
     } catch (e) {
       setError(messageOf(e));
+      const seconds = e instanceof ApiError ? e.retryAfterSeconds : undefined;
+      if (seconds !== undefined && Number.isFinite(seconds) && seconds > 0) {
+        setNow(Date.now());
+        setRequestRetryAt(Date.now() + seconds * 1000);
+      }
     } finally {
       sending.current = false;
     }
@@ -1038,11 +1053,6 @@ export default function Workspace() {
           )}
           <div className="message-history" ref={historyRef}>
             <div className="message-content" ref={historyContentRef}>
-              {!settingsOpen && error && (
-                <div className="error-notice" role="alert">
-                  {error}
-                </div>
-              )}
               {!settingsOpen && notice && (
                 <output className="setup-notice !mt-0 !mb-4 block">
                   {notice}
@@ -1464,12 +1474,51 @@ export default function Workspace() {
             data-listening={voice.active}
             onSubmit={send}
           >
+            {!settingsOpen && error && (
+              <div
+                id="composer-error"
+                className="error-notice composer-error"
+                role="alert"
+              >
+                <p>{error}</p>
+                <div className="composer-error-actions">
+                  {text.trim() ? (
+                    <>
+                      <span>Your draft is kept here.</span>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        disabled={!canChat || retryWaiting}
+                        onClick={() => void send()}
+                      >
+                        {retryWaiting ? 'Wait to retry' : 'Retry message'}
+                      </Button>
+                    </>
+                  ) : (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      disabled={busy}
+                      onClick={() => perform(() => refresh())}
+                    >
+                      Refresh conversation
+                    </Button>
+                  )}
+                </div>
+              </div>
+            )}
             <Textarea
               id="magic-message"
               rows={1}
               aria-label="Message Chat"
               placeholder="Message Chat…"
-              aria-describedby="composer-help"
+              aria-describedby={
+                error && !settingsOpen
+                  ? 'composer-help composer-error'
+                  : 'composer-help'
+              }
               value={text}
               maxLength={12000}
               disabled={!canCompose}
@@ -1557,7 +1606,7 @@ export default function Workspace() {
                   size="icon"
                   aria-label="Send message"
                   className="composer-send"
-                  disabled={!canChat || !text.trim()}
+                  disabled={!canChat || !text.trim() || retryWaiting}
                 >
                   <ArrowUp /> <span>Send</span>
                 </Button>

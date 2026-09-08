@@ -42,3 +42,9 @@ next-env.d.ts
 /output/
 /docs/d10-action-states.html
 /.openai/
+
+# Isolated review dependencies, synthetic sessions and raw traces
+/scripts/review/tooling/node_modules/
+/.review-npm-cache/
+/evidence/**/runtime/
+/evidence/runtime/
