@@ -1,4 +1,4 @@
-import { ArrowRight, FileText } from 'lucide-react';
+import { ArrowRight } from 'lucide-react';
 import { BrandMark } from './brand';
 import { findWorkspaceBrand } from '@/lib/brands';
 import type { Action, Snapshot } from '@/lib/contracts';
@@ -98,23 +98,17 @@ export function FlowChip({
       className="flow-chip"
       aria-label={`From ${businessName} to ${destination === 'facebook' ? 'Facebook' : destination ? 'Google Calendar' : 'private business records'}`}
     >
-      <BrandMark
-        brand={findWorkspaceBrand(businessName)}
-        alt={businessName}
-        initials={initials(businessName)}
-        size="sm"
-      />
       <span className="flow-business" title={businessName}>
-        {businessName}
+        My business
       </span>
-      <ArrowRight size={16} aria-hidden="true" />
-      {destination ? (
-        <BrandMark brand={destination} showLabel size="sm" />
-      ) : (
-        <span className="flow-destination">
-          <FileText size={16} aria-hidden="true" /> Private records
-        </span>
-      )}
+      <ArrowRight size={12} aria-hidden="true" />
+      <span className="flow-destination">
+        {destination === 'facebook'
+          ? 'Facebook'
+          : destination
+            ? 'Google Calendar'
+            : 'Private records'}
+      </span>
     </div>
   );
 }

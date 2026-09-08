@@ -24,6 +24,14 @@ import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { ConnectionsPanel } from './connections-panel';
 import { MessageCopy } from './message-copy';
+import {
+  BusinessBanner,
+  BusinessDetails,
+  BriefDisclosure,
+  CompactChatReply,
+  MetadataDisclosure,
+  SplitTitle,
+} from './workbench-handoff';
 import { RecordPreview } from './record-preview';
 import { proposalImage } from '@/lib/proposal-presentation';
 import { ActionOutcome, ActionStatusChip } from './action-status';
@@ -204,7 +212,9 @@ export default function Workspace() {
   const [focusedAgent, setFocusedAgent] = useState<AgentName | null>(null);
   const [actionFilter, setActionFilter] = useState<ActionFilter>('needs-you');
   const [now, setNow] = useState(Date.now);
-  const [crewCollapsed, setCrewCollapsed] = useState(true);
+  const [crewCollapsed, setCrewCollapsed] = useState(false);
+  const [reviewActionId, setReviewActionId] = useState<string | null>(null);
+  const [reviewRequest, setReviewRequest] = useState(0);
   const [chatExpanded, setChatExpanded] = useState(false);
   const [mobile, setMobile] = useState('chat'),
     [view, setView] = useState('actions'),
@@ -722,7 +732,7 @@ export default function Workspace() {
     (section) => section.id === view,
   );
   return (
-    <main className="app-shell" ref={shellRef}>
+    <main className="app-shell handoff-shell" ref={shellRef}>
       <header className="topbar">
         <Link className="brand" href="/" aria-label="Workbench home">
           <Image
@@ -796,6 +806,17 @@ export default function Workspace() {
           )}
         </span>
       </header>
+      {snapshot && (
+        <BusinessBanner
+          snapshot={snapshot}
+          connections={
+            connectionState.workspaceId === workspaceId
+              ? connectionState.connections
+              : []
+          }
+          onConnections={() => chooseView('connections')}
+        />
+      )}
       <div
         className="workspace-grid"
         data-mobile={mobile}
@@ -829,7 +850,7 @@ export default function Workspace() {
             {team.map(({ id, name, detail, icon: Icon }) => (
               <button
                 type="button"
-                className={`agent-card ${focusedAgent === id ? 'active' : ''} ${recentAgents.includes(id as AgentName) ? 'participated' : ''}`}
+                className={`agent-card ${focusedAgent === id ? 'active' : ''} ${recentAgents.includes(id as AgentName) ? 'participated' : ''} ${activity.workingAgents.has(id as AgentName) || (chat.busy && focusedAgent === id) ? 'is-working' : ''}`}
                 key={id}
                 aria-pressed={focusedAgent === id}
                 aria-label={`${name}: ${detail}`}
@@ -848,12 +869,18 @@ export default function Workspace() {
                 </span>
                 <span className="crew-agent-copy">
                   <strong>{name}</strong>
-                  <small>{detail}</small>
+                  <small>
+                    {activity.workingAgents.has(id as AgentName) ||
+                    (chat.busy && focusedAgent === id)
+                      ? 'Working now'
+                      : detail}
+                  </small>
                 </span>
                 <span className="agent-dot" aria-hidden="true" />
               </button>
             ))}
           </div>
+          <BusinessDetails snapshot={snapshot} />
         </aside>
         <section className="conversation-panel">
           <div className="panel-heading">
@@ -895,7 +922,7 @@ export default function Workspace() {
                     : focusedAgent
                       ? `${team.find((agent) => agent.id === focusedAgent)?.name} selected`
                       : snapshot
-                        ? `${snapshot.workspace.name}${snapshot.workspace.workspace_type === 'sandbox' ? ' · Sandbox' : ''} · No work running`
+                        ? 'Crew ready'
                         : 'Setup & sign in'}
               </output>
             </div>
@@ -1346,7 +1373,14 @@ export default function Workspace() {
                           unoptimized
                         />
                       </span>
-                      <h2>Your crew is ready</h2>
+                      <h2>
+                        G’day
+                        {typeof session?.user.user_metadata?.full_name ===
+                        'string'
+                          ? ` ${session.user.user_metadata.full_name.split(' ')[0]}`
+                          : ''}
+                        , what can I get done for you today?
+                      </h2>
                       <p>
                         Tell us what needs doing, or start with one of these.
                       </p>
@@ -1416,8 +1450,11 @@ export default function Workspace() {
                                 ? ' · Sending…'
                                 : ''}
                             </span>
-                            <MessageCopy text={m.content} />
-                            <BrandMentions text={m.content} />
+                            {m.role === 'assistant' ? (
+                              <CompactChatReply text={m.content} />
+                            ) : (
+                              <MessageCopy text={m.content} />
+                            )}
                             {m.attachment_ids.length > 0 && (
                               <div className="message-attachments">
                                 {attachments.map((file) =>
@@ -1448,6 +1485,143 @@ export default function Workspace() {
                           </article>
                         );
                       })}
+                      {!chat.busy &&
+                        snapshot?.actions.some(
+                          (action) =>
+                            action.conversation_id ===
+                              snapshot.conversationId &&
+                            action.status === 'waiting_approval' &&
+                            !isDoneAction(action, renderTime),
+                        ) && (
+                          <div
+                            className="chat-proposals"
+                            aria-label="Proposals from this conversation"
+                          >
+                            {snapshot.actions
+                              .filter(
+                                (action) =>
+                                  action.conversation_id ===
+                                    snapshot.conversationId &&
+                                  action.status === 'waiting_approval' &&
+                                  !isDoneAction(action, renderTime),
+                              )
+                              .map((action) => {
+                                const photo = proposalImage(
+                                  action,
+                                  snapshot.uploads,
+                                );
+                                return (
+                                  <article
+                                    className="chat-proposal-card"
+                                    key={action.id}
+                                  >
+                                    <div className="chat-proposal-head">
+                                      <span>
+                                        <span className="proposal-agent-mark">
+                                          {action.agent === 'finance'
+                                            ? '$'
+                                            : action.agent
+                                                .slice(0, 1)
+                                                .toUpperCase()}
+                                        </span>
+                                        {
+                                          team.find(
+                                            (agent) =>
+                                              agent.id === action.agent,
+                                          )?.name
+                                        }
+                                      </span>
+                                      <ActionStatusChip action={action} />
+                                    </div>
+                                    <div className="chat-proposal-body">
+                                      <h3>
+                                        <SplitTitle title={action.summary} />
+                                      </h3>
+                                      <FlowChip
+                                        businessName={snapshot.workspace.name}
+                                        actionType={action.action_type}
+                                      />
+                                      {photo && (
+                                        <PrivateThumbnail
+                                          file={photo}
+                                          token={token}
+                                          className="chat-proposal-image"
+                                        />
+                                      )}
+                                      <BriefDisclosure>
+                                        {action.action_type ===
+                                        'calendar.create' ? (
+                                          <dl>
+                                            <dt>Starts</dt>
+                                            <dd>
+                                              {String(action.payload.start)}
+                                            </dd>
+                                            <dt>Ends</dt>
+                                            <dd>
+                                              {String(action.payload.end)}
+                                            </dd>
+                                            <dt>Time zone</dt>
+                                            <dd>
+                                              {String(action.payload.timeZone)}
+                                            </dd>
+                                            {typeof action.payload
+                                              .description === 'string' && (
+                                              <>
+                                                <dt>Details</dt>
+                                                <dd>
+                                                  {action.payload.description}
+                                                </dd>
+                                              </>
+                                            )}
+                                          </dl>
+                                        ) : (
+                                          <MessageCopy
+                                            text={
+                                              typeof action.payload.body ===
+                                              'string'
+                                                ? action.payload.body
+                                                : typeof action.payload
+                                                      .message === 'string'
+                                                  ? action.payload.message
+                                                  : action.summary
+                                            }
+                                          />
+                                        )}
+                                      </BriefDisclosure>
+                                    </div>
+                                    <div className="chat-proposal-foot">
+                                      <span>
+                                        Expires{' '}
+                                        {new Date(
+                                          action.expires_at,
+                                        ).toLocaleString('en-AU', {
+                                          weekday: 'short',
+                                          hour: 'numeric',
+                                          minute: '2-digit',
+                                          timeZone:
+                                            snapshot.workspace.time_zone,
+                                        })}
+                                      </span>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setActionFilter('all');
+                                          setReviewActionId(action.id);
+                                          setReviewRequest(
+                                            (value) => value + 1,
+                                          );
+                                          setChatExpanded(false);
+                                          chooseView('actions');
+                                        }}
+                                      >
+                                        Review & approve in Workspace →
+                                      </button>
+                                    </div>
+                                  </article>
+                                );
+                              })}
+                          </div>
+                        )}
                       {chat.busy && (
                         <output className="pending-state block">
                           {chat.stage}
@@ -1468,7 +1642,7 @@ export default function Workspace() {
               id="magic-message"
               rows={1}
               aria-label="Message Chat"
-              placeholder="Message Chat…"
+              placeholder="Message your crew…"
               aria-describedby="composer-help"
               value={text}
               maxLength={12000}
@@ -1571,7 +1745,7 @@ export default function Workspace() {
                 : 'Listening… Keep adds your words to the draft. Nothing is sent.'
               : voice.error ||
                 blockedReason ||
-                'Workbench prepares. You approve any external changes.'}
+                'Chat prepares work. Nothing sends until you approve it.'}
             {snapshot &&
               !busy &&
               !chat.busy &&
@@ -1633,15 +1807,21 @@ export default function Workspace() {
                 <ArrowLeft size={16} /> Back to Chat
               </Button>
             )}
-            <div className="section-label">
-              {snapshot?.workspace.name || 'YOUR WORKSPACE'}
-            </div>
-            <h2>
+            <h2>{settingsOpen ? 'Workspace settings' : 'Workspace'}</h2>
+            <p className="muted small">
               {settingsOpen
-                ? 'Workspace settings'
-                : activeWorkspaceHeading.title}
-            </h2>
-            <p className="muted small">{activeWorkspaceHeading.description}</p>
+                ? activeWorkspaceHeading.description
+                : 'Review · follow · look back'}
+            </p>
+            <Button
+              className="workspace-settings-button"
+              variant="ghost"
+              size="icon"
+              aria-label="Workspace settings"
+              onClick={() => chooseView('connections')}
+            >
+              <Settings size={16} />
+            </Button>
           </div>
           <nav className="workspace-simple-nav" aria-label="Workspace sections">
             {workspacePrimarySections.map(({ id, label, icon: Icon }) => (
@@ -1656,15 +1836,6 @@ export default function Workspace() {
                 <span>{label}</span>
               </button>
             ))}
-            <button
-              type="button"
-              className={settingsOpen ? 'active' : ''}
-              aria-current={settingsOpen ? 'page' : undefined}
-              onClick={() => chooseView('connections')}
-            >
-              <Settings size={15} />
-              <span>Settings</span>
-            </button>
           </nav>
           <div className="workspace-content-layout">
             {settingsOpen && (
@@ -1793,6 +1964,7 @@ export default function Workspace() {
                         key={id}
                         type="button"
                         aria-pressed={actionFilter === id}
+                        data-filter={id}
                         onClick={() => setActionFilter(id)}
                       >
                         {label} <span>{actionGroups[id].length}</span>
@@ -1839,18 +2011,40 @@ export default function Workspace() {
                   )}
                   {visibleActions.map((a) =>
                     isDoneAction(a, renderTime) ? (
-                      <article className="action-card" key={a.id}>
-                        <ActionStatusChip action={a} />
-                        <h3>{a.summary}</h3>
+                      <MetadataDisclosure
+                        className="completed-action-row"
+                        id={`completed:${a.id}`}
+                        key={a.id}
+                        summary={
+                          <div className="action-card-summary-main">
+                            <div className="action-status-row">
+                              <span className="section-label">{a.agent}</span>
+                              <ActionStatusChip action={a} />
+                            </div>
+                            <FlowChip
+                              businessName={
+                                snapshot?.workspace.name || 'My business'
+                              }
+                              actionType={a.action_type}
+                            />
+                            <h3>
+                              <SplitTitle title={a.summary} />
+                            </h3>
+                          </div>
+                        }
+                      >
                         <ActionOutcome
                           action={a}
                           timeZone={snapshot?.workspace.time_zone}
                         />
-                      </article>
+                      </MetadataDisclosure>
                     ) : (
                       <ActionCard
                         key={a.id}
                         action={a}
+                        focusRequest={
+                          reviewActionId === a.id ? reviewRequest : 0
+                        }
                         timeZone={snapshot?.workspace.time_zone}
                         businessName={
                           snapshot?.workspace.name || 'Your workspace'
@@ -2026,16 +2220,62 @@ export default function Workspace() {
                     </div>
                   )}
                   {activeRecords.map((r) => (
-                    <article className="action-card" key={r.id}>
-                      <span className="section-label">
-                        {r.kind} ·{' '}
+                    <MetadataDisclosure
+                      className="record-row"
+                      key={r.id}
+                      id={`record:${r.id}`}
+                      summary={
+                        <>
+                          <span className="file-row-copy">
+                            <strong>
+                              <SplitTitle title={r.title} />
+                            </strong>
+                            <small>
+                              {r.source === 'approved_ai_draft'
+                                ? 'Approved AI draft'
+                                : 'Private records'}{' '}
+                              ·{' '}
+                              {new Date(r.created_at).toLocaleDateString(
+                                'en-AU',
+                                {
+                                  day: 'numeric',
+                                  month: 'short',
+                                  timeZone: snapshot?.workspace.time_zone,
+                                },
+                              )}
+                            </small>
+                          </span>
+                          <span className="file-row-status informational">
+                            Saved
+                          </span>
+                        </>
+                      }
+                    >
+                      <p>
+                        Source:{' '}
                         {r.source === 'approved_ai_draft'
-                          ? 'AI DRAFT'
-                          : 'OWNER SUPPLIED'}
-                      </span>
-                      <h3>{r.title}</h3>
-                      <p>{r.body}</p>
-                      <BrandMentions text={`${r.title} ${r.body}`} />
+                          ? 'Approved AI draft'
+                          : 'Owner supplied'}
+                      </p>
+                      <p>Visibility: Private</p>
+                      <Dialog>
+                        <DialogTrigger
+                          render={<Button variant="outline" size="xs" />}
+                        >
+                          Open record
+                        </DialogTrigger>
+                        <DialogContent className="record-content-dialog">
+                          <DialogHeader>
+                            <DialogTitle>
+                              <SplitTitle title={r.title} />
+                            </DialogTitle>
+                            <DialogDescription>
+                              Private {r.kind} record
+                            </DialogDescription>
+                          </DialogHeader>
+                          <MessageCopy text={r.body} />
+                        </DialogContent>
+                      </Dialog>
                       {owner && (
                         <Button
                           size="xs"
@@ -2063,7 +2303,7 @@ export default function Workspace() {
                           <Archive size={13} /> Archive record
                         </Button>
                       )}
-                    </article>
+                    </MetadataDisclosure>
                   ))}
                 </>
               )}
@@ -2625,6 +2865,7 @@ export default function Workspace() {
 
 export function ActionCard({
   action: a,
+  focusRequest = 0,
   timeZone,
   businessName,
   token,
@@ -2640,6 +2881,7 @@ export function ActionCard({
   onRevise,
 }: {
   action: Action;
+  focusRequest?: number;
   timeZone?: string;
   businessName: string;
   token: string;
@@ -2659,6 +2901,7 @@ export function ActionCard({
     a.status === 'approved' || a.status === 'failed',
   );
   const [editing, setEditing] = useState(false);
+  const cardRef = useRef<HTMLDetailsElement>(null);
 
   useEffect(() => {
     try {
@@ -2670,6 +2913,19 @@ export function ActionCard({
       // The card still works for this session when browser storage is blocked.
     }
   }, [storageKey, a.status]);
+
+  useEffect(() => {
+    if (!focusRequest) return;
+    setOpen(true);
+    const frame = window.requestAnimationFrame(() => {
+      cardRef.current?.scrollIntoView({
+        block: 'nearest',
+        behavior: 'instant',
+      });
+      cardRef.current?.querySelector('summary')?.focus({ preventScroll: true });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [focusRequest]);
 
   const state = actionState(a);
   const calendar = a.action_type === 'calendar.create',
@@ -2694,6 +2950,8 @@ export function ActionCard({
       .replace(',', ' at');
   return (
     <details
+      ref={cardRef}
+      id={`action-${a.id}`}
       className="action-card collapsible-action-card"
       data-action-kind={a.action_type}
       open={open}
@@ -2714,7 +2972,16 @@ export function ActionCard({
             <ActionStatusChip action={a} />
           </div>
           <FlowChip businessName={businessName} actionType={a.action_type} />
-          <h3 className="mt-2">{a.summary}</h3>
+          <h3 className="mt-2">
+            <SplitTitle title={a.summary} />
+          </h3>
+          {imageFile && (
+            <PrivateThumbnail
+              file={imageFile}
+              token={token}
+              className="action-summary-image"
+            />
+          )}
         </div>
         <span className="action-card-toggle-hint" aria-hidden="true">
           <span>{open ? 'Minimise' : 'Open'}</span>
@@ -3083,6 +3350,50 @@ function PrivateImagePreview({
   );
 }
 
+function PrivateThumbnail({
+  file,
+  token,
+  className = '',
+}: {
+  file: Upload;
+  token: string;
+  className?: string;
+}) {
+  const [url, setUrl] = useState('');
+  useEffect(() => {
+    let active = true;
+    setUrl('');
+    void requestApi<{ signedUrl: string }>(
+      token,
+      `uploads/${file.id}/url?preview=1`,
+    )
+      .then((result) => {
+        if (active) setUrl(result.signedUrl);
+      })
+      .catch(() => {
+        /* The file can still be opened from its full review. */
+      });
+    return () => {
+      active = false;
+    };
+  }, [file.id, token]);
+  return (
+    <span className={`private-thumbnail ${className}`}>
+      {url ? (
+        <Image
+          src={url}
+          alt={file.filename}
+          width={640}
+          height={320}
+          unoptimized
+        />
+      ) : (
+        <Camera size={18} aria-label="Image preview" />
+      )}
+    </span>
+  );
+}
+
 function FileCard({
   file,
   token,
@@ -3095,45 +3406,65 @@ function FileCard({
   onSelect: () => void;
 }) {
   const [url, setUrl] = useState(''),
-    [error, setError] = useState('');
+    [error, setError] = useState(''),
+    [opening, setOpening] = useState(false);
   const image = isImageUpload(file);
+  const type = image
+    ? 'Image'
+    : file.mime_type === 'application/pdf'
+      ? 'PDF'
+      : file.mime_type.includes('csv')
+        ? 'CSV'
+        : 'DOC';
   return (
-    <article
-      className={`action-card file-card ${image ? 'image-file-card' : ''}`}
+    <MetadataDisclosure
+      className="file-card file-row"
+      id={`file:${file.id}`}
+      summary={
+        <>
+          <span className="file-row-tile">
+            {image ? <PrivateThumbnail file={file} token={token} /> : type}
+          </span>
+          <span className="file-row-copy">
+            <strong title={file.filename}>{file.filename}</strong>
+            <small>{Math.ceil(file.size_bytes / 1024)} KB · Private</small>
+          </span>
+          <span
+            className={`file-row-status ${file.status === 'ready' ? 'ready' : 'needs-review'}`}
+          >
+            {file.status === 'ready' ? 'Ready' : 'Needs review'}
+          </span>
+        </>
+      }
     >
-      {image ? (
-        <PrivateImagePreview file={file} token={token} />
-      ) : (
-        <FileText size={17} />
-      )}
-      <h3 className="mt-2 break-all">{file.filename}</h3>
-      <BrandMentions text={file.filename} />
-      <p>{Math.ceil(file.size_bytes / 1024)} KB · Private</p>
+      <p>Type: {type}</p>
+      <p>Size: {Math.ceil(file.size_bytes / 1024)} KB</p>
+      <p>Source: Conversation upload</p>
       <div className="button-row">
-        <Button
-          size="xs"
-          variant={selected ? 'default' : 'outline'}
-          onClick={onSelect}
-        >
+        <Button size="xs" variant="outline" onClick={onSelect}>
           {selected ? 'Attached to next message' : 'Attach to message'}
         </Button>
         <Button
           size="xs"
           variant="ghost"
+          disabled={opening}
           onClick={async () => {
+            setOpening(true);
             try {
-              const r = await requestApi<{ signedUrl: string }>(
+              const result = await requestApi<{ signedUrl: string }>(
                 token,
                 `uploads/${file.id}/url`,
               );
-              setUrl(r.signedUrl);
+              setUrl(result.signedUrl);
               setError('');
-            } catch (e) {
-              setError(messageOf(e));
+            } catch (reason) {
+              setError(messageOf(reason));
+            } finally {
+              setOpening(false);
             }
           }}
         >
-          Get download link
+          {opening ? 'Opening…' : 'Get download link'}
         </Button>
       </div>
       {url && (
@@ -3147,7 +3478,7 @@ function FileCard({
         </a>
       )}
       {error && <p role="alert">{error}</p>}
-    </article>
+    </MetadataDisclosure>
   );
 }
 function CaseCard({
