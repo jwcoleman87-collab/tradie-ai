@@ -83,6 +83,7 @@ export async function rpc<T = unknown>(
       FORBIDDEN: 403,
       NOT_FOUND: 404,
       RATE_LIMITED: 429,
+      WORKSPACE_LIMIT: 429,
       CONFLICT: 409,
       EXPIRED: 409,
       BUSY: 409,
@@ -112,11 +113,13 @@ export async function rpc<T = unknown>(
                 ? 'Restore this workspace before adding new work.'
                 : code === 'CONVERSATION_ARCHIVED'
                   ? 'Restore this conversation before adding new messages.'
-                  : code === 'RATE_LIMITED'
-                    ? 'Please wait a minute before trying again.'
-                    : code === 'BUSY'
-                      ? 'Your team is still working on the previous request.'
-                      : 'The change was not applied. Refresh the workspace and try again.',
+                  : code === 'WORKSPACE_LIMIT'
+                    ? 'This account has 20 active workspaces. Archive a workspace before creating or restoring another.'
+                    : code === 'RATE_LIMITED'
+                      ? 'Please wait a minute before trying again.'
+                      : code === 'BUSY'
+                        ? 'Your team is still working on the previous request.'
+                        : 'The change was not applied. Refresh the workspace and try again.',
     );
   }
   return data as T;

@@ -313,9 +313,7 @@ export async function onboardingApi(
             unresolved_questions: [],
             discovery_status:
               session?.discovery_status ||
-              (env('WEB_SEARCH_ENABLED') === 'true'
-                ? 'ready'
-                : 'unavailable'),
+              (env('WEB_SEARCH_ENABLED') === 'true' ? 'ready' : 'unavailable'),
             prompt_count: promptCount,
             status: profileWasConfirmed
               ? 'completed'
@@ -353,108 +351,81 @@ export async function onboardingApi(
       : env('WEB_SEARCH_ENABLED') === 'true'
         ? 'ready'
         : 'unavailable';
-    if (turn.identityChanged)
-      checked(
-        await admin
-          .from('business_profile_facts')
-          .delete()
-          .eq('workspace_id', workspace.id),
-      );
-    checked(
-      await admin.from('business_profiles').upsert(
-        {
-          workspace_id: workspace.id,
-          ...(turn.identityChanged
-            ? {
-                website_url: null,
-                base_location: null,
-                service_areas: [],
-                services: [],
-                preferred_job_types: [],
-                enquiry_channels: [],
-                primary_goal: null,
-                admin_bottleneck: null,
-                brand_summary: null,
-              }
-            : {}),
-          display_name:
-            typeof patch.display_name === 'string'
-              ? patch.display_name
-              : profile?.display_name || workspace.name,
-          ...patch,
-          onboarding_status: profileWasConfirmed
-            ? 'confirmed'
-            : reviewReady
-              ? 'review'
-              : 'in_progress',
-          updated_at: now,
-        },
-        { onConflict: 'workspace_id', ignoreDuplicates: false },
-      ),
-    );
-    for (const fact of turn.facts)
-      checked(
-        await admin.from('business_profile_facts').upsert(
-          {
-            workspace_id: workspace.id,
-            field_path: fact.fieldPath,
-            value: fact.value,
-            source_type: 'owner_message',
-            source_label: `Your onboarding message ${turnNumber}`,
-            source_url: sourceReference,
-            confidence: fact.confidence,
-            fact_state: fact.factState,
-            observed_at: now,
-            confirmed_at: null,
-          },
-          { onConflict: 'workspace_id,field_path', ignoreDuplicates: false },
-        ),
-      );
-    checked(
-      await admin.from('onboarding_sessions').upsert(
-        {
-          id: sessionId,
-          user_id: userId,
-          workspace_id: workspace.id,
-          messages,
-          information_goals: [
-            ...new Set([
-              ...(session?.information_goals || []),
-              ...turn.goalsCovered,
-            ]),
-          ],
-          current_goal: turn.nextGoal,
-          unresolved_questions: [],
-          discovery_status: discoveryStatus,
-          prompt_count: promptCount,
-          status: profileWasConfirmed
-            ? 'completed'
-            : reviewReady
-              ? 'review'
-              : 'in_progress',
-          updated_at: now,
-        },
-        { onConflict: 'workspace_id', ignoreDuplicates: false },
-      ),
-    );
-    checked(
-      await admin.from('audit_logs').insert({
-        workspace_id: workspace.id,
-        actor_id: userId,
-        event: 'onboarding.turn_saved',
-        entity_id: sessionId,
-        metadata: {
-          prompt_count: promptCount,
-          turn_number: turnNumber,
-          goals_covered: turn.goalsCovered,
-          discovery_status: discoveryStatus,
-          model: provider.model,
-          provider_trace: provider.attempts || [],
-          web_research_used: turn.researchUsed,
-          identity_changed: turn.identityChanged,
-        },
-      }),
-    );
+    // The submitted answer was saved before AI processing. Commit the
+    // interpretation together so a later failure cannot erase old facts or
+    // leave the profile ahead of its reply and audit receipt.
+    await rpc(admin, 'commit_onboarding_turn', {
+      p_workspace: workspace.id,
+      p_user: userId,
+      p_identity_changed: turn.identityChanged,
+      p_profile: {
+        ...(turn.identityChanged
+          ? {
+              website_url: null,
+              base_location: null,
+              service_areas: [],
+              services: [],
+              preferred_job_types: [],
+              enquiry_channels: [],
+              primary_goal: null,
+              admin_bottleneck: null,
+              brand_summary: null,
+            }
+          : {}),
+        display_name:
+          typeof patch.display_name === 'string'
+            ? patch.display_name
+            : profile?.display_name || workspace.name,
+        ...patch,
+        onboarding_status: profileWasConfirmed
+          ? 'confirmed'
+          : reviewReady
+            ? 'review'
+            : 'in_progress',
+        updated_at: now,
+      },
+      p_facts: turn.facts.map((fact) => ({
+        field_path: fact.fieldPath,
+        value: fact.value,
+        source_type: 'owner_message',
+        source_label: `Your onboarding message ${turnNumber}`,
+        source_url: sourceReference,
+        confidence: fact.confidence,
+        fact_state: fact.factState,
+        observed_at: now,
+        confirmed_at: null,
+      })),
+      p_session: {
+        id: sessionId,
+        messages,
+        information_goals: [
+          ...new Set([
+            ...(session?.information_goals || []),
+            ...turn.goalsCovered,
+          ]),
+        ],
+        current_goal: turn.nextGoal,
+        unresolved_questions: [],
+        discovery_status: discoveryStatus,
+        prompt_count: promptCount,
+        status: profileWasConfirmed
+          ? 'completed'
+          : reviewReady
+            ? 'review'
+            : 'in_progress',
+        updated_at: now,
+      },
+      p_metadata: {
+        prompt_count: promptCount,
+        turn_number: turnNumber,
+        goals_covered: turn.goalsCovered,
+        discovery_status: discoveryStatus,
+        model: provider.model,
+        provider_trace: provider.attempts || [],
+        web_research_used: turn.researchUsed,
+        identity_changed: turn.identityChanged,
+      },
+    });
     return json(await snapshot(db, userId, workspace.id));
   }
   if (path === 'onboarding/profile' && method === 'PATCH') {
@@ -470,39 +441,20 @@ export async function onboardingApi(
         .maybeSingle(),
     );
     requireValue(profile, 'NOT_FOUND', 404);
-    checked(
-      await admin
-        .from('business_profiles')
-        .update({ ...profilePatch(input.facts), updated_at: now })
-        .eq('workspace_id', input.workspaceId),
-    );
-    for (const fact of input.facts)
-      checked(
-        await admin.from('business_profile_facts').upsert(
-          {
-            workspace_id: input.workspaceId,
-            field_path: fact.fieldPath,
-            value: fact.value,
-            source_type: 'owner_correction',
-            source_label: 'Your profile correction',
-            source_url: null,
-            confidence: 'high',
-            fact_state: 'owner_supplied',
-            observed_at: now,
-            confirmed_at: null,
-          },
-          { onConflict: 'workspace_id,field_path', ignoreDuplicates: false },
-        ),
-      );
-    checked(
-      await admin.from('audit_logs').insert({
-        workspace_id: input.workspaceId,
-        actor_id: userId,
-        event: 'onboarding.profile_corrected',
-        entity_id: input.workspaceId,
-        metadata: { fields: input.facts.map((fact) => fact.fieldPath) },
-      }),
-    );
+    await rpc(admin, 'correct_onboarding_profile', {
+      p_workspace: input.workspaceId,
+      p_user: userId,
+      p_profile: { ...profilePatch(input.facts), updated_at: now },
+      // Preserve the earlier per-field upsert's last-value behavior when a
+      // client supplies the same field more than once in one correction.
+      p_facts: [
+        ...new Map(input.facts.map((fact) => [fact.fieldPath, fact])).values(),
+      ].map((fact) => ({
+        field_path: fact.fieldPath,
+        value: fact.value,
+      })),
+      p_metadata: { fields: input.facts.map((fact) => fact.fieldPath) },
+    });
     return json(await snapshot(db, userId, input.workspaceId));
   }
   if (path === 'onboarding/confirm' && method === 'POST') {
@@ -536,45 +488,10 @@ export async function onboardingApi(
       409,
       'Add some business information before confirming the profile.',
     );
-    const now = new Date().toISOString();
-    checked(
-      await admin
-        .from('business_profiles')
-        .update({
-          onboarding_status: 'confirmed',
-          confirmed_at: now,
-          updated_at: now,
-        })
-        .eq('workspace_id', input.workspaceId),
-    );
-    checked(
-      await admin
-        .from('business_profile_facts')
-        .update({ fact_state: 'confirmed', confirmed_at: now })
-        .eq('workspace_id', input.workspaceId),
-    );
-    checked(
-      await admin
-        .from('onboarding_sessions')
-        .update({ status: 'completed', completed_at: now, updated_at: now })
-        .eq('workspace_id', input.workspaceId)
-        .eq('user_id', userId),
-    );
-    await rpc(admin, 'update_workspace', {
+    await rpc(admin, 'confirm_onboarding', {
       p_workspace: input.workspaceId,
       p_user: userId,
-      p_name: profile.display_name,
-      p_workspace_type: workspace.workspace_type,
     });
-    checked(
-      await admin.from('audit_logs').insert({
-        workspace_id: input.workspaceId,
-        actor_id: userId,
-        event: 'onboarding.completed',
-        entity_id: input.workspaceId,
-        metadata: { fact_count: facts.length },
-      }),
-    );
     return json({ ok: true, workspaceId: input.workspaceId });
   }
   return null;

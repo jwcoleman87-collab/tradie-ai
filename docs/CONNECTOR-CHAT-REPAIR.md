@@ -5,19 +5,19 @@ Prepared 5 September 2026 against audit baseline
 
 ## Repairs
 
-| Audit finding | Result |
-| --- | --- |
-| Modern Facebook Pages rejected | Explicit publishing-capable legacy and `PROFILE_PLUS_*` tasks accepted. Required scopes and Page token checks retained. |
-| Temporary Facebook errors disable connections | Bounded provider error parsing separates throttling/transient failures from confirmed authorization or publishing-permission failure. Temporary failures preserve status and credentials. |
-| Interrupted Chat stays working on replay | The same saved request is atomically expired after its lease. Status reads expire it too; replay never duplicates the user's message. Late workers cannot commit after lease expiry. |
-| One Ads root prevents all choices | Four concurrent discovery workers, at most twenty roots, isolate account-specific access/disabled errors; successful choices carry an incomplete-discovery notice. Global token/configuration failures still fail visibly. |
-| Ads permission errors reported as outages | Structured Ads codes distinguish account access, account state, OAuth authorization, developer-token/configuration, quota and temporary failures. Recovery copy matches the cause. |
-| Calendar work before every Chat turn | The structured router decides whether availability is needed before Calendar is fetched. Calendar reads use the same pinned connection; unrelated requests make no Calendar calls. |
-| Excessive routing/context cost | Router context is limited to the last six messages and 2,000 characters per message, with a separate 2,048-token output budget. Original GPT-5 models use minimal reasoning for routing. Independent database reads and attachments are bounded and concurrent. |
-| No acknowledgement/progress until completion | An optimistic message appears immediately; a durable NDJSON acceptance receipt clears the composer. Stage updates continue during processing; the final persisted reply renders directly. Other panels refresh in the background. |
-| No coherent total deadline | 110 seconds for work plus persistence within a 120-second total budget, a 150-second database lease and a 150-second route maximum. Stage deadlines and cancellation apply across fallback. All bounded attempts are retained. |
-| Reconnected actions cannot be resolved | Original approvals, connection IDs and payloads remain immutable. Replacement creates a new pending proposal for a currently verified connection and requires fresh approval. Obsolete proposals can be cancelled with history retained. |
-| Calendar disconnect paths disagree | Both paths use a shared transactional disconnect. Durable provider generations invalidate pending states, candidates and already-consumed callbacks at commit. |
+| Audit finding                                 | Result                                                                                                                                                                                                                                                          |
+| --------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Modern Facebook Pages rejected                | Explicit publishing-capable legacy and `PROFILE_PLUS_*` tasks accepted. Required scopes and Page token checks retained.                                                                                                                                         |
+| Temporary Facebook errors disable connections | Bounded provider error parsing separates throttling/transient failures from confirmed authorization or publishing-permission failure. Temporary failures preserve status and credentials.                                                                       |
+| Interrupted Chat stays working on replay      | The same saved request is atomically expired after its lease. Status reads expire it too; replay never duplicates the user's message. Late workers cannot commit after lease expiry.                                                                            |
+| One Ads root prevents all choices             | Four concurrent discovery workers, at most twenty roots, isolate account-specific access/disabled errors; successful choices carry an incomplete-discovery notice. Global token/configuration failures still fail visibly.                                      |
+| Ads permission errors reported as outages     | Structured Ads codes distinguish account access, account state, OAuth authorization, developer-token/configuration, quota and temporary failures. Recovery copy matches the cause.                                                                              |
+| Calendar work before every Chat turn          | The structured router decides whether availability is needed before Calendar is fetched. Calendar reads use the same pinned connection; unrelated requests make no Calendar calls.                                                                              |
+| Excessive routing/context cost                | Router context is limited to the last six messages and 2,000 characters per message, with a separate 2,048-token output budget. Original GPT-5 models use minimal reasoning for routing. Independent database reads and attachments are bounded and concurrent. |
+| No acknowledgement/progress until completion  | An optimistic message appears immediately; a durable NDJSON acceptance receipt clears the composer. Stage updates continue during processing; the final persisted reply renders directly. Other panels refresh in the background.                               |
+| No coherent total deadline                    | 110 seconds for work plus persistence within a 120-second total budget, a 150-second database lease and a 150-second route maximum. Stage deadlines and cancellation apply across fallback. All bounded attempts are retained.                                  |
+| Reconnected actions cannot be resolved        | Original approvals, connection IDs and payloads remain immutable. Replacement creates a new pending proposal for a currently verified connection and requires fresh approval. Obsolete proposals can be cancelled with history retained.                        |
+| Calendar disconnect paths disagree            | Both paths use a shared transactional disconnect. Durable provider generations invalidate pending states, candidates and already-consumed callbacks at commit.                                                                                                  |
 
 Additional related defects found during implementation were repaired:
 
@@ -207,18 +207,18 @@ had not been checked. Reloading while the accepted Calendar request was working
 recovered its persisted reply without a duplicate user message. No test proposal
 or external action was created or accepted.
 
-| Server duration | Caption | Disconnected Calendar |
-| --- | ---: | ---: |
-| Authentication | 967 ms | 288 ms |
-| Durable acceptance | 3,717 ms | 2,495 ms |
-| Submission to saved acknowledgement | 4,684 ms | 2,783 ms |
-| Database context | 877 ms | 865 ms |
-| Routing | 2,291 ms | 1,443 ms |
-| Records | 291 ms | 320 ms |
-| Attachments / skills | 0 / 4 ms | 0 / 2 ms |
-| Final generation | 6,777 ms | 7,395 ms |
-| Persistence | 2,041 ms | 654 ms |
-| Total request | 16,965 ms | 13,462 ms |
+| Server duration                     |   Caption | Disconnected Calendar |
+| ----------------------------------- | --------: | --------------------: |
+| Authentication                      |    967 ms |                288 ms |
+| Durable acceptance                  |  3,717 ms |              2,495 ms |
+| Submission to saved acknowledgement |  4,684 ms |              2,783 ms |
+| Database context                    |    877 ms |                865 ms |
+| Routing                             |  2,291 ms |              1,443 ms |
+| Records                             |    291 ms |                320 ms |
+| Attachments / skills                |  0 / 4 ms |              0 / 2 ms |
+| Final generation                    |  6,777 ms |              7,395 ms |
+| Persistence                         |  2,041 ms |                654 ms |
+| Total request                       | 16,965 ms |             13,462 ms |
 
 These are production server timings, not browser paint measurements. Neither
 request performed Calendar or web research work. The bounded current-deployment

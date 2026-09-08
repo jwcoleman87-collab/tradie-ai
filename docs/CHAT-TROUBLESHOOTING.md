@@ -40,17 +40,17 @@ did not establish hosted compatibility or future API balance.
    request after its 150-second lease. An uncertain completion write remains
    pollable until the database confirms the outcome.
 
-| Code | Meaning / next step |
-| --- | --- |
-| `AI_QUOTA_EXCEEDED` | Provider reported API credit/usage limits; check its billing. |
-| `AI_RATE_LIMITED` | Temporary rate limit; wait. Consented backup may be attempted. |
-| `AI_KEY_INVALID` | Key authentication failed; check/rotate that server key. |
-| `AI_ACCESS_DENIED` / `AI_MODEL_UNAVAILABLE` | Verify project/model access and configuration. |
-| `AI_TIMEOUT` / `AI_NETWORK_ERROR` | No timely usable connection; do not infer missing credits. |
-| `AI_TRANSPORT_CONFIG_INVALID` | Runtime-incompatible request options; needs an app fix. |
-| `AI_REDIRECT_BLOCKED` | Unexpected redirect rejected; do not enable credential forwarding. |
-| `AI_UNAVAILABLE` | Unavailable/interrupted provider; this alone does not establish a credit or key failure. |
-| `AI_REFUSED` / `AI_INVALID_RESPONSE` | Terminal; never switch to circumvent refusal/validation. |
+| Code                                        | Meaning / next step                                                                      |
+| ------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| `AI_QUOTA_EXCEEDED`                         | Provider reported API credit/usage limits; check its billing.                            |
+| `AI_RATE_LIMITED`                           | Temporary rate limit; wait. Consented backup may be attempted.                           |
+| `AI_KEY_INVALID`                            | Key authentication failed; check/rotate that server key.                                 |
+| `AI_ACCESS_DENIED` / `AI_MODEL_UNAVAILABLE` | Verify project/model access and configuration.                                           |
+| `AI_TIMEOUT` / `AI_NETWORK_ERROR`           | No timely usable connection; do not infer missing credits.                               |
+| `AI_TRANSPORT_CONFIG_INVALID`               | Runtime-incompatible request options; needs an app fix.                                  |
+| `AI_REDIRECT_BLOCKED`                       | Unexpected redirect rejected; do not enable credential forwarding.                       |
+| `AI_UNAVAILABLE`                            | Unavailable/interrupted provider; this alone does not establish a credit or key failure. |
+| `AI_REFUSED` / `AI_INVALID_RESPONSE`        | Terminal; never switch to circumvent refusal/validation.                                 |
 
 Backup uses only providers explicitly allowed by the owner. It does not create
 free credits, transfer balances or bypass refusals. Readiness means a key is

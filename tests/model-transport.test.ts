@@ -172,14 +172,12 @@ it.each([
   async (model) => {
     vi.stubEnv('OPENAI_API_KEY', 'private-test');
     vi.stubEnv('OPENAI_MODEL', model);
-    const mock = vi
-      .spyOn(globalThis, 'fetch')
-      .mockResolvedValue(
-        Response.json({
-          status: 'incomplete',
-          incomplete_details: { reason: 'max_output_tokens' },
-        }),
-      );
+    const mock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      Response.json({
+        status: 'incomplete',
+        incomplete_details: { reason: 'max_output_tokens' },
+      }),
+    );
     await expect(
       new OpenAIProvider().structured(RouteOutput, '', [], {
         purpose: 'routing',

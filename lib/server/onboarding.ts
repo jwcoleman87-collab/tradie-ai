@@ -51,8 +51,7 @@ export function prepareOnboardingAnswer(
   input: { requestId: string; answer: string; createdAt: string },
 ) {
   const existingIndex = messages.findIndex(
-    (message) =>
-      message.id === input.requestId && message.role === 'user',
+    (message) => message.id === input.requestId && message.role === 'user',
   );
   if (existingIndex >= 0) {
     const existing = messages[existingIndex];
@@ -238,15 +237,11 @@ function websiteForBusiness(
       .lastIndexOf(businessName.toLowerCase());
     if (nameIndex < 0) continue;
     const candidates = [
-      ...message.content.matchAll(
-        /https?:\/\/[^\s,;)]+|\bwww\.[^\s,;)]+/gi,
-      ),
+      ...message.content.matchAll(/https?:\/\/[^\s,;)]+|\bwww\.[^\s,;)]+/gi),
     ]
       .map((match) => {
         const raw = match[0];
-        const normalized = /^https?:\/\//i.test(raw)
-          ? raw
-          : `https://${raw}`;
+        const normalized = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
         try {
           const hostnameKey = compactName(
             new URL(normalized).hostname.replace(/^www\./i, '').split('.')[0],

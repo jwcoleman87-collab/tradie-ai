@@ -4,10 +4,7 @@ import type { AgentName } from '../contracts';
 import { sha256 } from './crypto';
 
 function readSkill(agent: AgentName) {
-  return readFileSync(
-    join(process.cwd(), 'skills', agent, 'SKILL.md'),
-    'utf8',
-  );
+  return readFileSync(join(process.cwd(), 'skills', agent, 'SKILL.md'), 'utf8');
 }
 
 const sources: Record<AgentName, string> = {

@@ -74,6 +74,7 @@ const writes: {
 let consent = true;
 let failTable = '';
 let failureUpdateWon = true;
+let missingConversation = false;
 function query(table: string) {
   let operation = 'select';
   let data: Record<string, unknown> = {};
@@ -93,7 +94,10 @@ function query(table: string) {
         error: null,
       };
     if (table === 'conversations')
-      return { data: { status: 'active' }, error: null };
+      return {
+        data: missingConversation ? null : { status: 'active' },
+        error: null,
+      };
     if (table === 'integration_credentials') return { data: null, error: null };
     if (table === 'messages')
       return {
@@ -128,7 +132,10 @@ function query(table: string) {
       filters.push(filter);
       return chain;
     },
-    single: async () => result(),
+    single: async () =>
+      table === 'conversations' && missingConversation
+        ? { data: null, error: new Error('PGRST116: zero visible rows') }
+        : result(),
     maybeSingle: async () => result(),
     update: (value: Record<string, unknown>) => {
       operation = 'update';
@@ -165,6 +172,7 @@ beforeEach(() => {
   consent = true;
   failTable = '';
   failureUpdateWon = true;
+  missingConversation = false;
   mocks.connections.mockReset().mockResolvedValue([]);
   mocks.from.mockReset().mockImplementation(query);
   mocks.rpc
@@ -188,6 +196,19 @@ beforeEach(() => {
   vi.spyOn(console, 'info').mockImplementation(() => {});
 });
 afterEach(() => vi.restoreAllMocks());
+
+it('returns a non-disclosing 404 for a conversation outside the requested workspace before beginning paid work', async () => {
+  missingConversation = true;
+  const response = await send();
+  expect(response.status).toBe(404);
+  const receipt = await response.json();
+  expect(receipt.error.code).toBe('NOT_FOUND');
+  expect(JSON.stringify(receipt)).not.toContain(input.conversationId);
+  expect(JSON.stringify(receipt)).not.toContain(input.workspaceId);
+  expect(mocks.rpc).not.toHaveBeenCalled();
+  expect(mocks.runTeam).not.toHaveBeenCalled();
+  expect(writes).toEqual([]);
+});
 
 it('returns a saved receipt only after the completed reply transaction', async () => {
   const response = await send();

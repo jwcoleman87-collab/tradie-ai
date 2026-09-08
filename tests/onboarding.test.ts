@@ -171,8 +171,7 @@ describe('continuous Magic onboarding', () => {
       expect.objectContaining({
         id: requestId,
         role: 'user',
-        content:
-          'We are Coastal Sparkies and handle commercial maintenance.',
+        content: 'We are Coastal Sparkies and handle commercial maintenance.',
       }),
     );
 

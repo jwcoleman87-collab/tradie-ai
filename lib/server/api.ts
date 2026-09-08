@@ -441,8 +441,9 @@ async function handleApi(
         .select('status')
         .eq('workspace_id', input.workspaceId)
         .eq('id', input.conversationId)
-        .single(),
+        .maybeSingle(),
     );
+    requireValue(activeConversation, 'NOT_FOUND', 404);
     requireValue(
       activeConversation?.status === 'active',
       'CONVERSATION_ARCHIVED',
