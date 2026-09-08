@@ -4,22 +4,22 @@ Priority: approved work that does not start, together with missing outcome feedb
 
 This adds to the existing set-out sheet. The navy/yellow identity, type scale, spacing and narrow Crew rail stay in place. Website's card now says **Draft changes for your website**.
 
-[Open the drawn state sheet](d10-action-states.html). It is generated from the actual application components with synthetic records; rebuild it with `node scripts/render-action-states.mjs` after changing state styling.
+The drawn state sheet is generated locally from the actual application components with synthetic records. Run `node scripts/render-action-states.mjs`, then open `docs/d10-action-states.html`. Generated HTML is excluded from the release snapshot.
 
-| Evidence | Chip | Customer action / evidence |
-| --- | --- | --- |
-| Waiting approval, within expiry | Amber · Waiting on you | Approve / Not yet. Not yet leaves approval pending; Decline proposal is separate. |
-| Approved, execution not started | Amber · Approved, not started | Resume; show saved approval time. |
-| Executing, current lease | Amber · Sending / In progress | Explain that confirmation is pending. |
-| Execution stopped without confirmed outcome | Amber · Needs checking | Resume when permitted; reconcile the original attempt. |
-| Completed | Green · Sent / Booked / Saved | Database completion time; validated live post or Calendar receipt link. Private saves remain labelled private. |
-| Definite failure | Red · Didn't send / Didn't save | Safe reason from the recorded error; Try again when permitted. |
-| Calendar attempt failed without a successful receipt | Amber · Booking not confirmed | Recorded reason; Resume checks the same booking. A failed retry does not establish that an earlier booking failed. |
-| Facebook sending/uncertain marker without live execution | Amber · Check Facebook | Explain possible publication. No retry or replacement that might duplicate the post. |
-| Facebook confirmed publication but local completion failed | Amber · Sent, needs review | Publication timestamp and live post link. No retry or replacement. |
-| Retry limit reached | Amber or red, according to evidence | Explain that review is required; no unusable retry control. |
-| Denied / expired / replaced / cancelled | Neutral · Not approved / Expired / Replaced / Closed | History, without execution controls. |
-| Finance evidence does not cover a verified complete period | Amber disclosure in the answer | Actual returned/total relevant record count, shortened-content count and explicit subtotal/partial-period limitation. |
+| Evidence                                                   | Chip                                                 | Customer action / evidence                                                                                            |
+| ---------------------------------------------------------- | ---------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| Waiting approval, within expiry                            | Amber · Waiting on you                               | Approve / Not yet. Not yet leaves approval pending; Decline proposal is separate.                                     |
+| Approved, execution not started                            | Amber · Approved, not started                        | Resume; show saved approval time.                                                                                     |
+| Executing, current lease                                   | Amber · Sending / In progress                        | Explain that confirmation is pending.                                                                                 |
+| Execution stopped without confirmed outcome                | Amber · Needs checking                               | Resume when permitted; reconcile the original attempt.                                                                |
+| Completed                                                  | Green · Sent / Booked / Saved                        | Database completion time; validated live post or Calendar receipt link. Private saves remain labelled private.        |
+| Definite failure                                           | Red · Didn't send / Didn't save                      | Safe reason from the recorded error; Try again when permitted.                                                        |
+| Calendar attempt failed without a successful receipt       | Amber · Booking not confirmed                        | Recorded reason; Resume checks the same booking. A failed retry does not establish that an earlier booking failed.    |
+| Facebook sending/uncertain marker without live execution   | Amber · Check Facebook                               | Explain possible publication. No retry or replacement that might duplicate the post.                                  |
+| Facebook confirmed publication but local completion failed | Amber · Sent, needs review                           | Publication timestamp and live post link. No retry or replacement.                                                    |
+| Retry limit reached                                        | Amber or red, according to evidence                  | Explain that review is required; no unusable retry control.                                                           |
+| Denied / expired / replaced / cancelled                    | Neutral · Not approved / Expired / Replaced / Closed | History, without execution controls.                                                                                  |
+| Finance evidence does not cover a verified complete period | Amber disclosure in the answer                       | Actual returned/total relevant record count, shortened-content count and explicit subtotal/partial-period limitation. |
 
 Chips remain visible when cards are folded. Approved and failed cards open on status change. Recent completions appear in Workspace as well as History. Returning to the app refreshes states; active work is polled while the workspace is open.
 

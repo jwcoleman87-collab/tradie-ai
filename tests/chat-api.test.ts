@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   from: vi.fn(),
   rpc: vi.fn(),
   runTeam: vi.fn(),
+  connections: vi.fn(),
   provider: {
     usage: [],
     attempts: [
@@ -44,7 +45,7 @@ vi.mock('../lib/server/integration-api', () => ({
 }));
 vi.mock('../lib/server/connections', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../lib/server/connections')>()),
-  connectionList: async () => [],
+  connectionList: mocks.connections,
 }));
 
 const runId = crypto.randomUUID();
@@ -164,6 +165,7 @@ beforeEach(() => {
   consent = true;
   failTable = '';
   failureUpdateWon = true;
+  mocks.connections.mockReset().mockResolvedValue([]);
   mocks.from.mockReset().mockImplementation(query);
   mocks.rpc
     .mockReset()
@@ -445,3 +447,82 @@ it('does not relabel a committed reply as failed when Ask James case creation fa
     ),
   ).toBe(false);
 });
+
+const facebookPage = {
+  provider: 'facebook',
+  configured: true,
+  connectionId: '10000000-0000-4000-8000-000000000001',
+  status: 'connected',
+  externalId: '12345',
+  displayName: 'Test Page',
+  verifiedAt: '2026-09-05T00:00:00Z',
+  lastErrorCode: null,
+  lastErrorAt: null,
+  capabilities: [],
+  publishingUnavailableReason: 'operator_disabled',
+};
+function facebookResult(pageId = '12345') {
+  return {
+    reply: 'Review this post. Publishing is switched off in Workbench.',
+    agents: ['social'],
+    versions: [],
+    model: 'fixture',
+    usage: [],
+    providerTrace: [],
+    proposals: [
+      {
+        type: 'facebook.publish',
+        agent: 'social',
+        summary: 'Review this post',
+        payload: { pageId, message: 'Bookings are available next week.' },
+      },
+    ],
+    escalation: 'none',
+  };
+}
+
+it.each([true, false])(
+  'persists a Facebook review proposal with the trusted connection when execution enabled=%s',
+  async (enabled) => {
+    mocks.connections.mockResolvedValue([
+      {
+        ...facebookPage,
+        capabilities: enabled ? ['facebook.publish'] : [],
+        publishingUnavailableReason: enabled ? null : 'operator_disabled',
+      },
+    ]);
+    mocks.runTeam.mockResolvedValue(facebookResult());
+    expect((await send()).status).toBe(200);
+    const saved = mocks.rpc.mock.calls.find(
+      (call) => call[1] === 'complete_chat',
+    )![2];
+    expect(saved.p_proposals).toEqual([
+      {
+        ...facebookResult().proposals[0],
+        connectionId: facebookPage.connectionId,
+      },
+    ]);
+  },
+);
+
+it.each([
+  ['wrong Page', facebookPage, '99999'],
+  ['not connected', { ...facebookPage, status: 'not_connected' }, '12345'],
+  ['not configured', { ...facebookPage, configured: false }, '12345'],
+  ['missing selection', { ...facebookPage, connectionId: null }, '12345'],
+  [
+    'saved error',
+    { ...facebookPage, lastErrorCode: 'FACEBOOK_CHECK_FAILED' },
+    '12345',
+  ],
+] as const)(
+  'does not persist a Facebook proposal with %s',
+  async (_label, connection, pageId) => {
+    mocks.connections.mockResolvedValue([connection]);
+    mocks.runTeam.mockResolvedValue(facebookResult(pageId));
+    expect((await send()).status).toBe(409);
+    expect(
+      mocks.rpc.mock.calls.some((call) => call[1] === 'complete_chat'),
+    ).toBe(false);
+  },
+);

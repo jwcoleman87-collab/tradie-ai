@@ -5,6 +5,7 @@ import './workspace.css';
 import './workbench.css';
 import './public.css';
 import './setout.css';
+import './handoff.css';
 
 const inter = Inter({
   variable: '--font-inter',

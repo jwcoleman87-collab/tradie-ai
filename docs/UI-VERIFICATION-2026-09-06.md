@@ -2,6 +2,8 @@
 
 Work was performed in the existing `tradie-ai` checkout for `jwcoleman87-collab/tradie-ai`, on `codex/ui-setout-2026-09-05` at base commit `775b95d`, preserving its existing uncommitted work. The remote refs and the existing release worktree were checked. The user confirmed that the requested composer, activity and filter designs existed only in an external prototype, and authorized their implementation after baseline verification.
 
+Claude Design created the new Workbench design; Codex built the original application and integrated the agreed design into the existing architecture. This task does not independently redesign Workbench or begin onboarding.
+
 ## Baseline
 
 | Command             | Result                                   |
@@ -39,7 +41,17 @@ The repository had a text-only composer, selectable crew cards and a workspace-w
 | `tests/action-execution.test.ts`     | Two cancel/replace response-metadata regression cases.                                                                                                                                          |
 | `docs/UI-VERIFICATION-2026-09-06.md` | This verification record.                                                                                                                                                                       |
 
-Unrelated formatter-only changes were restored to their initial contents, including onboarding files. Existing uncommitted files were backed up before formatting. No onboarding work, dependency change, commit, push or deployment was performed.
+Unrelated formatter-only changes were restored to their initial contents, including onboarding files. Existing uncommitted files were backed up before formatting. The initial verification involved no onboarding work, dependency change, commit, push or deployment.
+
+## Review packaging
+
+The owner subsequently authorized isolated release packaging. The focused ten-file patch is applied on `codex/ui-review-2026-09-06`, based on baseline commit `459b3e2924ee6a6b1d45cae4dd056befdfc2c734` on `codex/ui-baseline-2026-09-06`. The baseline contains the pre-existing application dependencies and is reviewed separately against `main`; the UI draft PR targets that baseline. See [the baseline record](UI-BASELINE-2026-09-06.md) for scope and exclusions.
+
+Packaging uses a separate worktree and fresh `npm ci`. Formatting-only changes outside the task are restored before committing, preserving a ten-file UI review diff and unchanged onboarding code. The exact committed UI source is then checked again with typecheck, tests and build; its commit identifier and command outcomes belong in the draft PR and release handover, separately from the original-checkout evidence below.
+
+Automatic Git deployment is disabled for both review branches because the existing Vercel Preview environment shares production service credentials. A test-data preview remains blocked until dedicated test Auth/database/private Storage, synthetic user/data, encryption and AI configuration are available. No production service configuration is used for this review.
+
+The packaging lint check found one `jsx-a11y/prefer-tag-over-role` error in the action filter group. The generic group element was changed to a native fieldset with the same accessible label; border, padding and minimum-width resets preserve the designed layout. This isolated semantic correction is the only application-code difference from the original focused patch. No lint rule was disabled, and the original checkout was not edited.
 
 ## Final validation
 

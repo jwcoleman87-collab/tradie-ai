@@ -109,6 +109,8 @@ export function EntryHome() {
 
       <footer className="entry-footer">
         <span>Controlled pilot</span>
+        <Link href="/privacy">Privacy policy</Link>
+        <Link href="/data-deletion">Data deletion</Link>
         <span>Workbench prepares. You decide.</span>
       </footer>
     </main>

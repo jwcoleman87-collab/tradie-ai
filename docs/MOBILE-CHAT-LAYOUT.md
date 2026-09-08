@@ -22,6 +22,7 @@ scroll anchoring. Focus, sending and conversation changes resume following.
 Hidden panels retain the reader's position and release observers on unmount.
 
 Behavior references:
+
 - [VisualViewport height, offset and events](https://developer.mozilla.org/en-US/docs/Web/API/VisualViewport)
 - [Keyboard resizing and layout vs visual viewports](https://developer.chrome.com/blog/viewport-resize-behavior/)
 
@@ -40,6 +41,7 @@ hidden panels, and observer/listener cleanup. These tests simulate browser
 events and scroll geometry; they do not emulate an iPhone keyboard or CSS layout.
 
 Physical iPhone Safari acceptance remains to be checked:
+
 1. Open a long conversation at the bottom and focus the composer. The latest
    content and input should stay above the keyboard without a second page scroll.
 2. Type a multiline draft, attach several files, close/reopen the keyboard and

@@ -1,6 +1,13 @@
 export const providers = ['google_calendar', 'facebook', 'google_ads'] as const;
 export type Provider = (typeof providers)[number];
 export type AdditionalProvider = Exclude<Provider, 'google_calendar'>;
+export type FacebookPublishingUnavailableReason =
+  | 'not_configured'
+  | 'not_connected'
+  | 'reconnect_required'
+  | 'permissions_required'
+  | 'connection_issue'
+  | 'operator_disabled';
 export const providerNames: Record<Provider, string> = {
   google_calendar: 'Google Calendar',
   facebook: 'Facebook Page',
@@ -21,6 +28,7 @@ export type ConnectionInfo = {
   lastErrorCode: string | null;
   lastErrorAt: string | null;
   capabilities: string[];
+  publishingUnavailableReason?: FacebookPublishingUnavailableReason | null;
 };
 export type ResourceChoice = {
   id: string;
