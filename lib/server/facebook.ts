@@ -216,6 +216,24 @@ export async function publishFacebook(
   connectionId: string,
   executionToken: string,
 ) {
+  // Reconcile a previous send BEFORE checking current connection settings.
+  // A changed token or disabled connector must not overwrite an uncertain send.
+  const previous = checked(
+    await adminDb()
+      .from('external_publish_attempts')
+      .select('status,receipt')
+      .eq('workspace_id', workspaceId)
+      .eq('action_id', actionId)
+      .maybeSingle(),
+  );
+  if (previous?.status === 'sending' || previous?.status === 'uncertain')
+    throw new AppError(
+      'PUBLICATION_UNCERTAIN',
+      409,
+      'Check Facebook before taking further action; this post may already be published.',
+    );
+  if (previous?.status === 'confirmed')
+    return previous.receipt as PublishReceipt;
   requireValue(
     env('FACEBOOK_PUBLISHING_ENABLED') === 'true',
     'PUBLISHING_DISABLED',

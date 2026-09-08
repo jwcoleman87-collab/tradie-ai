@@ -97,6 +97,12 @@ body {
   --workbench-success: #2d8a56;
   --workbench-warning: #a66300;
   --workbench-error: #b43d32;
+  --status-amber-ink: #744500;
+  --status-amber-fill: #fff1cc;
+  --status-green-ink: #1c633b;
+  --status-green-fill: #e4f4e9;
+  --status-red-ink: #922c26;
+  --status-red-fill: #fce9e6;
   --font-display: 'Work Sans', 'Work Sans Fallback', Arial, sans-serif;
   --font-body: 'Inter', 'Inter Fallback', Arial, Helvetica, sans-serif;
   --background: #f4f4f2;

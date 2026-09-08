@@ -1,7 +1,6 @@
 /* Workbench visual system — approved styleboard: docs/brand/workbench-styleboard.png */
 .app-shell {
   height: var(--workspace-viewport-height, 100dvh);
-  container: workspace / size;
   background: var(--workbench-ink);
   color: var(--workbench-ink);
   font-family: var(--font-body), Arial, sans-serif;
@@ -442,12 +441,12 @@ button {
   padding: 10px;
 }
 
-.message-history > h2 {
+.message-content > h2 {
   color: var(--workbench-ink);
   font-size: 29px;
 }
 
-.message-history > .muted,
+.message-content > .muted,
 .muted {
   color: #68717a;
 }
@@ -1062,12 +1061,11 @@ output.composer-caption:empty {
 
   .composer textarea {
     min-height: 40px;
-    max-height: min(120px, 25cqh);
+    max-height: 120px;
   }
 
   .conversation-panel {
-    overflow-y: auto;
-    padding-bottom: env(safe-area-inset-bottom, 0px);
+    overflow: hidden;
   }
 
   .composer-footer {
@@ -1085,30 +1083,6 @@ output.composer-caption:empty {
   .composer-footer [data-slot='button'] {
     min-width: 40px;
     flex-shrink: 0;
-  }
-
-  /* Use the shell's visible height: Safari's keyboard does not resize media queries. */
-  @container workspace (max-height: 500px) {
-    .conversation-panel:has(.composer:focus-within) .panel-heading,
-    .conversation-panel:has(.composer:focus-within) .conversation-toolbar {
-      display: none;
-    }
-
-    .conversation-panel:has(.composer:focus-within) .message-history {
-      padding-block: 8px;
-    }
-  }
-
-  /* Landscape phones can leave only a narrow strip above the keyboard. */
-  @container workspace (max-height: 300px) {
-    .app-shell:has(.composer:focus-within) .topbar,
-    .app-shell:has(.composer:focus-within) .mobile-tabs {
-      display: none;
-    }
-
-    .app-shell:has(.composer:focus-within) .workspace-grid {
-      height: 100%;
-    }
   }
 
   .workspace-panel-intro,

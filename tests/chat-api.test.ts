@@ -120,6 +120,9 @@ function query(table: string) {
     select: () => chain,
     order: () => chain,
     limit: () => chain,
+    in: () => chain,
+    gt: () => chain,
+    or: () => chain,
     eq: (...filter: unknown[]) => {
       filters.push(filter);
       return chain;
