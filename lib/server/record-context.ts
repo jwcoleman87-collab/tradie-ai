@@ -67,9 +67,9 @@ const CLOSED = new Set([
   'wants',
 ]);
 const FOCUS_USER_TURNS = 6;
-const FOCUS_TURN_CHARS = 400;
 const FOCUS_TERM_LIMIT = 6;
 const FOCUS_PER_TURN = 3;
+const FOCUS_RESULT_LIMIT = 8;
 const RECORD_FIELDS = 'id,kind,title,body,source';
 
 export function recentUserFocusText(
@@ -79,7 +79,7 @@ export function recentUserFocusText(
   return history
     .filter((message) => message.role === 'user')
     .slice(-FOCUS_USER_TURNS)
-    .map((message) => message.content.slice(0, FOCUS_TURN_CHARS))
+    .map((message) => message.content)
     .join('\n');
 }
 
@@ -173,6 +173,45 @@ function persistentId(record: LoadedRecord) {
   return typeof record.id === 'string' && record.id ? record.id : null;
 }
 
+function remember(record: LoadedRecord, seen: Set<string>) {
+  const id = persistentId(record);
+  if (!id) return true;
+  if (seen.has(id)) return false;
+  seen.add(id);
+  return true;
+}
+
+async function loadFocusedRecords(
+  db: SupabaseClient,
+  workspaceId: string,
+  kinds: string[],
+  terms: string[],
+  signal?: AbortSignal,
+) {
+  const focused: LoadedRecord[] = [];
+  const seen = new Set<string>();
+  for (const term of terms) {
+    if (focused.length >= FOCUS_RESULT_LIMIT) break;
+    let focusQuery = db
+      .from('business_records')
+      .select(RECORD_FIELDS)
+      .eq('workspace_id', workspaceId)
+      .eq('status', 'active')
+      .in('kind', kinds)
+      .or(`title.ilike.%${term}%,body.ilike.%${term}%`)
+      .order('created_at', { ascending: false })
+      .limit(FOCUS_RESULT_LIMIT);
+    if (signal) focusQuery = focusQuery.abortSignal(signal);
+    const rows = (checked(await focusQuery) || []) as LoadedRecord[];
+    for (const record of rows) {
+      if (!remember(record, seen)) continue;
+      focused.push(record);
+      if (focused.length >= FOCUS_RESULT_LIMIT) break;
+    }
+  }
+  return focused;
+}
+
 export async function loadRecordContext(
   db: SupabaseClient,
   workspaceId: string,
@@ -193,31 +232,13 @@ export async function loadRecordContext(
   const result = await query;
   const newest = (checked(result) || []) as LoadedRecord[];
   const terms = conversationFocusTerms(conversationText);
-  let focused: LoadedRecord[] = [];
-  if (terms.length) {
-    const clause = terms
-      .flatMap((term) => [`title.ilike.%${term}%`, `body.ilike.%${term}%`])
-      .join(',');
-    let focusQuery = db
-      .from('business_records')
-      .select(RECORD_FIELDS)
-      .eq('workspace_id', workspaceId)
-      .eq('status', 'active')
-      .in('kind', kinds)
-      .or(clause)
-      .order('created_at', { ascending: false })
-      .limit(8);
-    if (signal) focusQuery = focusQuery.abortSignal(signal);
-    focused = (checked(await focusQuery) || []) as LoadedRecord[];
-  }
+  const focused = terms.length
+    ? await loadFocusedRecords(db, workspaceId, kinds, terms, signal)
+    : [];
   const merged: LoadedRecord[] = [];
   const seen = new Set<string>();
   for (const record of [...newest, ...focused]) {
-    const id = persistentId(record);
-    if (id) {
-      if (seen.has(id)) continue;
-      seen.add(id);
-    }
+    if (!remember(record, seen)) continue;
     merged.push(record);
   }
   return {
