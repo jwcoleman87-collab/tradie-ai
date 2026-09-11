@@ -56,3 +56,56 @@ it('allows Social to use saved jobs, and never equates all stored rows to comple
     'full record count is unavailable',
   );
 });
+
+it('pulls a matching John job even when it is older than the newest fifteen records', async () => {
+  const recent = Array.from({ length: 15 }, (_, i) => ({
+    workspace_id: 'a',
+    status: 'active',
+    kind: 'expense',
+    title: `Diesel ${i}`,
+    body: 'AUD 40',
+    source: 'owner_supplied',
+    created_at: `2026-09-${String(i + 1).padStart(2, '0')}`,
+  }));
+  const { db } = memoryDb({
+    business_records: [
+      ...recent,
+      {
+        workspace_id: 'a',
+        status: 'active',
+        kind: 'job',
+        title: 'Trench around existing power',
+        body: 'John Hale, Kingston ACT. 6 hours. Quote GV-1042 AUD 1110.',
+        source: 'owner_supplied',
+        created_at: '2026-08-01',
+      },
+      {
+        workspace_id: 'b',
+        status: 'active',
+        kind: 'job',
+        title: 'John other tenant',
+        body: 'Must not leak.',
+        source: 'owner_supplied',
+        created_at: '2026-08-01',
+      },
+    ],
+  });
+  const result = await loadRecordContext(
+    db,
+    'a',
+    ['finance'],
+    undefined,
+    'John called. Friday instead, 600 deep.',
+  );
+  expect(result.coverage.selection).toBe('newest_and_conversation_focus');
+  expect(
+    result.records.some(
+      (record) =>
+        typeof record === 'object' &&
+        record !== null &&
+        'title' in record &&
+        String(record.title).includes('Trench'),
+    ),
+  ).toBe(true);
+  expect(JSON.stringify(result.records)).not.toContain('other tenant');
+});

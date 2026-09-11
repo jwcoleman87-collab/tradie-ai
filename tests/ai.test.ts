@@ -122,7 +122,10 @@ it('routes multiple agents and records real managed skill hashes', async () => {
     attachments: [],
   });
   expect(result.agents).toEqual(['marketing', 'finance']);
-  expect(result.versions).toHaveLength(2);
+  expect(result.versions).toHaveLength(3);
+  expect(result.versions.some((v) => v.agent === 'ops' && v.applied === false)).toBe(
+    true,
+  );
   expect(result.versions[0].sha256).toMatch(/^[0-9a-f]{64}$/);
   expect(JSON.stringify(inputs[1])).toContain('Never spend');
   expect(inputs).toHaveLength(2);
@@ -247,7 +250,7 @@ it('injects GreenVac operating rules when the profile is hydro excavation', asyn
       proposals: [],
       escalation: 'none',
     });
-  await runTeam(
+  const greenvacRun = await runTeam(
     { model: 'test', structured },
     {
       history: [
@@ -271,6 +274,14 @@ it('injects GreenVac operating rules when the profile is hydro excavation', asyn
   expect(instructions).toContain(
     'finish in this turn: say whether the existing quote still holds',
   );
+  expect(
+    greenvacRun.versions.some(
+      (v) =>
+        v.agent === 'ops' &&
+        v.applied === true &&
+        v.path === 'skills/trade-intelligence/GREENVAC.md',
+    ),
+  ).toBe(true);
 });
 
 it('does not apply the GreenVac rate card to an unrelated workspace', async () => {
@@ -288,15 +299,29 @@ it('does not apply the GreenVac rate card to an unrelated workspace', async () =
       proposals: [],
       escalation: 'missing_information',
     });
-  await runTeam(
+  const plumbingRun = await runTeam(
     { model: 'test', structured },
     {
       history: [{ role: 'user', content: 'What is my hourly rate?' }],
       timeZone: 'Australia/Sydney',
-      businessProfile: { display_name: 'Newcastle Plumbing Co' },
+      businessProfile: {
+        display_name: 'Newcastle Plumbing Co',
+        services: ['plumbing'],
+        brand_summary: 'We sometimes quote against hydrovac contractors.',
+      },
     },
   );
   const instructions = String(structured.mock.calls[1][1]);
   expect(instructions).not.toContain('AUD 185 inc GST on site');
+  expect(instructions).not.toContain('AUD 650 inc GST');
+  expect(instructions).not.toContain('Trailer hydrovac');
   expect(instructions).toContain('Do not apply another business');
+  expect(
+    plumbingRun.versions.some(
+      (v) =>
+        v.agent === 'ops' &&
+        v.applied === false &&
+        v.path === 'skills/trade-intelligence/unapplied',
+    ),
+  ).toBe(true);
 });

@@ -8,17 +8,50 @@ export type RecordContext = {
     returnedCount: number;
     totalMatchingCount: number | null;
     truncatedBodyCount: number;
-    selection: 'newest_active_matching_kinds';
+    selection: 'newest_active_matching_kinds' | 'newest_and_conversation_focus';
     periodCoverage: 'not_established';
   };
 };
 
-export async function loadRecordContext(
-  db: SupabaseClient,
-  workspaceId: string,
-  agents: AgentName[],
-  signal?: AbortSignal,
-): Promise<RecordContext> {
+const WEEKDAYS =
+  /^(monday|tuesday|wednesday|thursday|friday|saturday|sunday|today|tomorrow)$/i;
+const STOP = new Set([
+  'called',
+  'instead',
+  'deep',
+  'wants',
+  'that',
+  'this',
+  'with',
+  'from',
+  'have',
+  'been',
+  'will',
+  'just',
+  'make',
+  'what',
+  'when',
+  'your',
+  'job',
+]);
+
+export function conversationFocusTerms(text: string | undefined) {
+  if (!text) return [];
+  const names = text.match(/\b[A-Z][a-z]{2,30}\b/g) || [];
+  const refs = text.match(/\b[A-Z]{1,6}-?\d{2,8}\b/g) || [];
+  return [...new Set([...names, ...refs])]
+    .map((term) => term.replace(/[%_,()]/g, '').trim())
+    .filter(
+      (term) =>
+        term.length >= 3 &&
+        term.length <= 32 &&
+        !WEEKDAYS.test(term) &&
+        !STOP.has(term.toLowerCase()),
+    )
+    .slice(0, 3);
+}
+
+function kindsFor(agents: AgentName[]) {
   const kinds = {
     finance: ['invoice', 'expense', 'customer', 'job', 'note'],
     marketing: ['campaign', 'customer', 'job', 'note'],
@@ -26,29 +59,79 @@ export async function loadRecordContext(
     maintenance: ['asset', 'maintenance', 'note'],
     website: ['website', 'job', 'asset', 'note'],
   };
+  return [...new Set(agents.flatMap((agent) => kinds[agent]))];
+}
+
+function clip(record: { body: string }) {
+  return {
+    ...record,
+    body: record.body.slice(0, 2000),
+    bodyShortened: record.body.length > 2000,
+  };
+}
+
+function recordKey(record: { kind?: string; title?: string; body?: string }) {
+  return `${record.kind}|${record.title}|${String(record.body || '').slice(0, 80)}`;
+}
+
+export async function loadRecordContext(
+  db: SupabaseClient,
+  workspaceId: string,
+  agents: AgentName[],
+  signal?: AbortSignal,
+  conversationText?: string,
+): Promise<RecordContext> {
+  const kinds = kindsFor(agents);
   let query = db
     .from('business_records')
     .select('kind,title,body,source', { count: 'exact' })
     .eq('workspace_id', workspaceId)
     .eq('status', 'active')
-    .in('kind', [...new Set(agents.flatMap((agent) => kinds[agent]))])
+    .in('kind', kinds)
     .order('created_at', { ascending: false })
     .limit(15);
   if (signal) query = query.abortSignal(signal);
   const result = await query;
-  const rows = checked(result) || [];
+  const newest = checked(result) || [];
+  const terms = conversationFocusTerms(conversationText);
+  let focused: typeof newest = [];
+  if (terms.length) {
+    const clause = terms
+      .flatMap((term) => [
+        `title.ilike.%${term}%`,
+        `body.ilike.%${term}%`,
+      ])
+      .join(',');
+    let focusQuery = db
+      .from('business_records')
+      .select('kind,title,body,source')
+      .eq('workspace_id', workspaceId)
+      .eq('status', 'active')
+      .in('kind', kinds)
+      .or(clause)
+      .order('created_at', { ascending: false })
+      .limit(8);
+    if (signal) focusQuery = focusQuery.abortSignal(signal);
+    focused = checked(await focusQuery) || [];
+  }
+  const merged = [...newest];
+  const seen = new Set(newest.map(recordKey));
+  for (const record of focused) {
+    const key = recordKey(record);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    merged.push(record);
+  }
   return {
-    records: rows.map((record) => ({
-      ...record,
-      body: record.body.slice(0, 2000),
-      bodyShortened: record.body.length > 2000,
-    })),
+    records: merged.map(clip),
     coverage: {
-      returnedCount: rows.length,
+      returnedCount: merged.length,
       totalMatchingCount: result.count ?? null,
-      truncatedBodyCount: rows.filter((record) => record.body.length > 2000)
+      truncatedBodyCount: merged.filter((record) => record.body.length > 2000)
         .length,
-      selection: 'newest_active_matching_kinds',
+      selection: focused.length
+        ? 'newest_and_conversation_focus'
+        : 'newest_active_matching_kinds',
       periodCoverage: 'not_established',
     },
   };

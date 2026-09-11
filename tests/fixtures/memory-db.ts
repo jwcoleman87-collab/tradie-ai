@@ -66,14 +66,27 @@ export function memoryDb(tables: Record<string, Row[]>) {
           return chain;
         },
         or(expression: string) {
-          const states =
-            expression.match(/^status.in.\(([^)]+)\)/)?.[1].split(',') || [];
-          const expiry = expression.match(/expires_at.lte.([^)]*)/)?.[1] || '';
-          filters.push(
-            (row) =>
-              states.includes(String(row.status)) ||
-              (row.status === 'waiting_approval' &&
-                String(row.expires_at) <= expiry),
+          if (expression.includes('status.in.')) {
+            const states =
+              expression.match(/^status.in.\(([^)]+)\)/)?.[1].split(',') || [];
+            const expiry = expression.match(/expires_at.lte.([^)]*)/)?.[1] || '';
+            filters.push(
+              (row) =>
+                states.includes(String(row.status)) ||
+                (row.status === 'waiting_approval' &&
+                  String(row.expires_at) <= expiry),
+            );
+            return chain;
+          }
+          const clauses = expression.split(',');
+          filters.push((row) =>
+            clauses.some((clause) => {
+              const match = clause.match(/^(\w+)\.ilike\.%(.+)%$/i);
+              if (!match) return false;
+              return String(row[match[1]] ?? '')
+                .toLowerCase()
+                .includes(match[2].toLowerCase());
+            }),
           );
           return chain;
         },
