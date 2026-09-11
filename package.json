@@ -48,7 +48,7 @@
     "@types/react": "19.2.14",
     "@types/react-dom": "19.2.3",
     "esbuild": "0.28.1",
-    "miniflare": "5.20260828.0-alpha",
+    "miniflare": "^5.20260910.0-alpha",
     "oxfmt": "0.61.0",
     "oxlint": "1.76.0",
     "oxlint-tsgolint": "7.0.2001",
