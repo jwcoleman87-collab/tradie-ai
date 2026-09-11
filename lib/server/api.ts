@@ -27,7 +27,7 @@ import {
   connectionList,
   disconnectIntegration,
 } from './connections';
-import { aiProblem } from '../ai-diagnostics';
+import { aiProblem, timeoutCopyContext } from '../ai-diagnostics';
 import { onboardingApi } from './onboarding-api';
 import { preferredWorkspace } from '../workspace-selection';
 import {
@@ -994,7 +994,17 @@ async function handleApi(
             requestId: input.requestId,
             userMessageId: run.userMessageId,
             messageSaved: true,
-            error: { code, message: aiProblem(code) },
+            error: {
+              code,
+              message: aiProblem(
+                code,
+                timeoutCopyContext(
+                  preferences as AIPreferences,
+                  publicConfig().aiProviders,
+                  provider.attempts,
+                ),
+              ),
+            },
           },
           error instanceof AppError ? error.status : 500,
         );

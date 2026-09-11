@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import type { ModelProvider, ModelUsage } from './ai';
-import { callSignal, type ModelCallOptions } from './chat-budget';
+import { modelCallSignal, type ModelCallOptions } from './chat-budget';
 import { env, required } from './config';
 import { modelSchema } from './model-schema';
 import { AppError, requireValue } from './errors';
@@ -147,7 +147,7 @@ export class ClaudeProvider implements ModelProvider {
           ],
           tool_choice: { type: 'tool', name: 'web_search' },
         }),
-        signal: callSignal(options, modelTimeout()),
+        signal: modelCallSignal(options, modelTimeout()),
       },
       this.diagnostics,
     );
@@ -261,7 +261,7 @@ export class ClaudeProvider implements ModelProvider {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify(payload),
-          signal: callSignal(options, modelTimeout()),
+          signal: modelCallSignal(options, modelTimeout()),
         },
         this.diagnostics,
       );

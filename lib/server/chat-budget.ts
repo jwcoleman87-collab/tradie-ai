@@ -18,6 +18,14 @@ export type ModelCallOptions = {
   maxOutputTokens?: number;
 };
 
+export function remainingBudgetMs(
+  options: ModelCallOptions = {},
+  fallbackMs: number,
+) {
+  const remaining = (options.deadlineAt ?? Infinity) - Date.now();
+  return Number.isFinite(remaining) && remaining > 0 ? remaining : fallbackMs;
+}
+
 export function callSignal(options: ModelCallOptions = {}, timeout: number) {
   const remaining = Math.min(
     timeout,
@@ -29,6 +37,47 @@ export function callSignal(options: ModelCallOptions = {}, timeout: number) {
   return options.signal
     ? AbortSignal.any([options.signal, deadline])
     : deadline;
+}
+
+export function stageAttempt(
+  sharedOptions: ModelCallOptions,
+  original: ModelCallOptions,
+  fallbackTimeoutMs: number,
+) {
+  const now = Date.now();
+  const stageRemaining = (original.deadlineAt ?? Infinity) - now;
+  const timeout =
+    Number.isFinite(stageRemaining) && stageRemaining > 0
+      ? stageRemaining
+      : fallbackTimeoutMs;
+  const stageRemainingMs = Number.isFinite(stageRemaining)
+    ? Math.max(0, Math.floor(stageRemaining))
+    : undefined;
+  const timeoutMs = Math.max(1, Math.floor(timeout));
+  // Reuse the absolute stage signal when the attempt may consume the rest of
+  // the stage. A second timer of the same remaining duration can fire first
+  // and start a leftover-millisecond fallback after the stage is effectively
+  // exhausted.
+  if (sharedOptions.signal && timeout >= stageRemaining)
+    return {
+      signal: sharedOptions.signal,
+      timeoutMs,
+      stageRemainingMs,
+    };
+  return {
+    signal: callSignal(sharedOptions, timeout),
+    timeoutMs,
+    stageRemainingMs,
+  };
+}
+
+export function modelCallSignal(
+  options: ModelCallOptions = {},
+  fallbackTimeoutMs: number,
+) {
+  if (options.deadlineAt !== undefined)
+    return callSignal(options, remainingBudgetMs(options, fallbackTimeoutMs));
+  return options.signal ?? callSignal(options, fallbackTimeoutMs);
 }
 
 export async function withinBudget<T>(

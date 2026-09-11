@@ -223,37 +223,26 @@ describe('bounded availability fallback', () => {
         errorCode: 'AI_TIMEOUT',
       });
     });
-    it(`${method} can use the consented backup after a per-attempt timeout while shared budget remains`, async () => {
+    it(`${method} can use the consented backup after a failed attempt while shared budget remains`, async () => {
       const a = makeResearch('openai'),
         b = makeResearch('anthropic');
-      const clock = vi.spyOn(Date, 'now').mockReturnValue(1000);
-      vi.stubEnv('AI_REQUEST_TIMEOUT_MS', '1000');
-      const timers: { milliseconds: number; controller: AbortController }[] =
-        [];
-      vi.spyOn(AbortSignal, 'timeout').mockImplementation((milliseconds) => {
-        const controller = new AbortController();
-        timers.push({ milliseconds, controller });
-        return controller.signal;
-      });
-      a[method].mockImplementation(() => new Promise(() => {}));
+      vi.spyOn(Date, 'now').mockReturnValue(1000);
+      vi.stubEnv('AI_REQUEST_TIMEOUT_MS', '30000');
+      a[method].mockRejectedValue(new AppError('AI_TIMEOUT', 503));
       const provider = new FallbackProvider([a, b]);
-      const options = { deadlineAt: 61_000 };
-      const pending =
+      const options = { deadlineAt: 46_000 };
+      await expect(
         method === 'structured'
           ? provider.structured(schema, '', [], options)
-          : provider.research('public update', 'Australia/Sydney', options);
-      const attemptTimer = timers.find((timer) => timer.milliseconds === 1000);
-      expect(attemptTimer).toBeDefined();
-      clock.mockReturnValue(2000);
-      attemptTimer!.controller.abort();
-      await expect(pending).resolves.toMatchObject(
+          : provider.research('public update', 'Australia/Sydney', options),
+      ).resolves.toMatchObject(
         method === 'structured' ? { ok: true } : { provider: 'anthropic' },
       );
       expect(a[method]).toHaveBeenCalledTimes(1);
       expect(b[method]).toHaveBeenCalledTimes(1);
       expect(
         a[method].mock.calls[0][method === 'structured' ? 3 : 2].signal.aborted,
-      ).toBe(true);
+      ).toBe(false);
       expect(
         b[method].mock.calls[0][method === 'structured' ? 3 : 2].signal.aborted,
       ).toBe(false);
