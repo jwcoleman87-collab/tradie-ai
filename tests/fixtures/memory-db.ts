@@ -83,9 +83,11 @@ export function memoryDb(tables: Record<string, Row[]>) {
             clauses.some((clause) => {
               const match = clause.match(/^(\w+)\.ilike\.%(.+)%$/i);
               if (!match) return false;
-              return String(row[match[1]] ?? '')
-                .toLowerCase()
-                .includes(match[2].toLowerCase());
+              const cell = row[match[1]];
+              return (
+                typeof cell === 'string' &&
+                cell.toLowerCase().includes(match[2].toLowerCase())
+              );
             }),
           );
           return chain;

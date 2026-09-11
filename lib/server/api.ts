@@ -606,6 +606,7 @@ async function handleApi(
         );
         const history = (checked(historyResult) || []).reverse();
         const workspace = checked(workspaceResult)!;
+        const profile = checked(profileResult);
         const connection = checked(connectionResult);
         const referencedAttachmentIds = [
           ...new Set(
@@ -730,9 +731,8 @@ async function handleApi(
               coverage: actionData.coverage,
             },
             businessProfile: {
-              ...(checked(profileResult) || {}),
-              display_name:
-                checked(profileResult)?.display_name || workspace.name,
+              ...profile,
+              display_name: profile?.display_name || workspace.name,
               name: workspace.name,
             },
             loadRecords: (agents) =>

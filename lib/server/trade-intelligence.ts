@@ -26,9 +26,13 @@ type ProfileFields = {
 };
 
 function textList(value: unknown) {
-  if (Array.isArray(value)) return value.map(String).join(' ');
-  if (value == null) return '';
-  return String(value);
+  if (Array.isArray(value))
+    return value
+      .filter((item) => typeof item === 'string' || typeof item === 'number')
+      .map(String)
+      .join(' ');
+  if (typeof value === 'string' || typeof value === 'number') return String(value);
+  return '';
 }
 
 export function profileMatchesGreenVac(profile: unknown) {
