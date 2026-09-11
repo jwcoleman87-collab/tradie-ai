@@ -16,7 +16,7 @@ import { createAIProvider } from './ai-provider';
 import { AIConsentInput, type AIPreferences } from '../ai-settings';
 import { executeAction } from './actions';
 import { actionContext, loadActionData, publicAction } from './action-data';
-import { loadRecordContext } from './record-context';
+import { loadRecordContext, recentUserFocusText } from './record-context';
 import { calendarContext } from './calendar';
 import { finishGoogle, startGoogle } from './oauth';
 import { readFileBody, safeFilename, validateFile } from './uploads';
@@ -741,8 +741,7 @@ async function handleApi(
                 input.workspaceId,
                 agents,
                 workSignal,
-                [...bounded].reverse().find((message) => message.role === 'user')
-                  ?.content,
+                recentUserFocusText(bounded),
               ),
             timeZone: workspace.time_zone,
             loadCalendar: connection

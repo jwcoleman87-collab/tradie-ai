@@ -33,22 +33,61 @@ const STOP = new Set([
   'when',
   'your',
   'job',
+  'the',
+  'one',
+  'and',
+  'for',
+  'not',
+  'but',
+  'you',
+  'our',
+  'are',
+  'was',
+  'can',
+  'get',
+  'got',
+  'now',
+  'new',
+  'move',
+  'please',
+  'also',
 ]);
+
+const FOCUS_USER_TURNS = 6;
+const FOCUS_TURN_CHARS = 400;
+const FOCUS_TERM_LIMIT = 6;
+
+export function recentUserFocusText(
+  history: { role: string; content: string }[] | undefined,
+) {
+  if (!history?.length) return '';
+  return history
+    .filter((message) => message.role === 'user')
+    .slice(-FOCUS_USER_TURNS)
+    .map((message) => message.content.slice(0, FOCUS_TURN_CHARS))
+    .join('\n');
+}
 
 export function conversationFocusTerms(text: string | undefined) {
   if (!text) return [];
-  const names = text.match(/\b[A-Z][a-z]{2,30}\b/g) || [];
-  const refs = text.match(/\b[A-Z]{1,6}-?\d{2,8}\b/g) || [];
-  return [...new Set([...names, ...refs])]
-    .map((term) => term.replace(/[%_,()]/g, '').trim())
+  const normalized = text.replace(/['’]s\b/gi, ' ');
+  const refs = normalized.match(/\b[a-z]{1,6}-?\d{2,8}\b/gi) || [];
+  const words = normalized.match(/\b[a-z]{3,30}\b/gi) || [];
+  return [
+    ...new Set(
+      [...refs, ...words].map((term) =>
+        term.replace(/[%_,()]/g, '').trim().toLowerCase(),
+      ),
+    ),
+  ]
     .filter(
       (term) =>
         term.length >= 3 &&
         term.length <= 32 &&
         !WEEKDAYS.test(term) &&
-        !STOP.has(term.toLowerCase()),
+        !STOP.has(term),
     )
-    .slice(0, 3);
+    .slice(0, FOCUS_TERM_LIMIT);
 }
 
 function kindsFor(agents: AgentName[]) {

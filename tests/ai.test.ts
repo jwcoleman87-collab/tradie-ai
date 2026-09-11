@@ -1,6 +1,7 @@
 import { it, expect, vi } from 'vitest';
 import { runTeam, type ModelProvider, OpenAIProvider } from '../lib/server/ai';
 import { RouteOutput } from '../lib/contracts';
+import { rateCardLeaked } from '../lib/server/trade-intelligence';
 
 it('routes with a small context before retrieving optional workspace or Calendar data', async () => {
   let routed!: (value: unknown) => void;
@@ -235,7 +236,7 @@ it('requests non-stored structured output with no execution tools', async () => 
   }
 });
 
-it('injects GreenVac operating rules when the profile is hydro excavation', async () => {
+it('injects GreenVac operating rules when the business identity is GreenVac', async () => {
   const structured = vi
     .fn()
     .mockResolvedValueOnce({
@@ -322,6 +323,46 @@ it('does not apply the GreenVac rate card to an unrelated workspace', async () =
         v.agent === 'ops' &&
         v.applied === false &&
         v.path === 'skills/trade-intelligence/unapplied',
+    ),
+  ).toBe(true);
+});
+
+it('does not apply the GreenVac rate card to an unrelated hydrovac workspace', async () => {
+  const structured = vi
+    .fn()
+    .mockResolvedValueOnce({
+      agents: ['finance'],
+      reason: 'quote',
+      calendarContext: false,
+      webSearch: false,
+      searchQuery: null,
+    })
+    .mockResolvedValueOnce({
+      reply: 'Need your rate card.',
+      proposals: [],
+      escalation: 'missing_information',
+    });
+  const hydroRun = await runTeam(
+    { model: 'test', structured },
+    {
+      history: [
+        { role: 'user', content: 'How much should I charge for 6 hours?' },
+      ],
+      timeZone: 'Australia/Sydney',
+      businessProfile: {
+        display_name: 'Southern Hydrovac',
+        services: ['hydro excavation', 'hydrovac'],
+      },
+    },
+  );
+  const instructions = String(structured.mock.calls[1][1]);
+  expect(instructions).not.toContain('AUD 185 inc GST on site');
+  expect(instructions).not.toContain('AUD 650 inc GST');
+  expect(instructions).not.toContain('Trailer hydrovac');
+  expect(rateCardLeaked(instructions)).toBe(false);
+  expect(
+    hydroRun.versions.some(
+      (v) => v.agent === 'ops' && v.applied === false,
     ),
   ).toBe(true);
 });

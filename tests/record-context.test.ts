@@ -1,7 +1,9 @@
 import { expect, it } from 'vitest';
 import {
+  conversationFocusTerms,
   financeDisclosure,
   loadRecordContext,
+  recentUserFocusText,
 } from '../lib/server/record-context';
 import { memoryDb } from './fixtures/memory-db';
 
@@ -109,3 +111,90 @@ it('pulls a matching John job even when it is older than the newest fifteen reco
   ).toBe(true);
   expect(JSON.stringify(result.records)).not.toContain('other tenant');
 });
+
+function johnRecords() {
+  const recent = Array.from({ length: 15 }, (_, i) => ({
+    workspace_id: 'a',
+    status: 'active',
+    kind: 'expense',
+    title: `Diesel ${i}`,
+    body: 'AUD 40',
+    source: 'owner_supplied',
+    created_at: `2026-09-${String(i + 1).padStart(2, '0')}`,
+  }));
+  return {
+    business_records: [
+      ...recent,
+      {
+        workspace_id: 'a',
+        status: 'active',
+        kind: 'job',
+        title: 'Trench around existing power',
+        body: 'John Hale, Kingston ACT. 6 hours. Quote GV-1042 AUD 1110.',
+        source: 'owner_supplied',
+        created_at: '2026-08-01',
+      },
+      {
+        workspace_id: 'b',
+        status: 'active',
+        kind: 'job',
+        title: 'John other tenant',
+        body: 'Must not leak.',
+        source: 'owner_supplied',
+        created_at: '2026-08-01',
+      },
+    ],
+  };
+}
+
+function hasKingstonJob(records: unknown[]) {
+  return records.some(
+    (record) =>
+      typeof record === 'object' &&
+      record !== null &&
+      'title' in record &&
+      String(record.title).includes('Trench'),
+  );
+}
+
+it('retrieves the older John record from a follow-up turn that does not restate the name', async () => {
+  const { db } = memoryDb(johnRecords());
+  const focus = recentUserFocusText([
+    {
+      role: 'user',
+      content: "John's GV-1042 trench is the one in Kingston.",
+    },
+    { role: 'assistant', content: 'I have that job.' },
+    { role: 'user', content: 'Friday instead, 600 deep.' },
+  ]);
+  expect(focus).toContain('Friday instead, 600 deep.');
+  expect(focus).toContain('GV-1042');
+  const result = await loadRecordContext(
+    db,
+    'a',
+    ['finance'],
+    undefined,
+    focus,
+  );
+  expect(hasKingstonJob(result.records)).toBe(true);
+  expect(JSON.stringify(result.records)).not.toContain('other tenant');
+});
+
+it.each(['john', 'JOHN', 'John', 'gv-1042', 'GV-1042'])(
+  'finds the same eligible record for %s',
+  async (term) => {
+    expect(conversationFocusTerms(`move ${term} job to friday`)).toContain(
+      term.toLowerCase(),
+    );
+    const { db } = memoryDb(johnRecords());
+    const result = await loadRecordContext(
+      db,
+      'a',
+      ['finance'],
+      undefined,
+      `move ${term} job to friday`,
+    );
+    expect(hasKingstonJob(result.records)).toBe(true);
+    expect(JSON.stringify(result.records)).not.toContain('other tenant');
+  },
+);

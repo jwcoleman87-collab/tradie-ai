@@ -7,7 +7,7 @@ const SOURCE = readFileSync(
   'utf8',
 );
 
-const APPLIES = /greenvac|hydro\s*vac|hydro\s*excav/i;
+const IDENTITY = /\bgreen\s*vac\b/i;
 const RATE_MARKERS = [
   'AUD 185 inc GST on site',
   'AUD 650 inc GST',
@@ -21,8 +21,7 @@ export const UNAVAILABLE_INSTRUCTIONS =
 type ProfileFields = {
   display_name?: unknown;
   name?: unknown;
-  services?: unknown;
-  preferred_job_types?: unknown;
+  managed_pack?: unknown;
 };
 
 function textList(value: unknown) {
@@ -38,8 +37,8 @@ function textList(value: unknown) {
 export function profileMatchesGreenVac(profile: unknown) {
   if (profile == null || typeof profile !== 'object') return false;
   const fields = profile as ProfileFields;
-  const applicable = `${textList(fields.display_name)} ${textList(fields.name)} ${textList(fields.services)} ${textList(fields.preferred_job_types)}`;
-  return APPLIES.test(applicable);
+  const identity = `${textList(fields.display_name)} ${textList(fields.name)} ${textList(fields.managed_pack)}`;
+  return IDENTITY.test(identity);
 }
 
 export function rateCardLeaked(instructions: string) {
