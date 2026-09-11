@@ -314,6 +314,110 @@ export const crewCases: CrewEvalCase[] = [
       },
     ],
   },
+  {
+    name: 'Finance treats a quoted job depth change as a variation with calendar and records',
+    agent: 'finance',
+    context: {
+      ...context(
+        'John called. He wants that trench done Friday instead, and he said make it 600 deep.',
+      ),
+      timeZone: 'Australia/Sydney',
+      businessProfile: {
+        display_name: 'GreenVac',
+        services: ['hydro excavation'],
+      },
+      records: {
+        records: [
+          {
+            kind: 'customer',
+            title: 'John Hale',
+            body: 'Kingston ACT. Regular. Careful around live power.',
+            source: 'owner_supplied',
+          },
+          {
+            kind: 'job',
+            title: 'Trench around existing power',
+            body: 'John Hale, Kingston ACT. 6 hours. Depth TBC. Quote GV-1042 AUD 1110. Booked tomorrow 07:30 Australia/Sydney.',
+            source: 'owner_supplied',
+          },
+          {
+            kind: 'invoice',
+            title: 'GV-1042',
+            body: 'John Hale trench 6 h AUD 1110 inc GST. Spoil on site. Issued.',
+            source: 'owner_supplied',
+          },
+        ],
+        coverage: {
+          returnedCount: 3,
+          totalMatchingCount: 3,
+          truncatedBodyCount: 0,
+          selection: 'newest_active_matching_kinds',
+          periodCoverage: 'not_established',
+        },
+      },
+    },
+    candidate: output(
+      'John Hale, Kingston trench. Friday instead and 600 mm around existing power is a variation, not a silent reprice of GV-1042. I have allowed an extra hour. Approve the calendar move, job record and variation draft; nothing is booked until you Accept.',
+      [
+        {
+          type: 'calendar.create',
+          agent: 'finance',
+          summary: 'Move John Hale trench to Friday',
+          payload: {
+            summary: 'John Hale · trench around power',
+            description: '600 mm around existing power. Hydro/pothole only within 300 mm.',
+            start,
+            end: new Date(Date.parse(start) + 7 * 3600000).toISOString(),
+            timeZone: 'Australia/Sydney',
+          },
+        },
+        {
+          type: 'record.create',
+          agent: 'finance',
+          summary: 'Update Kingston trench spec',
+          payload: {
+            kind: 'job',
+            title: 'Trench around existing power',
+            body: 'John Hale, Kingston ACT. 600 mm deep around existing power. 7 hours. Variation to GV-1042.',
+          },
+        },
+        {
+          type: 'draft.save',
+          agent: 'finance',
+          summary: 'Variation GV-1042-V1',
+          payload: {
+            kind: 'invoice',
+            title: 'GV-1042-V1',
+            body: 'Variation: extra hour at AUD 185. Original GV-1042 AUD 1110. New total AUD 1295 inc GST. Not issued until Accept.',
+          },
+        },
+      ],
+    ),
+    checks: [
+      {
+        name: 'names the change as a variation',
+        test: (o) => /variation/i.test(o.reply),
+      },
+      {
+        name: 'does not claim the move already happened',
+        test: (o) =>
+          !/booked|moved|issued|sent/i.test(
+            o.reply.replace(/until you Accept|nothing is booked/gi, ''),
+          ) || /Accept/i.test(o.reply),
+      },
+      {
+        name: 'proposes calendar, job record and variation draft',
+        test: (o) =>
+          o.proposals.some((p) => p.type === 'calendar.create') &&
+          o.proposals.some(
+            (p) => p.type === 'record.create' && p.payload.kind === 'job',
+          ) &&
+          o.proposals.some(
+            (p) => p.type === 'draft.save' && p.payload.kind === 'invoice',
+          ),
+      },
+    ],
+  },
 ];
 
 export function gradeCrewCase(

@@ -231,3 +231,72 @@ it('requests non-stored structured output with no execution tools', async () => 
     delete process.env.OPENAI_API_KEY;
   }
 });
+
+it('injects GreenVac operating rules when the profile is hydro excavation', async () => {
+  const structured = vi
+    .fn()
+    .mockResolvedValueOnce({
+      agents: ['finance'],
+      reason: 'job move',
+      calendarContext: true,
+      webSearch: false,
+      searchQuery: null,
+    })
+    .mockResolvedValueOnce({
+      reply: 'Variation ready for Accept.',
+      proposals: [],
+      escalation: 'none',
+    });
+  await runTeam(
+    { model: 'test', structured },
+    {
+      history: [
+        {
+          role: 'user',
+          content:
+            'John called. He wants that trench done Friday instead, and he said make it 600 deep.',
+        },
+      ],
+      timeZone: 'Australia/Sydney',
+      businessProfile: {
+        display_name: 'GreenVac',
+        services: ['hydro excavation'],
+      },
+    },
+  );
+  const instructions = String(structured.mock.calls[1][1]);
+  expect(instructions).toContain('GreenVac operating intelligence');
+  expect(instructions).toContain('VARIATION');
+  expect(instructions).toContain('600 mm around power');
+  expect(instructions).toContain(
+    'finish in this turn: say whether the existing quote still holds',
+  );
+});
+
+it('does not apply the GreenVac rate card to an unrelated workspace', async () => {
+  const structured = vi
+    .fn()
+    .mockResolvedValueOnce({
+      agents: ['finance'],
+      reason: 'invoice',
+      calendarContext: false,
+      webSearch: false,
+      searchQuery: null,
+    })
+    .mockResolvedValueOnce({
+      reply: 'Need your rate card.',
+      proposals: [],
+      escalation: 'missing_information',
+    });
+  await runTeam(
+    { model: 'test', structured },
+    {
+      history: [{ role: 'user', content: 'What is my hourly rate?' }],
+      timeZone: 'Australia/Sydney',
+      businessProfile: { display_name: 'Newcastle Plumbing Co' },
+    },
+  );
+  const instructions = String(structured.mock.calls[1][1]);
+  expect(instructions).not.toContain('AUD 185 inc GST on site');
+  expect(instructions).toContain('Do not apply another business');
+});
