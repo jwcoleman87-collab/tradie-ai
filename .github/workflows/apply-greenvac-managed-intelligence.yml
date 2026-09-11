@@ -21,6 +21,7 @@ jobs:
             echo "Patch not present yet; nothing to apply."
             exit 0
           fi
+          printf '\n' >> .greenvac-managed-intelligence.patch
           git apply --check .greenvac-managed-intelligence.patch
           git apply .greenvac-managed-intelligence.patch
           rm .greenvac-managed-intelligence.patch
