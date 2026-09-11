@@ -181,32 +181,59 @@ function remember(record: LoadedRecord, seen: Set<string>) {
   return true;
 }
 
+async function queryFocusTerm(
+  db: SupabaseClient,
+  workspaceId: string,
+  kinds: string[],
+  term: string,
+  signal?: AbortSignal,
+) {
+  let focusQuery = db
+    .from('business_records')
+    .select(RECORD_FIELDS)
+    .eq('workspace_id', workspaceId)
+    .eq('status', 'active')
+    .in('kind', kinds)
+    .or(`title.ilike.%${term}%,body.ilike.%${term}%`)
+    .order('created_at', { ascending: false })
+    .limit(FOCUS_RESULT_LIMIT);
+  if (signal) focusQuery = focusQuery.abortSignal(signal);
+  return (checked(await focusQuery) || []) as LoadedRecord[];
+}
+
 async function loadFocusedRecords(
   db: SupabaseClient,
   workspaceId: string,
   kinds: string[],
   terms: string[],
+  already: Set<string>,
   signal?: AbortSignal,
 ) {
+  const perTerm = await Promise.all(
+    terms.map((term) => queryFocusTerm(db, workspaceId, kinds, term, signal)),
+  );
   const focused: LoadedRecord[] = [];
-  const seen = new Set<string>();
-  for (const term of terms) {
-    if (focused.length >= FOCUS_RESULT_LIMIT) break;
-    let focusQuery = db
-      .from('business_records')
-      .select(RECORD_FIELDS)
-      .eq('workspace_id', workspaceId)
-      .eq('status', 'active')
-      .in('kind', kinds)
-      .or(`title.ilike.%${term}%,body.ilike.%${term}%`)
-      .order('created_at', { ascending: false })
-      .limit(FOCUS_RESULT_LIMIT);
-    if (signal) focusQuery = focusQuery.abortSignal(signal);
-    const rows = (checked(await focusQuery) || []) as LoadedRecord[];
+  const seen = new Set<string>(already);
+  const leftovers: LoadedRecord[][] = [];
+  for (const rows of perTerm) {
+    let reserved: LoadedRecord | undefined;
+    const rest: LoadedRecord[] = [];
+    for (const record of rows) {
+      const id = persistentId(record);
+      if (id && seen.has(id)) continue;
+      if (!reserved) reserved = record;
+      else rest.push(record);
+    }
+    leftovers.push(rest);
+    if (!reserved || !remember(reserved, seen)) continue;
+    focused.push(reserved);
+    if (focused.length >= FOCUS_RESULT_LIMIT) return focused;
+  }
+  for (const rows of leftovers) {
     for (const record of rows) {
       if (!remember(record, seen)) continue;
       focused.push(record);
-      if (focused.length >= FOCUS_RESULT_LIMIT) break;
+      if (focused.length >= FOCUS_RESULT_LIMIT) return focused;
     }
   }
   return focused;
@@ -232,8 +259,11 @@ export async function loadRecordContext(
   const result = await query;
   const newest = (checked(result) || []) as LoadedRecord[];
   const terms = conversationFocusTerms(conversationText);
+  const already = new Set(
+    newest.map(persistentId).filter((id): id is string => !!id),
+  );
   const focused = terms.length
-    ? await loadFocusedRecords(db, workspaceId, kinds, terms, signal)
+    ? await loadFocusedRecords(db, workspaceId, kinds, terms, already, signal)
     : [];
   const merged: LoadedRecord[] = [];
   const seen = new Set<string>();

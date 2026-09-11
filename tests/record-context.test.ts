@@ -281,6 +281,34 @@ it('keeps the older John job when newer leftover refs would fill the focused res
   expect(JSON.stringify(result.records)).not.toContain('other tenant');
 });
 
+it('still retrieves a later exact job ref when the first cue already has eight matches', async () => {
+  const johnJobs = Array.from({ length: 8 }, (_, i) => ({
+    id: `john-${i}`,
+    workspace_id: 'a',
+    status: 'active',
+    kind: 'job',
+    title: `John site ${i}`,
+    body: 'John quoted a small job. No GV ref.',
+    source: 'owner_supplied',
+    created_at: `2026-08-${String(10 + i).padStart(2, '0')}`,
+  }));
+  const { db } = memoryDb({
+    business_records: [...johnRecords().business_records, ...johnJobs],
+  });
+  expect(conversationFocusTerms("move john's GV-1042 job instead")[0]).toBe(
+    'john',
+  );
+  const result = await loadRecordContext(
+    db,
+    'a',
+    ['finance'],
+    undefined,
+    "move john's GV-1042 job instead",
+  );
+  expect(hasKingstonJob(result.records)).toBe(true);
+  expect(JSON.stringify(result.records)).not.toContain('other tenant');
+});
+
 it('extracts identifiers past the first 400 characters of a long user turn', async () => {
   const paste = `${'x'.repeat(420)} move John's job instead`;
   expect(paste.length).toBeGreaterThan(400);
