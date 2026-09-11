@@ -9,6 +9,7 @@ import { memoryDb } from './fixtures/memory-db';
 
 it('discloses 15 of 63 records and every shortened body without claiming period coverage', async () => {
   const rows = Array.from({ length: 63 }, (_, i) => ({
+    id: `exp-${i}`,
     workspace_id: 'a',
     status: 'active',
     kind: 'expense',
@@ -20,8 +21,8 @@ it('discloses 15 of 63 records and every shortened body without claiming period 
   const { db } = memoryDb({
     business_records: [
       ...rows,
-      { ...rows[0], workspace_id: 'b' },
-      { ...rows[0], status: 'archived' },
+      { ...rows[0], id: 'b-0', workspace_id: 'b' },
+      { ...rows[0], id: 'arch-0', status: 'archived' },
     ],
   });
   const result = await loadRecordContext(db, 'a', ['finance']);
@@ -34,11 +35,13 @@ it('discloses 15 of 63 records and every shortened body without claiming period 
   expect(financeDisclosure(result)).toContain('15 of 63');
   expect(financeDisclosure(result)).toContain('15 records were shortened');
   expect(financeDisclosure(result)).toContain('not a complete period total');
+  expect(JSON.stringify(result.records)).not.toContain('"id"');
 });
 it('allows Social to use saved jobs, and never equates all stored rows to complete books', async () => {
   const { db } = memoryDb({
     business_records: [
       {
+        id: 'job-drive',
         workspace_id: 'a',
         status: 'active',
         kind: 'job',
@@ -59,61 +62,9 @@ it('allows Social to use saved jobs, and never equates all stored rows to comple
   );
 });
 
-it('pulls a matching John job even when it is older than the newest fifteen records', async () => {
-  const recent = Array.from({ length: 15 }, (_, i) => ({
-    workspace_id: 'a',
-    status: 'active',
-    kind: 'expense',
-    title: `Diesel ${i}`,
-    body: 'AUD 40',
-    source: 'owner_supplied',
-    created_at: `2026-09-${String(i + 1).padStart(2, '0')}`,
-  }));
-  const { db } = memoryDb({
-    business_records: [
-      ...recent,
-      {
-        workspace_id: 'a',
-        status: 'active',
-        kind: 'job',
-        title: 'Trench around existing power',
-        body: 'John Hale, Kingston ACT. 6 hours. Quote GV-1042 AUD 1110.',
-        source: 'owner_supplied',
-        created_at: '2026-08-01',
-      },
-      {
-        workspace_id: 'b',
-        status: 'active',
-        kind: 'job',
-        title: 'John other tenant',
-        body: 'Must not leak.',
-        source: 'owner_supplied',
-        created_at: '2026-08-01',
-      },
-    ],
-  });
-  const result = await loadRecordContext(
-    db,
-    'a',
-    ['finance'],
-    undefined,
-    'John called. Friday instead, 600 deep.',
-  );
-  expect(result.coverage.selection).toBe('newest_and_conversation_focus');
-  expect(
-    result.records.some(
-      (record) =>
-        typeof record === 'object' &&
-        record !== null &&
-        'title' in record &&
-        String(record.title).includes('Trench'),
-    ),
-  ).toBe(true);
-  expect(JSON.stringify(result.records)).not.toContain('other tenant');
-});
-
 function johnRecords() {
   const recent = Array.from({ length: 15 }, (_, i) => ({
+    id: `diesel-${i}`,
     workspace_id: 'a',
     status: 'active',
     kind: 'expense',
@@ -126,6 +77,7 @@ function johnRecords() {
     business_records: [
       ...recent,
       {
+        id: 'job-john',
         workspace_id: 'a',
         status: 'active',
         kind: 'job',
@@ -135,6 +87,7 @@ function johnRecords() {
         created_at: '2026-08-01',
       },
       {
+        id: 'job-other-tenant',
         workspace_id: 'b',
         status: 'active',
         kind: 'job',
@@ -157,6 +110,20 @@ function hasKingstonJob(records: unknown[]) {
   );
 }
 
+it('pulls a matching John job even when it is older than the newest fifteen records', async () => {
+  const { db } = memoryDb(johnRecords());
+  const result = await loadRecordContext(
+    db,
+    'a',
+    ['finance'],
+    undefined,
+    'John called. Friday instead, 600 deep.',
+  );
+  expect(result.coverage.selection).toBe('newest_and_conversation_focus');
+  expect(hasKingstonJob(result.records)).toBe(true);
+  expect(JSON.stringify(result.records)).not.toContain('other tenant');
+});
+
 it('retrieves the older John record from a follow-up turn that does not restate the name', async () => {
   const { db } = memoryDb(johnRecords());
   const focus = recentUserFocusText([
@@ -169,13 +136,7 @@ it('retrieves the older John record from a follow-up turn that does not restate 
   ]);
   expect(focus).toContain('Friday instead, 600 deep.');
   expect(focus).toContain('GV-1042');
-  const result = await loadRecordContext(
-    db,
-    'a',
-    ['finance'],
-    undefined,
-    focus,
-  );
+  const result = await loadRecordContext(db, 'a', ['finance'], undefined, focus);
   expect(hasKingstonJob(result.records)).toBe(true);
   expect(JSON.stringify(result.records)).not.toContain('other tenant');
 });
@@ -198,3 +159,91 @@ it.each(['john', 'JOHN', 'John', 'gv-1042', 'GV-1042'])(
     expect(JSON.stringify(result.records)).not.toContain('other tenant');
   },
 );
+
+it('keeps the newest customer identifier when earlier turns already fill the term budget', () => {
+  const older = Array.from(
+    { length: 8 },
+    (_, i) => `Quote AB-${1000 + i} for Acme job ${i}.`,
+  );
+  const terms = conversationFocusTerms(
+    [...older, "move john's job instead"].join('\n'),
+  );
+  expect(terms[0]).toBe('john');
+  expect(terms).toContain('john');
+});
+
+it('does not let generic words crowd out a real customer identifier', async () => {
+  const generic =
+    'please quote the customer about the trench and move the job around the site';
+  expect(conversationFocusTerms(`${generic} for john`)).toEqual(['john']);
+  expect(conversationFocusTerms(generic)).not.toContain('quote');
+  expect(conversationFocusTerms(generic)).not.toContain('customer');
+  expect(conversationFocusTerms(generic)).not.toContain('trench');
+  expect(conversationFocusTerms(generic)).not.toContain('about');
+  expect(conversationFocusTerms(generic)).not.toContain('move');
+  expect(conversationFocusTerms(generic)).not.toContain('job');
+  const { db } = memoryDb(johnRecords());
+  const result = await loadRecordContext(
+    db,
+    'a',
+    ['finance'],
+    undefined,
+    `${generic} for john`,
+  );
+  expect(hasKingstonJob(result.records)).toBe(true);
+});
+
+it('keeps two similar recurring jobs that share a title and body prefix', async () => {
+  const prefix = `${'Recurring hydrovac trench template. Standard access notes. '.repeat(2)}`;
+  expect(prefix.length).toBeGreaterThan(80);
+  const expenses = Array.from({ length: 15 }, (_, i) => ({
+    id: `exp-${i}`,
+    workspace_id: 'a',
+    status: 'active',
+    kind: 'expense',
+    title: `Fuel ${i}`,
+    body: 'AUD 40',
+    source: 'owner_supplied',
+    created_at: `2026-09-${String(i + 1).padStart(2, '0')}`,
+  }));
+  const { db } = memoryDb({
+    business_records: [
+      ...expenses,
+      {
+        id: 'job-mary',
+        workspace_id: 'a',
+        status: 'active',
+        kind: 'job',
+        title: 'Recurring trench',
+        body: `${prefix}Mary Smith, Queanbeyan. Spoil on site.`,
+        source: 'owner_supplied',
+        created_at: '2026-08-02',
+      },
+      {
+        id: 'job-john',
+        workspace_id: 'a',
+        status: 'active',
+        kind: 'job',
+        title: 'Recurring trench',
+        body: `${prefix}John Hale, Kingston. Live power nearby.`,
+        source: 'owner_supplied',
+        created_at: '2026-08-01',
+      },
+    ],
+  });
+  const result = await loadRecordContext(
+    db,
+    'a',
+    ['finance'],
+    undefined,
+    'John called and Mary called.',
+  );
+  const bodies = result.records.map((record) =>
+    typeof record === 'object' && record && 'body' in record
+      ? String(record.body)
+      : '',
+  );
+  expect(bodies.some((body) => body.includes('John Hale'))).toBe(true);
+  expect(bodies.some((body) => body.includes('Mary Smith'))).toBe(true);
+  expect(JSON.stringify(result.records)).not.toContain('"id"');
+});

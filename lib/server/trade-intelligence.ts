@@ -7,7 +7,7 @@ const SOURCE = readFileSync(
   'utf8',
 );
 
-const IDENTITY = /\bgreen\s*vac\b/i;
+const CANONICAL_NAMES = new Set(['greenvac', 'green vac']);
 const RATE_MARKERS = [
   'AUD 185 inc GST on site',
   'AUD 650 inc GST',
@@ -24,21 +24,23 @@ type ProfileFields = {
   managed_pack?: unknown;
 };
 
-function textList(value: unknown) {
-  if (Array.isArray(value))
-    return value
-      .filter((item) => typeof item === 'string' || typeof item === 'number')
-      .map(String)
-      .join(' ');
-  if (typeof value === 'string' || typeof value === 'number') return String(value);
-  return '';
+function canonical(value: unknown) {
+  if (typeof value !== 'string') return '';
+  return value.trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+function isCanonicalGreenVacName(value: unknown) {
+  return CANONICAL_NAMES.has(canonical(value));
 }
 
 export function profileMatchesGreenVac(profile: unknown) {
   if (profile == null || typeof profile !== 'object') return false;
   const fields = profile as ProfileFields;
-  const identity = `${textList(fields.display_name)} ${textList(fields.name)} ${textList(fields.managed_pack)}`;
-  return IDENTITY.test(identity);
+  if (canonical(fields.managed_pack) === 'greenvac') return true;
+  return (
+    isCanonicalGreenVacName(fields.display_name) ||
+    isCanonicalGreenVacName(fields.name)
+  );
 }
 
 export function rateCardLeaked(instructions: string) {

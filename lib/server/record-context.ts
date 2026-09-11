@@ -2,6 +2,14 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { AgentName } from '../contracts';
 import { checked } from './db';
 
+type LoadedRecord = {
+  id?: string;
+  kind: string;
+  title: string;
+  body: string;
+  source: string;
+};
+
 export type RecordContext = {
   records: unknown[];
   coverage: {
@@ -15,26 +23,8 @@ export type RecordContext = {
 
 const WEEKDAYS =
   /^(monday|tuesday|wednesday|thursday|friday|saturday|sunday|today|tomorrow)$/i;
-const STOP = new Set([
-  'called',
-  'instead',
-  'deep',
-  'wants',
-  'that',
-  'this',
-  'with',
-  'from',
-  'have',
-  'been',
-  'will',
-  'just',
-  'make',
-  'what',
-  'when',
-  'your',
-  'job',
+const CLOSED = new Set([
   'the',
-  'one',
   'and',
   'for',
   'not',
@@ -48,14 +38,39 @@ const STOP = new Set([
   'got',
   'now',
   'new',
-  'move',
   'please',
   'also',
+  'this',
+  'that',
+  'with',
+  'from',
+  'have',
+  'been',
+  'will',
+  'just',
+  'make',
+  'what',
+  'when',
+  'your',
+  'job',
+  'one',
+  'about',
+  'quote',
+  'customer',
+  'trench',
+  'move',
+  'site',
+  'around',
+  'called',
+  'instead',
+  'deep',
+  'wants',
 ]);
-
 const FOCUS_USER_TURNS = 6;
 const FOCUS_TURN_CHARS = 400;
 const FOCUS_TERM_LIMIT = 6;
+const FOCUS_PER_TURN = 3;
+const RECORD_FIELDS = 'id,kind,title,body,source';
 
 export function recentUserFocusText(
   history: { role: string; content: string }[] | undefined,
@@ -68,26 +83,57 @@ export function recentUserFocusText(
     .join('\n');
 }
 
+function cleanTerm(value: string) {
+  return value.replace(/[%_,()]/g, '').trim().toLowerCase();
+}
+
+function addIdentifier(found: string[], seen: Set<string>, raw: string) {
+  const term = cleanTerm(raw);
+  if (term.length < 3 || term.length > 32) return;
+  if (WEEKDAYS.test(term) || CLOSED.has(term) || seen.has(term)) return;
+  seen.add(term);
+  found.push(term);
+}
+
+export function extractIdentifiers(text: string) {
+  const found: string[] = [];
+  const seen = new Set<string>();
+  for (const match of text.matchAll(/\b[a-z]{1,6}-?\d{2,8}\b/gi))
+    addIdentifier(found, seen, match[0]);
+  for (const match of text.matchAll(/\b([A-Za-z]{3,30})['’]s\b/g))
+    addIdentifier(found, seen, match[1]);
+  for (const match of text.matchAll(/\b([A-Za-z]{3,30})\s+called\b/gi))
+    addIdentifier(found, seen, match[1]);
+  for (const match of text.matchAll(/\bmove\s+([A-Za-z]{3,30})\b/gi))
+    addIdentifier(found, seen, match[1]);
+  for (const match of text.matchAll(
+    /\b(?:for|customer|client)\s+([A-Za-z]{3,30})\b/gi,
+  ))
+    addIdentifier(found, seen, match[1]);
+  for (const match of text.matchAll(/["“]([^"”]{2,40})["”]/g))
+    addIdentifier(found, seen, match[1]);
+  for (const match of text.matchAll(/\b[A-Z][a-z]{2,30}\b/g))
+    addIdentifier(found, seen, match[0]);
+  return found;
+}
+
 export function conversationFocusTerms(text: string | undefined) {
   if (!text) return [];
-  const normalized = text.replace(/['’]s\b/gi, ' ');
-  const refs = normalized.match(/\b[a-z]{1,6}-?\d{2,8}\b/gi) || [];
-  const words = normalized.match(/\b[a-z]{3,30}\b/gi) || [];
-  return [
-    ...new Set(
-      [...refs, ...words].map((term) =>
-        term.replace(/[%_,()]/g, '').trim().toLowerCase(),
-      ),
-    ),
-  ]
-    .filter(
-      (term) =>
-        term.length >= 3 &&
-        term.length <= 32 &&
-        !WEEKDAYS.test(term) &&
-        !STOP.has(term),
-    )
-    .slice(0, FOCUS_TERM_LIMIT);
+  const turns = text.split('\n');
+  const terms: string[] = [];
+  const seen = new Set<string>();
+  for (let i = turns.length - 1; i >= 0; i--) {
+    let added = 0;
+    for (const term of extractIdentifiers(turns[i])) {
+      if (seen.has(term)) continue;
+      seen.add(term);
+      terms.push(term);
+      added += 1;
+      if (added >= FOCUS_PER_TURN || terms.length >= FOCUS_TERM_LIMIT) break;
+    }
+    if (terms.length >= FOCUS_TERM_LIMIT) break;
+  }
+  return terms;
 }
 
 function kindsFor(agents: AgentName[]) {
@@ -101,16 +147,18 @@ function kindsFor(agents: AgentName[]) {
   return [...new Set(agents.flatMap((agent) => kinds[agent]))];
 }
 
-function clip(record: { body: string }) {
+function clip(record: LoadedRecord) {
   return {
-    ...record,
+    kind: record.kind,
+    title: record.title,
     body: record.body.slice(0, 2000),
+    source: record.source,
     bodyShortened: record.body.length > 2000,
   };
 }
 
-function recordKey(record: { kind?: string; title?: string; body?: string }) {
-  return `${record.kind}|${record.title}|${String(record.body || '').slice(0, 80)}`;
+function persistentId(record: LoadedRecord) {
+  return typeof record.id === 'string' && record.id ? record.id : null;
 }
 
 export async function loadRecordContext(
@@ -123,7 +171,7 @@ export async function loadRecordContext(
   const kinds = kindsFor(agents);
   let query = db
     .from('business_records')
-    .select('kind,title,body,source', { count: 'exact' })
+    .select(RECORD_FIELDS, { count: 'exact' })
     .eq('workspace_id', workspaceId)
     .eq('status', 'active')
     .in('kind', kinds)
@@ -131,19 +179,16 @@ export async function loadRecordContext(
     .limit(15);
   if (signal) query = query.abortSignal(signal);
   const result = await query;
-  const newest = checked(result) || [];
+  const newest = (checked(result) || []) as LoadedRecord[];
   const terms = conversationFocusTerms(conversationText);
-  let focused: typeof newest = [];
+  let focused: LoadedRecord[] = [];
   if (terms.length) {
     const clause = terms
-      .flatMap((term) => [
-        `title.ilike.%${term}%`,
-        `body.ilike.%${term}%`,
-      ])
+      .flatMap((term) => [`title.ilike.%${term}%`, `body.ilike.%${term}%`])
       .join(',');
     let focusQuery = db
       .from('business_records')
-      .select('kind,title,body,source')
+      .select(RECORD_FIELDS)
       .eq('workspace_id', workspaceId)
       .eq('status', 'active')
       .in('kind', kinds)
@@ -151,14 +196,16 @@ export async function loadRecordContext(
       .order('created_at', { ascending: false })
       .limit(8);
     if (signal) focusQuery = focusQuery.abortSignal(signal);
-    focused = checked(await focusQuery) || [];
+    focused = (checked(await focusQuery) || []) as LoadedRecord[];
   }
-  const merged = [...newest];
-  const seen = new Set(newest.map(recordKey));
-  for (const record of focused) {
-    const key = recordKey(record);
-    if (seen.has(key)) continue;
-    seen.add(key);
+  const merged: LoadedRecord[] = [];
+  const seen = new Set<string>();
+  for (const record of [...newest, ...focused]) {
+    const id = persistentId(record);
+    if (id) {
+      if (seen.has(id)) continue;
+      seen.add(id);
+    }
     merged.push(record);
   }
   return {
