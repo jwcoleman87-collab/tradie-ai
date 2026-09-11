@@ -47,7 +47,7 @@ import { actionState, canReplaceAction } from '@/lib/action-state';
 import { BrandMark, BrandMentions } from './brand';
 import { eligibleAIProviders, aiProviderLabel } from '@/lib/ai-settings';
 import { aiBrands } from '@/lib/brands';
-import { aiProblem } from '@/lib/ai-diagnostics';
+import { aiProblem, timeoutCopyContext } from '@/lib/ai-diagnostics';
 import { chatBlockedReason } from '@/lib/chat-client';
 import { useChatRun } from '@/lib/use-chat-run';
 import { bindWorkspaceViewport } from '@/lib/workspace-viewport';
@@ -335,7 +335,7 @@ export default function Workspace() {
   const chat = useChatRun(token, snapshot, (result) => {
     if (result.status === 'failed')
       setError(
-        `Your message is saved, but no reply was completed. ${aiProblem(result.error?.code)}${result.error?.code ? ` [${result.error.code}]` : ''}`,
+        `Your message is saved, but no reply was completed. ${aiProblem(result.error?.code, timeoutCopyContext(snapshot?.workspace, config?.aiProviders))}${result.error?.code ? ` [${result.error.code}]` : ''}`,
       );
     else setNotice(result.notice || '');
     void refresh().catch(() =>
@@ -1908,7 +1908,16 @@ export default function Workspace() {
                       {new Date(run.created_at).toLocaleString()}
                     </p>
                     {run.status === 'failed' && (
-                      <p>{aiProblem(run.error_code)}</p>
+                      <p>
+                        {aiProblem(
+                          run.error_code,
+                          timeoutCopyContext(
+                            snapshot.workspace,
+                            config?.aiProviders,
+                            run.provider_trace,
+                          ),
+                        )}
+                      </p>
                     )}
                     {run.status === 'working' && (
                       <p>

@@ -10,7 +10,12 @@ import { env } from './config';
 import { AppError, requireValue } from './errors';
 import type { ModelDiagnostic } from '../ai-diagnostics';
 import type { WebResearch } from './web-research';
-import { callSignal, withinBudget, type ModelCallOptions } from './chat-budget';
+import {
+  callSignal,
+  stageAttempt,
+  withinBudget,
+  type ModelCallOptions,
+} from './chat-budget';
 import { modelTimeout } from './model-http';
 export type ProviderAttempt = Partial<ModelDiagnostic> & {
   provider: AIProviderName;
@@ -19,6 +24,9 @@ export type ProviderAttempt = Partial<ModelDiagnostic> & {
   errorCode?: string;
   elapsedMs?: number;
   step?: 'routing' | 'research' | 'response';
+  attemptTimeoutMs?: number;
+  stageRemainingMs?: number;
+  backupEligible?: boolean;
 };
 const fallbackErrors = new Set([
   'AI_QUOTA_EXCEEDED',
@@ -78,6 +86,16 @@ export class FallbackProvider implements ModelProvider {
   private record(attempt: ProviderAttempt) {
     this.attempts.push(attempt);
   }
+  private beginAttempt(
+    options: ModelCallOptions,
+    sharedOptions: ModelCallOptions,
+  ) {
+    const attempt = stageAttempt(sharedOptions, options, modelTimeout());
+    return {
+      ...attempt,
+      backupEligible: this.index + 1 < this.choices.length,
+    };
+  }
   async research(
     query: string,
     timeZone: string,
@@ -88,13 +106,16 @@ export class FallbackProvider implements ModelProvider {
       const selected = this.choices[this.index];
       const started = Date.now();
       const diagnosticCount = selected.diagnostics?.length || 0;
+      const attempt = this.beginAttempt(options, sharedOptions);
       try {
         if (!selected.research)
           throw new AppError('AI_RESEARCH_UNAVAILABLE', 503);
-        const signal = callSignal(sharedOptions, modelTimeout());
         const output = await withinBudget(
-          selected.research(query, timeZone, { ...sharedOptions, signal }),
-          signal,
+          selected.research(query, timeZone, {
+            ...sharedOptions,
+            signal: attempt.signal,
+          }),
+          attempt.signal,
         );
         this.record({
           provider: selected.name,
@@ -102,6 +123,9 @@ export class FallbackProvider implements ModelProvider {
           status: 'completed',
           step: 'research',
           elapsedMs: Date.now() - started,
+          attemptTimeoutMs: attempt.timeoutMs,
+          stageRemainingMs: attempt.stageRemainingMs,
+          backupEligible: attempt.backupEligible,
           ...selected.diagnostics?.[diagnosticCount],
         });
         return output;
@@ -114,6 +138,9 @@ export class FallbackProvider implements ModelProvider {
           errorCode: code,
           step: 'research',
           elapsedMs: Date.now() - started,
+          attemptTimeoutMs: attempt.timeoutMs,
+          stageRemainingMs: attempt.stageRemainingMs,
+          backupEligible: attempt.backupEligible,
           ...selected.diagnostics?.[diagnosticCount],
         });
         if (
@@ -139,14 +166,14 @@ export class FallbackProvider implements ModelProvider {
       const started = Date.now();
       const step = this.completedCalls === 0 ? 'routing' : 'response';
       const diagnosticCount = selected.diagnostics?.length || 0;
+      const attempt = this.beginAttempt(options, sharedOptions);
       try {
-        const signal = callSignal(sharedOptions, modelTimeout());
         const output = await withinBudget(
           selected.structured(schema, instructions, input, {
             ...sharedOptions,
-            signal,
+            signal: attempt.signal,
           }),
-          signal,
+          attempt.signal,
         );
         this.record({
           provider: selected.name,
@@ -154,6 +181,9 @@ export class FallbackProvider implements ModelProvider {
           status: 'completed',
           step,
           elapsedMs: Date.now() - started,
+          attemptTimeoutMs: attempt.timeoutMs,
+          stageRemainingMs: attempt.stageRemainingMs,
+          backupEligible: attempt.backupEligible,
           ...selected.diagnostics?.[diagnosticCount],
         });
         this.completedCalls++;
@@ -167,6 +197,9 @@ export class FallbackProvider implements ModelProvider {
           errorCode: code,
           step,
           elapsedMs: Date.now() - started,
+          attemptTimeoutMs: attempt.timeoutMs,
+          stageRemainingMs: attempt.stageRemainingMs,
+          backupEligible: attempt.backupEligible,
           ...selected.diagnostics?.[diagnosticCount],
         });
         if (
