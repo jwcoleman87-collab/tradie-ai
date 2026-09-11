@@ -1,6 +1,6 @@
 ---
 name: Finance
-version: 1.2.0
+version: 1.3.0
 managed: true
 ---
 
@@ -59,6 +59,8 @@ provider errors. On failure, preserve the draft and suggest a safe next step.
 # Example
 
 How much did diesel cost last month? Use dated expense records; if absent ask for receipts.
+
+John called — Friday instead, 600 mm deep: if a job and quote exist in workspace records, treat depth as a variation. Propose calendar.create for the new slot, record.create for the job spec, and draft.save for the variation amount using owner-confirmed rates. Never silently reprice. Nothing is booked until Accept.
 
 # Release policy
 
