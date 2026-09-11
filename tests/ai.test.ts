@@ -264,6 +264,7 @@ it('injects GreenVac operating rules when the business identity is GreenVac', as
       timeZone: 'Australia/Sydney',
       businessProfile: {
         display_name: 'GreenVac',
+        managed_pack: 'greenvac',
         services: ['hydro excavation'],
       },
     },

@@ -1,13 +1,13 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { sha256 } from './crypto';
+import { env } from './config';
 
 const SOURCE = readFileSync(
   join(process.cwd(), 'skills/trade-intelligence/GREENVAC.md'),
   'utf8',
 );
 
-const CANONICAL_NAMES = new Set(['greenvac', 'green vac']);
 const RATE_MARKERS = [
   'AUD 185 inc GST on site',
   'AUD 650 inc GST',
@@ -19,28 +19,28 @@ export const UNAVAILABLE_INSTRUCTIONS =
   'Workspace operating rules: use only owner-confirmed prices and policies from this workspace. Do not apply another business\'s rate card. A quoted job whose scope later changes is a variation (draft.save + record.create), never a silent reprice. Calendar moves require calendar.create and owner Accept. If this workspace has no recorded hourly rate or minimum charge, say the rate is missing and ask for it. Do not invent a rate.';
 
 type ProfileFields = {
-  display_name?: unknown;
-  name?: unknown;
   managed_pack?: unknown;
+  workspace_id?: unknown;
 };
 
 function canonical(value: unknown) {
   if (typeof value !== 'string') return '';
-  return value.trim().toLowerCase().replace(/\s+/g, ' ');
+  return value.trim().toLowerCase();
 }
 
-function isCanonicalGreenVacName(value: unknown) {
-  return CANONICAL_NAMES.has(canonical(value));
+function allowedWorkspaceIds() {
+  return env('GREENVAC_WORKSPACE_IDS')
+    .split(',')
+    .map((value) => value.trim().toLowerCase())
+    .filter(Boolean);
 }
 
 export function profileMatchesGreenVac(profile: unknown) {
   if (profile == null || typeof profile !== 'object') return false;
   const fields = profile as ProfileFields;
   if (canonical(fields.managed_pack) === 'greenvac') return true;
-  return (
-    isCanonicalGreenVacName(fields.display_name) ||
-    isCanonicalGreenVacName(fields.name)
-  );
+  const workspaceId = canonical(fields.workspace_id);
+  return !!workspaceId && allowedWorkspaceIds().includes(workspaceId);
 }
 
 export function rateCardLeaked(instructions: string) {

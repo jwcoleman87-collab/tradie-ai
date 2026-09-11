@@ -87,33 +87,45 @@ function cleanTerm(value: string) {
   return value.replace(/[%_,()]/g, '').trim().toLowerCase();
 }
 
-function addIdentifier(found: string[], seen: Set<string>, raw: string) {
+function validTerm(raw: string) {
   const term = cleanTerm(raw);
-  if (term.length < 3 || term.length > 32) return;
-  if (WEEKDAYS.test(term) || CLOSED.has(term) || seen.has(term)) return;
-  seen.add(term);
-  found.push(term);
+  if (term.length < 3 || term.length > 32) return '';
+  if (WEEKDAYS.test(term) || CLOSED.has(term)) return '';
+  return term;
 }
 
 export function extractIdentifiers(text: string) {
+  const hits: { term: string; index: number; weight: number }[] = [];
+  function collect(
+    pattern: RegExp,
+    weight: number,
+    pick: (match: RegExpMatchArray) => string,
+  ) {
+    for (const match of text.matchAll(pattern)) {
+      const term = validTerm(pick(match));
+      if (!term) continue;
+      hits.push({ term, index: match.index ?? 0, weight });
+    }
+  }
+  collect(/\b[a-z]{1,6}-?\d{2,8}\b/gi, 1, (match) => match[0]);
+  collect(/\b([A-Za-z]{3,30})['’]s\b/g, 3, (match) => match[1]);
+  collect(/\b([A-Za-z]{3,30})\s+called\b/gi, 3, (match) => match[1]);
+  collect(/\bmove\s+([A-Za-z]{3,30})\b/gi, 3, (match) => match[1]);
+  collect(
+    /\b(?:for|customer|client)\s+([A-Za-z]{3,30})\b/gi,
+    3,
+    (match) => match[1],
+  );
+  collect(/["“]([^"”]{2,40})["”]/g, 3, (match) => match[1]);
+  collect(/\b[A-Z][a-z]{2,30}\b/g, 2, (match) => match[0]);
+  hits.sort((a, b) => b.weight - a.weight || a.index - b.index);
   const found: string[] = [];
   const seen = new Set<string>();
-  for (const match of text.matchAll(/\b[a-z]{1,6}-?\d{2,8}\b/gi))
-    addIdentifier(found, seen, match[0]);
-  for (const match of text.matchAll(/\b([A-Za-z]{3,30})['’]s\b/g))
-    addIdentifier(found, seen, match[1]);
-  for (const match of text.matchAll(/\b([A-Za-z]{3,30})\s+called\b/gi))
-    addIdentifier(found, seen, match[1]);
-  for (const match of text.matchAll(/\bmove\s+([A-Za-z]{3,30})\b/gi))
-    addIdentifier(found, seen, match[1]);
-  for (const match of text.matchAll(
-    /\b(?:for|customer|client)\s+([A-Za-z]{3,30})\b/gi,
-  ))
-    addIdentifier(found, seen, match[1]);
-  for (const match of text.matchAll(/["“]([^"”]{2,40})["”]/g))
-    addIdentifier(found, seen, match[1]);
-  for (const match of text.matchAll(/\b[A-Z][a-z]{2,30}\b/g))
-    addIdentifier(found, seen, match[0]);
+  for (const hit of hits) {
+    if (seen.has(hit.term)) continue;
+    seen.add(hit.term);
+    found.push(hit.term);
+  }
   return found;
 }
 

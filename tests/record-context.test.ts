@@ -172,6 +172,14 @@ it('keeps the newest customer identifier when earlier turns already fill the ter
   expect(terms).toContain('john');
 });
 
+it('keeps the named customer when earlier refs in the same turn fill a naive budget', () => {
+  const terms = conversationFocusTerms(
+    "ignore AB-1000, AB-1001 and AB-1002; move john's job instead",
+  );
+  expect(terms[0]).toBe('john');
+  expect(terms).toContain('john');
+});
+
 it('does not let generic words crowd out a real customer identifier', async () => {
   const generic =
     'please quote the customer about the trench and move the job around the site';

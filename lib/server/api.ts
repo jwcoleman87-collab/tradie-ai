@@ -595,7 +595,7 @@ async function handleApi(
             db
               .from('business_profiles')
               .select(
-                'display_name,website_url,base_location,service_areas,services,preferred_job_types,enquiry_channels,primary_goal,admin_bottleneck,brand_summary,confirmed_at',
+                'display_name,website_url,base_location,service_areas,services,preferred_job_types,enquiry_channels,primary_goal,admin_bottleneck,brand_summary,confirmed_at,managed_pack',
               )
               .eq('workspace_id', input.workspaceId)
               .eq('onboarding_status', 'confirmed')
@@ -732,8 +732,7 @@ async function handleApi(
             },
             businessProfile: {
               ...profile,
-              display_name: profile?.display_name || workspace.name,
-              name: workspace.name,
+              workspace_id: input.workspaceId,
             },
             loadRecords: (agents) =>
               loadRecordContext(

@@ -324,6 +324,7 @@ export const crewCases: CrewEvalCase[] = [
       timeZone: 'Australia/Sydney',
       businessProfile: {
         display_name: 'GreenVac',
+        managed_pack: 'greenvac',
         services: ['hydro excavation'],
       },
       records: {
