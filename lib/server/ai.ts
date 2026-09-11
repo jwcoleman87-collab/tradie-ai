@@ -97,7 +97,7 @@ export class OpenAIProvider implements ModelProvider {
           include: ['web_search_call.action.sources'],
           max_output_tokens: 2200,
         }),
-        signal: callSignal(options, modelTimeout()),
+        signal: options.signal ?? callSignal(options, modelTimeout()),
       },
       this.diagnostics,
     );
@@ -223,7 +223,7 @@ export class OpenAIProvider implements ModelProvider {
               },
             },
           }),
-          signal: callSignal(options, modelTimeout()),
+          signal: options.signal ?? callSignal(options, modelTimeout()),
         },
         this.diagnostics,
       );

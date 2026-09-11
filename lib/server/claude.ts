@@ -147,7 +147,7 @@ export class ClaudeProvider implements ModelProvider {
           ],
           tool_choice: { type: 'tool', name: 'web_search' },
         }),
-        signal: callSignal(options, modelTimeout()),
+        signal: options.signal ?? callSignal(options, modelTimeout()),
       },
       this.diagnostics,
     );
@@ -261,7 +261,7 @@ export class ClaudeProvider implements ModelProvider {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify(payload),
-          signal: callSignal(options, modelTimeout()),
+          signal: options.signal ?? callSignal(options, modelTimeout()),
         },
         this.diagnostics,
       );

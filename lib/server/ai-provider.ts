@@ -41,6 +41,15 @@ function sharedDeadlineOptions(options: ModelCallOptions): ModelCallOptions {
   return shared;
 }
 
+function attemptTimeoutMs(choiceCount: number, options: ModelCallOptions) {
+  if (choiceCount > 1) return modelTimeout();
+  const remaining = (options.deadlineAt ?? Infinity) - Date.now();
+  return Number.isFinite(remaining) && remaining > 0
+    ? remaining
+    : modelTimeout();
+}
+
+
 export class FallbackProvider implements ModelProvider {
   private index = 0;
   private completedCalls = 0;
@@ -91,7 +100,10 @@ export class FallbackProvider implements ModelProvider {
       try {
         if (!selected.research)
           throw new AppError('AI_RESEARCH_UNAVAILABLE', 503);
-        const signal = callSignal(sharedOptions, modelTimeout());
+        const signal = callSignal(
+          sharedOptions,
+          attemptTimeoutMs(this.choices.length, options),
+        );
         const output = await withinBudget(
           selected.research(query, timeZone, { ...sharedOptions, signal }),
           signal,
@@ -140,7 +152,10 @@ export class FallbackProvider implements ModelProvider {
       const step = this.completedCalls === 0 ? 'routing' : 'response';
       const diagnosticCount = selected.diagnostics?.length || 0;
       try {
-        const signal = callSignal(sharedOptions, modelTimeout());
+        const signal = callSignal(
+          sharedOptions,
+          attemptTimeoutMs(this.choices.length, options),
+        );
         const output = await withinBudget(
           selected.structured(schema, instructions, input, {
             ...sharedOptions,

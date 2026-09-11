@@ -268,6 +268,41 @@ describe('bounded availability fallback', () => {
         { provider: 'anthropic', status: 'completed', errorCode: undefined },
       ]);
     });
+    it(`${method} gives a single provider the remaining stage instead of aborting at 30s`, async () => {
+      const a = makeResearch('openai');
+      vi.spyOn(Date, 'now').mockReturnValue(1000);
+      vi.stubEnv('AI_REQUEST_TIMEOUT_MS', '30000');
+      const timers: { milliseconds: number; controller: AbortController }[] =
+        [];
+      vi.spyOn(AbortSignal, 'timeout').mockImplementation((milliseconds) => {
+        const controller = new AbortController();
+        timers.push({ milliseconds, controller });
+        return controller.signal;
+      });
+      a[method].mockResolvedValue(
+        method === 'structured'
+          ? { ok: true }
+          : {
+              summary: 'current notes',
+              sources: [],
+              searchedAt: '2026-09-02T00:00:00.000Z',
+              provider: 'openai',
+            },
+      );
+      const provider = new FallbackProvider([a]);
+      const pending =
+        method === 'structured'
+          ? provider.structured(schema, '', [], { deadlineAt: 46_000 })
+          : provider.research('public update', 'Australia/Sydney', {
+              deadlineAt: 46_000,
+            });
+      await expect(pending).resolves.toBeTruthy();
+      expect(timers.some((timer) => timer.milliseconds === 45_000)).toBe(true);
+      expect(timers.some((timer) => timer.milliseconds === 30_000)).toBe(false);
+      const passed = a[method].mock.calls[0][method === 'structured' ? 3 : 2]
+        .signal as AbortSignal;
+      expect(passed.aborted).toBe(false);
+    });
   }
   it('does not send any request when the run has already been cancelled', async () => {
     const a = make('openai'),
