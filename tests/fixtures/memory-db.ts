@@ -61,6 +61,19 @@ export function memoryDb(tables: Record<string, Row[]>) {
           filters.push((row) => values.includes(row[field]));
           return chain;
         },
+        not(field: string, operator: string, value: string) {
+          if (operator === 'in') {
+            const excluded = value
+              .replace(/^\(/, '')
+              .replace(/\)$/, '')
+              .split(',')
+              .filter(Boolean);
+            filters.push((row) => !excluded.includes(String(row[field])));
+            return chain;
+          }
+          filters.push((row) => String(row[field]) !== value);
+          return chain;
+        },
         gt(field: string, value: string) {
           filters.push((row) => String(row[field]) > value);
           return chain;

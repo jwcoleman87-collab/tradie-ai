@@ -186,6 +186,7 @@ async function queryFocusTerm(
   workspaceId: string,
   kinds: string[],
   term: string,
+  already: Set<string>,
   signal?: AbortSignal,
 ) {
   let focusQuery = db
@@ -193,7 +194,11 @@ async function queryFocusTerm(
     .select(RECORD_FIELDS)
     .eq('workspace_id', workspaceId)
     .eq('status', 'active')
-    .in('kind', kinds)
+    .in('kind', kinds);
+  if (already.size) {
+    focusQuery = focusQuery.not('id', 'in', `(${[...already].join(',')})`);
+  }
+  focusQuery = focusQuery
     .or(`title.ilike.%${term}%,body.ilike.%${term}%`)
     .order('created_at', { ascending: false })
     .limit(FOCUS_RESULT_LIMIT);
@@ -210,7 +215,9 @@ async function loadFocusedRecords(
   signal?: AbortSignal,
 ) {
   const perTerm = await Promise.all(
-    terms.map((term) => queryFocusTerm(db, workspaceId, kinds, term, signal)),
+    terms.map((term) =>
+      queryFocusTerm(db, workspaceId, kinds, term, already, signal),
+    ),
   );
   const focused: LoadedRecord[] = [];
   const seen = new Set<string>(already);

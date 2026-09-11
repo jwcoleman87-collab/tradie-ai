@@ -320,3 +320,31 @@ it('extracts identifiers past the first 400 characters of a long user turn', asy
   const result = await loadRecordContext(db, 'a', ['finance'], undefined, focus);
   expect(hasKingstonJob(result.records)).toBe(true);
 });
+
+it('still finds an older GV-1042 job when the newest fifteen already mention that ref', async () => {
+  const notes = Array.from({ length: 15 }, (_, i) => ({
+    id: `note-gv-${i}`,
+    workspace_id: 'a',
+    status: 'active',
+    kind: 'note',
+    title: `Follow-up GV-1042 ${i}`,
+    body: 'Internal note repeating GV-1042.',
+    source: 'owner_supplied',
+    created_at: `2026-09-${String(i + 1).padStart(2, '0')}`,
+  }));
+  const extras = johnRecords().business_records.filter(
+    (row) => row.id === 'job-john' || row.id === 'job-other-tenant',
+  );
+  const { db } = memoryDb({
+    business_records: [...notes, ...extras],
+  });
+  const result = await loadRecordContext(
+    db,
+    'a',
+    ['finance'],
+    undefined,
+    'move GV-1042 to friday',
+  );
+  expect(hasKingstonJob(result.records)).toBe(true);
+  expect(JSON.stringify(result.records)).not.toContain('other tenant');
+});
