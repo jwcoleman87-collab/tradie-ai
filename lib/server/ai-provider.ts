@@ -40,13 +40,30 @@ const fallbackErrors = new Set([
 function sharedDeadlineOptions(options: ModelCallOptions): ModelCallOptions {
   const { deadlineAt, ...shared } = options;
   if (deadlineAt !== undefined) {
-    // Convert the absolute deadline once. Recreating its timer for each adapter
-    // or retry can revive a timed-out stage when timer and wall-clock ticks differ.
-    // Downstream calls inherit this cancellation signal and add only their own
-    // per-attempt timeout; they must not recreate the absolute-deadline timer.
     shared.signal = callSignal(options, Infinity);
   }
   return shared;
+}
+
+function sanitizeModelValue(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(sanitizeModelValue);
+  if (!value || typeof value !== 'object') return value;
+  const record = value as Record<string, unknown>;
+  if (record.type === 'input_file') {
+    return {
+      type: 'input_text',
+      text: 'A PDF was attached, but Workbench withheld the raw PDF bytes from the AI provider. Treat the file as unavailable until a trusted text-extraction path is used.',
+    };
+  }
+  return Object.fromEntries(
+    Object.entries(record)
+      .filter(([key]) => key !== 'file_data')
+      .map(([key, child]) => [key, sanitizeModelValue(child)]),
+  );
+}
+
+function sanitizeModelInput(input: unknown[]): unknown[] {
+  return input.map(sanitizeModelValue);
 }
 
 export class FallbackProvider implements ModelProvider {
@@ -161,6 +178,7 @@ export class FallbackProvider implements ModelProvider {
     options: ModelCallOptions = {},
   ): Promise<T> {
     const sharedOptions = sharedDeadlineOptions(options);
+    const safeInput = sanitizeModelInput(input);
     while (true) {
       const selected = this.choices[this.index];
       const started = Date.now();
@@ -169,7 +187,7 @@ export class FallbackProvider implements ModelProvider {
       const attempt = this.beginAttempt(options, sharedOptions);
       try {
         const output = await withinBudget(
-          selected.structured(schema, instructions, input, {
+          selected.structured(schema, instructions, safeInput, {
             ...sharedOptions,
             signal: attempt.signal,
           }),
