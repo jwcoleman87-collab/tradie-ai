@@ -342,6 +342,22 @@ it('reports the committed reply when completion wins despite a lost commit ackno
     assistantMessage,
   });
 });
+it('on AI_TIMEOUT keeps the saved user message, fails the run, and does not persist a reply or proposals', async () => {
+  mocks.runTeam.mockRejectedValue(new AppError('AI_TIMEOUT', 503));
+  const data = await (await send()).json();
+  expect(data).toMatchObject({
+    messageSaved: true,
+    runId,
+    status: 'failed',
+    error: { code: 'AI_TIMEOUT' },
+  });
+  expect(data.assistantMessage).toBeUndefined();
+  expect(mocks.rpc.mock.calls.map((call) => call[1])).toEqual(['begin_chat']);
+  expect(writes[0]).toMatchObject({
+    table: 'agent_runs',
+    data: { status: 'failed', error_code: 'AI_TIMEOUT' },
+  });
+});
 it('records a failed outcome and safe diagnostics and still acknowledges the saved message', async () => {
   mocks.runTeam.mockRejectedValue(
     new AppError('AI_TIMEOUT', 503, 'PRIVATE-PROVIDER-ERROR'),

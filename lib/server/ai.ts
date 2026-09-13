@@ -19,6 +19,7 @@ import { modelFetch } from './model-fetch';
 import type { ModelDiagnostic } from '../ai-diagnostics';
 import {
   callSignal,
+  modelCallSignal,
   stageOptions,
   withinBudget,
   CHAT_STAGE_MS,
@@ -97,7 +98,7 @@ export class OpenAIProvider implements ModelProvider {
           include: ['web_search_call.action.sources'],
           max_output_tokens: 2200,
         }),
-        signal: callSignal(options, modelTimeout()),
+        signal: modelCallSignal(options, modelTimeout()),
       },
       this.diagnostics,
     );
@@ -223,7 +224,7 @@ export class OpenAIProvider implements ModelProvider {
               },
             },
           }),
-          signal: callSignal(options, modelTimeout()),
+          signal: modelCallSignal(options, modelTimeout()),
         },
         this.diagnostics,
       );

@@ -10,7 +10,12 @@ import { env } from './config';
 import { AppError, requireValue } from './errors';
 import type { ModelDiagnostic } from '../ai-diagnostics';
 import type { WebResearch } from './web-research';
-import { callSignal, withinBudget, type ModelCallOptions } from './chat-budget';
+import {
+  callSignal,
+  stageAttempt,
+  withinBudget,
+  type ModelCallOptions,
+} from './chat-budget';
 import { modelTimeout } from './model-http';
 export type ProviderAttempt = Partial<ModelDiagnostic> & {
   provider: AIProviderName;
@@ -19,6 +24,9 @@ export type ProviderAttempt = Partial<ModelDiagnostic> & {
   errorCode?: string;
   elapsedMs?: number;
   step?: 'routing' | 'research' | 'response';
+  attemptTimeoutMs?: number;
+  stageRemainingMs?: number;
+  backupEligible?: boolean;
 };
 const fallbackErrors = new Set([
   'AI_QUOTA_EXCEEDED',
@@ -32,13 +40,30 @@ const fallbackErrors = new Set([
 function sharedDeadlineOptions(options: ModelCallOptions): ModelCallOptions {
   const { deadlineAt, ...shared } = options;
   if (deadlineAt !== undefined) {
-    // Convert the absolute deadline once. Recreating its timer for each adapter
-    // or retry can revive a timed-out stage when timer and wall-clock ticks differ.
-    // Downstream calls inherit this cancellation signal and add only their own
-    // per-attempt timeout; they must not recreate the absolute-deadline timer.
     shared.signal = callSignal(options, Infinity);
   }
   return shared;
+}
+
+function sanitizeModelValue(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(sanitizeModelValue);
+  if (!value || typeof value !== 'object') return value;
+  const record = value as Record<string, unknown>;
+  if (record.type === 'input_file') {
+    return {
+      type: 'input_text',
+      text: 'A PDF was attached, but Workbench withheld the raw PDF bytes from the AI provider. Treat the file as unavailable until a trusted text-extraction path is used.',
+    };
+  }
+  return Object.fromEntries(
+    Object.entries(record)
+      .filter(([key]) => key !== 'file_data')
+      .map(([key, child]) => [key, sanitizeModelValue(child)]),
+  );
+}
+
+function sanitizeModelInput(input: unknown[]): unknown[] {
+  return input.map(sanitizeModelValue);
 }
 
 export class FallbackProvider implements ModelProvider {
@@ -78,6 +103,16 @@ export class FallbackProvider implements ModelProvider {
   private record(attempt: ProviderAttempt) {
     this.attempts.push(attempt);
   }
+  private beginAttempt(
+    options: ModelCallOptions,
+    sharedOptions: ModelCallOptions,
+  ) {
+    const attempt = stageAttempt(sharedOptions, options, modelTimeout());
+    return {
+      ...attempt,
+      backupEligible: this.index + 1 < this.choices.length,
+    };
+  }
   async research(
     query: string,
     timeZone: string,
@@ -88,13 +123,16 @@ export class FallbackProvider implements ModelProvider {
       const selected = this.choices[this.index];
       const started = Date.now();
       const diagnosticCount = selected.diagnostics?.length || 0;
+      const attempt = this.beginAttempt(options, sharedOptions);
       try {
         if (!selected.research)
           throw new AppError('AI_RESEARCH_UNAVAILABLE', 503);
-        const signal = callSignal(sharedOptions, modelTimeout());
         const output = await withinBudget(
-          selected.research(query, timeZone, { ...sharedOptions, signal }),
-          signal,
+          selected.research(query, timeZone, {
+            ...sharedOptions,
+            signal: attempt.signal,
+          }),
+          attempt.signal,
         );
         this.record({
           provider: selected.name,
@@ -102,6 +140,9 @@ export class FallbackProvider implements ModelProvider {
           status: 'completed',
           step: 'research',
           elapsedMs: Date.now() - started,
+          attemptTimeoutMs: attempt.timeoutMs,
+          stageRemainingMs: attempt.stageRemainingMs,
+          backupEligible: attempt.backupEligible,
           ...selected.diagnostics?.[diagnosticCount],
         });
         return output;
@@ -114,6 +155,9 @@ export class FallbackProvider implements ModelProvider {
           errorCode: code,
           step: 'research',
           elapsedMs: Date.now() - started,
+          attemptTimeoutMs: attempt.timeoutMs,
+          stageRemainingMs: attempt.stageRemainingMs,
+          backupEligible: attempt.backupEligible,
           ...selected.diagnostics?.[diagnosticCount],
         });
         if (
@@ -134,19 +178,20 @@ export class FallbackProvider implements ModelProvider {
     options: ModelCallOptions = {},
   ): Promise<T> {
     const sharedOptions = sharedDeadlineOptions(options);
+    const safeInput = sanitizeModelInput(input);
     while (true) {
       const selected = this.choices[this.index];
       const started = Date.now();
       const step = this.completedCalls === 0 ? 'routing' : 'response';
       const diagnosticCount = selected.diagnostics?.length || 0;
+      const attempt = this.beginAttempt(options, sharedOptions);
       try {
-        const signal = callSignal(sharedOptions, modelTimeout());
         const output = await withinBudget(
-          selected.structured(schema, instructions, input, {
+          selected.structured(schema, instructions, safeInput, {
             ...sharedOptions,
-            signal,
+            signal: attempt.signal,
           }),
-          signal,
+          attempt.signal,
         );
         this.record({
           provider: selected.name,
@@ -154,6 +199,9 @@ export class FallbackProvider implements ModelProvider {
           status: 'completed',
           step,
           elapsedMs: Date.now() - started,
+          attemptTimeoutMs: attempt.timeoutMs,
+          stageRemainingMs: attempt.stageRemainingMs,
+          backupEligible: attempt.backupEligible,
           ...selected.diagnostics?.[diagnosticCount],
         });
         this.completedCalls++;
@@ -167,6 +215,9 @@ export class FallbackProvider implements ModelProvider {
           errorCode: code,
           step,
           elapsedMs: Date.now() - started,
+          attemptTimeoutMs: attempt.timeoutMs,
+          stageRemainingMs: attempt.stageRemainingMs,
+          backupEligible: attempt.backupEligible,
           ...selected.diagnostics?.[diagnosticCount],
         });
         if (

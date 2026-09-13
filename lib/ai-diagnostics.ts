@@ -1,3 +1,10 @@
+import {
+  aiProviderNames,
+  eligibleAIProviders,
+  type AIAvailability,
+  type AIPreferences,
+} from './ai-settings';
+
 /** Deliberately excludes provider response bodies, customer text and secrets. */
 export type ModelDiagnostic = {
   clientRequestId: string;
@@ -11,7 +18,34 @@ export type ModelDiagnostic = {
   reasoningEffort?: 'minimal';
 };
 
-export function aiProblem(code?: string | null) {
+export type AIProblemContext = {
+  backupEligible?: boolean;
+  fallbackAttempted?: boolean;
+};
+
+export function timeoutCopyContext(
+  preferences: AIPreferences | null | undefined,
+  availability: AIAvailability | undefined,
+  attempts?: { provider?: string; status?: string }[] | null,
+): AIProblemContext {
+  const available: AIAvailability = availability || {
+    openai: false,
+    anthropic: false,
+  };
+  const eligible =
+    preferences?.ai_primary_provider && preferences.ai_allowed_providers
+      ? eligibleAIProviders(preferences, available)
+      : [];
+  const backupEligible = aiProviderNames.some(
+    (name) => available[name] && !eligible.includes(name),
+  );
+  const fallbackAttempted =
+    (attempts || []).filter((attempt) => attempt.status === 'failed').length >
+    1;
+  return { backupEligible, fallbackAttempted };
+}
+
+export function aiProblem(code?: string | null, context?: AIProblemContext) {
   switch (code) {
     case 'AI_QUOTA_EXCEEDED':
       return 'The provider’s API credits or usage limit have been reached. Check its API billing, or allow an available backup in Connections.';
@@ -23,7 +57,11 @@ export function aiProblem(code?: string | null) {
     case 'AI_RATE_LIMITED':
       return 'The provider is receiving too many requests. Wait a moment before trying again.';
     case 'AI_TIMEOUT':
-      return 'The provider took too long to answer. Try a shorter request or allow an available backup in Connections.';
+      if (context?.fallbackAttempted)
+        return 'The crew could not complete the response in time. Try again or use a shorter request.';
+      if (context?.backupEligible)
+        return 'The provider took too long to answer. Try a shorter request or allow an available backup in Connections.';
+      return 'The provider took too long to answer. Try again or use a shorter request.';
     case 'AI_NETWORK_ERROR':
       return 'The server could not reach the AI provider. Check the connection or try again shortly.';
     case 'AI_RESEARCH_UNAVAILABLE':
