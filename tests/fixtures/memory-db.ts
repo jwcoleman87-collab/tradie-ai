@@ -61,19 +61,47 @@ export function memoryDb(tables: Record<string, Row[]>) {
           filters.push((row) => values.includes(row[field]));
           return chain;
         },
+        not(field: string, operator: string, value: string) {
+          if (operator === 'in') {
+            const excluded = value
+              .replace(/^\(/, '')
+              .replace(/\)$/, '')
+              .split(',')
+              .filter(Boolean);
+            filters.push((row) => !excluded.includes(String(row[field])));
+            return chain;
+          }
+          filters.push((row) => String(row[field]) !== value);
+          return chain;
+        },
         gt(field: string, value: string) {
           filters.push((row) => String(row[field]) > value);
           return chain;
         },
         or(expression: string) {
-          const states =
-            expression.match(/^status.in.\(([^)]+)\)/)?.[1].split(',') || [];
-          const expiry = expression.match(/expires_at.lte.([^)]*)/)?.[1] || '';
-          filters.push(
-            (row) =>
-              states.includes(String(row.status)) ||
-              (row.status === 'waiting_approval' &&
-                String(row.expires_at) <= expiry),
+          if (expression.includes('status.in.')) {
+            const states =
+              expression.match(/^status.in.\(([^)]+)\)/)?.[1].split(',') || [];
+            const expiry = expression.match(/expires_at.lte.([^)]*)/)?.[1] || '';
+            filters.push(
+              (row) =>
+                states.includes(String(row.status)) ||
+                (row.status === 'waiting_approval' &&
+                  String(row.expires_at) <= expiry),
+            );
+            return chain;
+          }
+          const clauses = expression.split(',');
+          filters.push((row) =>
+            clauses.some((clause) => {
+              const match = clause.match(/^(\w+)\.ilike\.%(.+)%$/i);
+              if (!match) return false;
+              const cell = row[match[1]];
+              return (
+                typeof cell === 'string' &&
+                cell.toLowerCase().includes(match[2].toLowerCase())
+              );
+            }),
           );
           return chain;
         },

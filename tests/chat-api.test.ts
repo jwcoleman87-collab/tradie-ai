@@ -89,6 +89,7 @@ function query(table: string) {
           status: 'active',
           ai_consent_at: consent ? '2026-08-31' : null,
           time_zone: 'Australia/Sydney',
+          name: 'Lab Workspace',
         },
         error: null,
       };
@@ -542,3 +543,62 @@ it.each([
     ).toBe(false);
   },
 );
+
+it('keeps job and variation proposals when Calendar is disconnected rather than failing the turn', async () => {
+  const start = new Date(Date.now() + 86400000).toISOString();
+  const end = new Date(Date.parse(start) + 3600000).toISOString();
+  mocks.runTeam.mockResolvedValue({
+    reply: 'Variation ready. Nothing is booked until you Accept.',
+    agents: ['finance'],
+    versions: [],
+    model: 'fixture',
+    usage: [],
+    providerTrace: [],
+    proposals: [
+      {
+        type: 'calendar.create',
+        agent: 'finance',
+        summary: 'Move John Hale trench',
+        payload: {
+          summary: 'John Hale',
+          description: '600 mm',
+          start,
+          end,
+          timeZone: 'Australia/Sydney',
+        },
+      },
+      {
+        type: 'record.create',
+        agent: 'finance',
+        summary: 'Update job spec',
+        payload: {
+          kind: 'job',
+          title: 'Trench',
+          body: '600 mm around existing power',
+        },
+      },
+      {
+        type: 'draft.save',
+        agent: 'finance',
+        summary: 'Variation GV-1042-V1',
+        payload: {
+          kind: 'invoice',
+          title: 'GV-1042-V1',
+          body: 'Variation draft. Not issued until Accept.',
+        },
+      },
+    ],
+    escalation: 'none',
+  });
+  const response = await send();
+  expect(response.status).toBe(200);
+  const saved = mocks.rpc.mock.calls.find(
+    (call) => call[1] === 'complete_chat',
+  )![2];
+  expect(saved.p_proposals.map((p: { type: string }) => p.type)).toEqual([
+    'record.create',
+    'draft.save',
+  ]);
+  expect(saved.p_reply).toContain('Calendar is not connected');
+  expect(saved.p_reply).toContain('Other drafts remain ready for Accept');
+});

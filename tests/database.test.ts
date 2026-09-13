@@ -859,6 +859,63 @@ describe('chat transaction and escalation privacy', () => {
       call('complete_chat', [r.id, 'Duplicate', [], [], 'mock-test', []]),
     ).rejects.toThrow('CONFLICT');
   });
+  it('records managed ops intelligence versions without treating them as proposal agents', async () => {
+    await db.query('update workspaces set ai_consent_at=now() where id=$1', [
+      wA,
+    ]);
+    const request = id();
+    const r = await call<{ id: string }>('begin_chat', [
+      wA,
+      cA,
+      ownerA,
+      request,
+      'John called. Friday instead, 600 deep.',
+      [],
+    ]);
+    await call('complete_chat', [
+      r.id,
+      'Variation ready for Accept.',
+      ['finance'],
+      [
+        {
+          agent: 'finance',
+          version: '1.3.0',
+          sha256: 'b'.repeat(64),
+          path: 'skills/finance/SKILL.md',
+        },
+        {
+          agent: 'ops',
+          version: '1.0.0',
+          sha256: 'c'.repeat(64),
+          path: 'skills/trade-intelligence/GREENVAC.md',
+          applied: true,
+        },
+      ],
+      'mock-test',
+      [
+        {
+          type: 'draft.save',
+          agent: 'finance',
+          summary: 'Variation draft',
+          payload: {
+            kind: 'invoice',
+            title: 'GV-1042-V1',
+            body: 'Not issued until Accept.',
+          },
+        },
+      ],
+    ]);
+    const versions = await db.query<{ agent: string; version: string }>(
+      'select agent, version from agent_versions where agent=$1',
+      ['ops'],
+    );
+    expect(versions.rows).toEqual([{ agent: 'ops', version: '1.0.0' }]);
+    const proposals = await db.query<{ agent: string }>(
+      'select agent from proposed_actions where run_id=$1',
+      [r.id],
+    );
+    expect(proposals.rows.map((row) => row.agent)).toEqual(['finance']);
+  });
   it('rejects cross-tenant conversations and attachments', async () => {
     await expect(
       call('begin_chat', [wA, cB, ownerA, id(), 'hello', []]),

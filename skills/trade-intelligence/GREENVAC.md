@@ -1,15 +1,15 @@
 ---
 name: GreenVac operating intelligence
-version: 1.0.0
+version: 1.0.1
 managed: true
-applies: greenvac | hydro excavation | hydrovac
+applies: greenvac
 ---
 
 # Use
 
-Apply these rules when the confirmed business profile is GreenVac or hydro excavation.
+Apply these rules only when the confirmed business identity is GreenVac.
 They are owner-lab operating knowledge, not another customer's data.
-Do not apply GreenVac prices to an unrelated trade workspace.
+Do not apply GreenVac prices to another hydrovac or trade workspace.
 If a fact is missing, ask once or escalate Ask James. Do not invent.
 
 # 1 Quote limit

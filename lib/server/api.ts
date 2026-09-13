@@ -16,7 +16,7 @@ import { createAIProvider } from './ai-provider';
 import { AIConsentInput, type AIPreferences } from '../ai-settings';
 import { executeAction } from './actions';
 import { actionContext, loadActionData, publicAction } from './action-data';
-import { loadRecordContext } from './record-context';
+import { loadRecordContext, recentUserFocusText } from './record-context';
 import { calendarContext } from './calendar';
 import { finishGoogle, startGoogle } from './oauth';
 import { readFileBody, safeFilename, validateFile } from './uploads';
@@ -572,7 +572,7 @@ async function handleApi(
               .abortSignal(contextSignal),
             db
               .from('workspaces')
-              .select('time_zone')
+              .select('time_zone,name')
               .eq('id', input.workspaceId)
               .abortSignal(contextSignal)
               .single(),
@@ -595,7 +595,7 @@ async function handleApi(
             db
               .from('business_profiles')
               .select(
-                'display_name,website_url,base_location,service_areas,services,preferred_job_types,enquiry_channels,primary_goal,admin_bottleneck,brand_summary,confirmed_at',
+                'display_name,website_url,base_location,service_areas,services,preferred_job_types,enquiry_channels,primary_goal,admin_bottleneck,brand_summary,confirmed_at,managed_pack',
               )
               .eq('workspace_id', input.workspaceId)
               .eq('onboarding_status', 'confirmed')
@@ -606,6 +606,7 @@ async function handleApi(
         );
         const history = (checked(historyResult) || []).reverse();
         const workspace = checked(workspaceResult)!;
+        const profile = checked(profileResult);
         const connection = checked(connectionResult);
         const referencedAttachmentIds = [
           ...new Set(
@@ -722,16 +723,25 @@ async function handleApi(
             return remaining >= 0;
           })
           .reverse();
-        const result = await withinBudget(
+        let result = await withinBudget(
           runTeam(provider, {
             history: bounded,
             actionHistory: {
               actions: actionData.actions.map(actionContext),
               coverage: actionData.coverage,
             },
-            businessProfile: checked(profileResult),
+            businessProfile: {
+              ...profile,
+              workspace_id: input.workspaceId,
+            },
             loadRecords: (agents) =>
-              loadRecordContext(db, input.workspaceId, agents, workSignal),
+              loadRecordContext(
+                db,
+                input.workspaceId,
+                agents,
+                workSignal,
+                recentUserFocusText(bounded),
+              ),
             timeZone: workspace.time_zone,
             loadCalendar: connection
               ? (signal) =>
@@ -749,13 +759,18 @@ async function handleApi(
           }),
           workSignal,
         );
-        requireValue(
-          connection ||
-            !result.proposals.some((p) => p.type === 'calendar.create'),
-          'CALENDAR_NOT_CONNECTED',
-          409,
-          'Connect Google Calendar first, then ask your team to prepare the booking.',
-        );
+        if (
+          !connection &&
+          result.proposals.some((p) => p.type === 'calendar.create')
+        ) {
+          result = {
+            ...result,
+            proposals: result.proposals.filter(
+              (p) => p.type !== 'calendar.create',
+            ),
+            reply: `${result.reply}\n\nCalendar is not connected in this workspace. The booking was not prepared. Connect Google Calendar, then ask to book the new slot. Other drafts remain ready for Accept.`,
+          };
+        }
         const facebook = integrations.find(facebookPreparationAvailable);
         requireValue(
           !result.proposals.some(
