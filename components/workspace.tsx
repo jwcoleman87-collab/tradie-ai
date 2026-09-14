@@ -33,7 +33,10 @@ import {
   SplitTitle,
 } from './workbench-handoff';
 import { RecordPreview } from './record-preview';
-import { proposalImage } from '@/lib/proposal-presentation';
+import {
+  proposalImage,
+  referencedImageUploads,
+} from '@/lib/proposal-presentation';
 import { ActionOutcome, ActionStatusChip } from './action-status';
 import {
   FacebookPostEditor,
@@ -1455,6 +1458,14 @@ export default function Workspace() {
                             ) : (
                               <MessageCopy text={m.content} />
                             )}
+                            {m.role === 'assistant' && (
+                              <ReferencedImagePreviews
+                                text={m.content}
+                                uploads={snapshot?.uploads || []}
+                                token={token}
+                                label="Images referenced in this reply"
+                              />
+                            )}
                             {m.attachment_ids.length > 0 && (
                               <div className="message-attachments">
                                 {attachments.map((file) =>
@@ -2018,8 +2029,9 @@ export default function Workspace() {
                       </p>
                     </div>
                   )}
-                  {visibleActions.map((a) =>
-                    isDoneAction(a, renderTime) ? (
+                  {visibleActions.map((a) => {
+                    const imageFile = proposalImage(a, snapshot?.uploads || []);
+                    return isDoneAction(a, renderTime) ? (
                       <MetadataDisclosure
                         className="completed-action-row"
                         id={`completed:${a.id}`}
@@ -2039,6 +2051,13 @@ export default function Workspace() {
                             <h3>
                               <SplitTitle title={a.summary} />
                             </h3>
+                            {imageFile && (
+                              <PrivateThumbnail
+                                file={imageFile}
+                                token={token}
+                                className="action-summary-image"
+                              />
+                            )}
                           </div>
                         }
                       >
@@ -2059,7 +2078,7 @@ export default function Workspace() {
                           snapshot?.workspace.name || 'Your workspace'
                         }
                         token={token}
-                        imageFile={proposalImage(a, snapshot?.uploads || [])}
+                        imageFile={imageFile}
                         disabled={
                           busy ||
                           !owner ||
@@ -2172,8 +2191,8 @@ export default function Workspace() {
                           })
                         }
                       />
-                    ),
-                  )}
+                    );
+                  })}
                   {!!actionHistory.length && (
                     <Button
                       variant="ghost"
@@ -2228,92 +2247,113 @@ export default function Workspace() {
                       </p>
                     </div>
                   )}
-                  {activeRecords.map((r) => (
-                    <MetadataDisclosure
-                      className="record-row"
-                      key={r.id}
-                      id={`record:${r.id}`}
-                      summary={
-                        <>
-                          <span className="file-row-copy">
-                            <strong>
-                              <SplitTitle title={r.title} />
-                            </strong>
-                            <small>
-                              {r.source === 'approved_ai_draft'
-                                ? 'Approved AI draft'
-                                : 'Private records'}{' '}
-                              ·{' '}
-                              {new Date(r.created_at).toLocaleDateString(
-                                'en-AU',
-                                {
-                                  day: 'numeric',
-                                  month: 'short',
-                                  timeZone: snapshot?.workspace.time_zone,
-                                },
-                              )}
-                            </small>
-                          </span>
-                          <span className="file-row-status informational">
-                            Saved
-                          </span>
-                        </>
-                      }
-                    >
-                      <p>
-                        Source:{' '}
-                        {r.source === 'approved_ai_draft'
-                          ? 'Approved AI draft'
-                          : 'Owner supplied'}
-                      </p>
-                      <p>Visibility: Private</p>
-                      <Dialog>
-                        <DialogTrigger
-                          render={<Button variant="outline" size="xs" />}
-                        >
-                          Open record
-                        </DialogTrigger>
-                        <DialogContent className="record-content-dialog">
-                          <DialogHeader>
-                            <DialogTitle>
-                              <SplitTitle title={r.title} />
-                            </DialogTitle>
-                            <DialogDescription>
-                              Private {r.kind} record
-                            </DialogDescription>
-                          </DialogHeader>
-                          <MessageCopy text={r.body} />
-                        </DialogContent>
-                      </Dialog>
-                      {owner && (
-                        <Button
-                          size="xs"
-                          variant="outline"
-                          disabled={
-                            busy ||
-                            r.legal_hold ||
-                            snapshot?.workspace.status === 'archived'
-                          }
-                          onClick={() =>
-                            perform(async () => {
-                              await requestApi(
-                                token,
-                                `records/${r.id}/status`,
-                                'PATCH',
-                                {
-                                  workspaceId,
-                                  status: 'archived',
-                                },
-                              );
-                              await refresh();
-                            })
-                          }
-                        >
-                          <Archive size={13} /> Archive record
-                        </Button>
-                      )}
-                    </MetadataDisclosure>
-                  ))}
+                  {activeRecords.map((r) => {
+                    const imageFile = referencedImageUploads(
+                      r.body,
+                      snapshot?.uploads || [],
+                    )[0];
+                    return (
+                      <MetadataDisclosure
+                        className="record-row"
+                        key={r.id}
+                        id={`record:${r.id}`}
+                        summary={
+                          <>
+                            {imageFile && (
+                              <span className="file-row-tile">
+                                <PrivateThumbnail
+                                  file={imageFile}
+                                  token={token}
+                                />
+                              </span>
+                            )}
+                            <span className="file-row-copy">
+                              <strong>
+                                <SplitTitle title={r.title} />
+                              </strong>
+                              <small>
+                                {r.source === 'approved_ai_draft'
+                                  ? 'Approved AI draft'
+                                  : 'Private records'}{' '}
+                                ·{' '}
+                                {new Date(r.created_at).toLocaleDateString(
+                                  'en-AU',
+                                  {
+                                    day: 'numeric',
+                                    month: 'short',
+                                    timeZone: snapshot?.workspace.time_zone,
+                                  },
+                                )}
+                              </small>
+                            </span>
+                            <span className="file-row-status informational">
+                              Saved
+                            </span>
+                          </>
+                        }
+                      >
+                        <p>
+                          Source:{' '}
+                          {r.source === 'approved_ai_draft'
+                            ? 'Approved AI draft'
+                            : 'Owner supplied'}
+                        </p>
+                        <p>Visibility: Private</p>
+                        <Dialog>
+                          <DialogTrigger
+                            render={<Button variant="outline" size="xs" />}
+                          >
+                            Open record
+                          </DialogTrigger>
+                          <DialogContent className="record-content-dialog">
+                            <DialogHeader>
+                              <DialogTitle>
+                                <SplitTitle title={r.title} />
+                              </DialogTitle>
+                              <DialogDescription>
+                                Private {r.kind} record
+                              </DialogDescription>
+                            </DialogHeader>
+                            <MessageCopy text={r.body} />
+                            <ReferencedImagePreviews
+                              text={r.body}
+                              uploads={snapshot?.uploads || []}
+                              token={token}
+                              label="Images referenced in this record"
+                              variant="feature"
+                            />
+                          </DialogContent>
+                        </Dialog>
+                        {owner && (
+                          <Button
+                            size="xs"
+                            variant="outline"
+                            disabled={
+                              busy ||
+                              r.legal_hold ||
+                              snapshot?.workspace.status === 'archived'
+                            }
+                            onClick={() =>
+                              perform(async () => {
+                                await requestApi(
+                                  token,
+                                  `records/${r.id}/status`,
+                                  'PATCH',
+                                  {
+                                    workspaceId,
+                                    status: 'archived',
+                                  },
+                                );
+                                await refresh();
+                              })
+                            }
+                          >
+                            <Archive size={13} /> Archive record
+                          </Button>
+                        )}
+                      </MetadataDisclosure>
+                    );
+                  })}
                 </>
               )}
               {view === 'audit' && (
@@ -3215,6 +3255,35 @@ function ActionImagePreview({
   if (file)
     return <PrivateImagePreview file={file} token={token} variant="feature" />;
   return <PrivateActionImagePreview fileId={fileId} token={token} />;
+}
+
+export function ReferencedImagePreviews({
+  text,
+  uploads,
+  token,
+  label,
+  variant = 'message',
+}: {
+  text: string;
+  uploads: Upload[];
+  token: string;
+  label: string;
+  variant?: 'message' | 'feature';
+}) {
+  const images = referencedImageUploads(text, uploads);
+  if (!images.length) return null;
+  return (
+    <div className="message-attachments referenced-images" aria-label={label}>
+      {images.map((file) => (
+        <PrivateImagePreview
+          key={file.id}
+          file={file}
+          token={token}
+          variant={variant}
+        />
+      ))}
+    </div>
+  );
 }
 
 function PrivateActionImagePreview({

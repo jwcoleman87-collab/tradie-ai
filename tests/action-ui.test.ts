@@ -3,8 +3,9 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { expect, it } from 'vitest';
 import { ActionOutcome, ActionStatusChip } from '../components/action-status';
 import { MessageCopy } from '../components/message-copy';
+import { ReferencedImagePreviews } from '../components/workspace';
 import { financeDisclosure } from '../lib/server/record-context';
-import type { Action } from '../lib/contracts';
+import type { Action, Upload } from '../lib/contracts';
 
 const sent: Action = {
   id: 'sample',
@@ -59,4 +60,25 @@ it('renders Finance coverage beside the answer and preserves precise supplied ca
   expect(result).toContain('2 records were shortened');
   expect(result).toContain('AUD 450');
   expect(result).not.toContain('Any figures below must');
+});
+
+it('renders a thumbnail slot when an assistant reply names a trusted image', () => {
+  const image: Upload = {
+    id: '1ba9bded-cff9-4bd8-ab78-201fa407d0bd',
+    filename: 'green-vac-job.png',
+    mime_type: 'image/png',
+    size_bytes: 2048,
+    status: 'ready',
+  };
+  const result = renderToStaticMarkup(
+    createElement(ReferencedImagePreviews, {
+      text: `Image to use (you uploaded): trusted file ID ${image.id}`,
+      uploads: [image],
+      token: 'private-token',
+      label: 'Images referenced in this reply',
+    }),
+  );
+  expect(result).toContain('aria-label="Images referenced in this reply"');
+  expect(result).toContain('private-image-loading message');
+  expect(result).toContain('Loading image…');
 });
