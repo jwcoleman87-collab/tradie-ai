@@ -112,6 +112,7 @@
 }
 
 .chat-reply .chat-reply-section > summary,
+.chat-reply .chat-reply-primary-title,
 .chat-reply .chat-reply-tools > summary {
   display: flex;
   align-items: center;
@@ -127,6 +128,16 @@
   line-height: 1.4;
   list-style: none;
   cursor: pointer;
+}
+
+.chat-reply .chat-reply-section[data-primary='true'] {
+  grid-column: 1 / -1;
+}
+
+.chat-reply .chat-reply-primary-title {
+  border-bottom: 1px solid var(--reply-line);
+  border-radius: 5px 5px 0 0;
+  cursor: default;
 }
 
 .chat-reply .chat-reply-section > summary::-webkit-details-marker,

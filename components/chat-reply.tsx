@@ -78,9 +78,11 @@ function metric(field: Field) {
 function ReplyField({
   field,
   kind,
+  allowCollapse = true,
 }: {
   field: Field;
   kind: ReplySection['kind'];
+  allowCollapse?: boolean;
 }) {
   const brand =
     kind === 'connections'
@@ -93,7 +95,7 @@ function ReplyField({
       : null;
   const contents = <MessageCopy text={field.value} />;
   const display =
-    field.value.length > 170 ? (
+    allowCollapse && field.value.length > 170 ? (
       <details className="chat-reply-field-detail">
         <summary>
           View {field.label.toLowerCase()}{' '}
@@ -128,15 +130,17 @@ function ReplyField({
 function Blocks({
   blocks,
   kind,
+  allowCollapse = true,
 }: {
   blocks: ReplyBlock[];
   kind: ReplySection['kind'];
+  allowCollapse?: boolean;
 }) {
   return blocks.map((block, index) => {
     if (block.kind === 'field')
       return (
         <dl className="chat-reply-fields" key={index}>
-          <ReplyField field={block} kind={kind} />
+          <ReplyField field={block} kind={kind} allowCollapse={allowCollapse} />
         </dl>
       );
     if (block.kind === 'list')
@@ -157,7 +161,13 @@ function Blocks({
   });
 }
 
-function ReplySectionView({ section }: { section: ReplySection }) {
+function ReplySectionView({
+  section,
+  primary,
+}: {
+  section: ReplySection;
+  primary: boolean;
+}) {
   const Icon = sectionIcons[section.kind];
   const metricFields = section.blocks.flatMap((block) =>
     block.kind === 'field' && metric(block) ? [block] : [],
@@ -175,11 +185,53 @@ function ReplySectionView({ section }: { section: ReplySection }) {
     next: 'Suggested next steps',
     answer: section.title,
   }[section.kind];
-  const [open, setOpen] = useState(
-    section.kind !== 'next' &&
-      section.kind !== 'gaps' &&
-      (section.kind !== 'rules' || metricFields.length > 0),
+  const [open, setOpen] = useState(false);
+  const heading = (
+    <span className="chat-reply-section-title">
+      <Icon size={16} aria-hidden="true" />
+      {title}
+    </span>
   );
+  const content = (
+    <div className="chat-reply-section-body">
+      {metricFields.length > 0 && (
+        <dl className="chat-reply-metrics">
+          {metricFields.map((field, index) => {
+            const value = metric(field)!;
+            return (
+              <div className="chat-reply-metric" key={index}>
+                <dt>{field.label}</dt>
+                <dd className="chat-reply-amount">{value.amount}</dd>
+                {value.qualifier && (
+                  <dd className="chat-reply-qualifier">
+                    <MessageCopy text={value.qualifier} />
+                  </dd>
+                )}
+              </div>
+            );
+          })}
+        </dl>
+      )}
+      <Blocks
+        blocks={otherBlocks}
+        kind={section.kind}
+        allowCollapse={!primary}
+      />
+    </div>
+  );
+  if (primary) {
+    return (
+      <section
+        className="chat-reply-section"
+        data-kind={section.kind}
+        data-primary="true"
+        aria-label={section.title}
+      >
+        <h3 className="chat-reply-primary-title">{heading}</h3>
+        {content}
+      </section>
+    );
+  }
   return (
     <details
       className="chat-reply-section"
@@ -188,33 +240,10 @@ function ReplySectionView({ section }: { section: ReplySection }) {
       onToggle={(event) => setOpen(event.currentTarget.open)}
     >
       <summary aria-label={section.title}>
-        <span className="chat-reply-section-title">
-          <Icon size={16} aria-hidden="true" />
-          {title}
-        </span>
+        {heading}
         <ChevronDown size={16} aria-hidden="true" />
       </summary>
-      <div className="chat-reply-section-body">
-        {metricFields.length > 0 && (
-          <dl className="chat-reply-metrics">
-            {metricFields.map((field, index) => {
-              const value = metric(field)!;
-              return (
-                <div className="chat-reply-metric" key={index}>
-                  <dt>{field.label}</dt>
-                  <dd className="chat-reply-amount">{value.amount}</dd>
-                  {value.qualifier && (
-                    <dd className="chat-reply-qualifier">
-                      <MessageCopy text={value.qualifier} />
-                    </dd>
-                  )}
-                </div>
-              );
-            })}
-          </dl>
-        )}
-        <Blocks blocks={otherBlocks} kind={section.kind} />
-      </div>
+      {content}
     </details>
   );
 }
@@ -291,6 +320,13 @@ export const ChatReply = memo(function ChatReply({
     ? research.body.slice(coverage[0].length)
     : research.body;
   const sections = parseChatSections(body);
+  const primarySection = sections.find((section) => section.blocks.length > 0);
+  const orderedSections = primarySection
+    ? [
+        primarySection,
+        ...sections.filter((section) => section !== primarySection),
+      ]
+    : sections;
   const compact = sections.length === 1 && body.length < 400;
   const overview = sections.some((section) => section.kind === 'business');
   const hasNext = sections.some((section) => section.kind === 'next');
@@ -327,8 +363,12 @@ export const ChatReply = memo(function ChatReply({
         </div>
       )}
       <div className="chat-reply-sections">
-        {sections.map((section) => (
-          <ReplySectionView key={section.id} section={section} />
+        {orderedSections.map((section) => (
+          <ReplySectionView
+            key={section.id}
+            section={section}
+            primary={section === primarySection}
+          />
         ))}
       </div>
       {sourcesOnly && <MessageCopy text={sourcesOnly} />}
