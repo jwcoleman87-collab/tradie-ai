@@ -19,7 +19,7 @@ import { actionContext, loadActionData, publicAction } from './action-data';
 import { loadRecordContext, recentUserFocusText } from './record-context';
 import { calendarContext } from './calendar';
 import { finishGoogle, startGoogle } from './oauth';
-import { readFileBody, safeFilename, validateFile } from './uploads';
+import { prepareUpload, readFileBody } from './uploads';
 import { integrationApi } from './integration-api';
 import { finishProvider } from './provider-oauth';
 import {
@@ -1173,14 +1173,16 @@ async function handleApi(
       p_operation: 'upload',
       p_limit: 10,
     });
-    const bytes = await readFileBody(request),
-      mime = request.headers.get('content-type')?.split(';')[0] || '';
-    validateFile(bytes, mime);
-    const filename = safeFilename(url.searchParams.get('filename') || 'upload'),
+    const prepared = await prepareUpload(
+        await readFileBody(request),
+        url.searchParams.get('filename') || 'upload',
+        request.headers.get('content-type') || '',
+      ),
+      { bytes, filename, mime } = prepared,
       id = crypto.randomUUID(),
       objectPath = `${workspaceId}/${id}/${filename}`;
     const hash = Buffer.from(
-      await crypto.subtle.digest('SHA-256', bytes),
+      await crypto.subtle.digest('SHA-256', Uint8Array.from(bytes)),
     ).toString('hex');
     checked(
       await admin.from('uploaded_files').insert({

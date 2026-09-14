@@ -930,6 +930,40 @@ describe('chat transaction and escalation privacy', () => {
       call('begin_chat', [wA, cA, ownerA, id(), 'hello', [f]]),
     ).rejects.toThrow('FORBIDDEN');
   });
+  it('persists an attachment-only user message but rejects a truly empty one', async () => {
+    const file = id();
+    await db.query(
+      "insert into uploaded_files(id,workspace_id,conversation_id,uploaded_by,filename,object_path,mime_type,size_bytes,sha256,status) values($1,$2,$3,$4,'image-only.jpg',$5,'image/jpeg',100,$6,'ready')",
+      [file, wA, cA, ownerA, `${wA}/${file}/image-only.jpg`, '1'.repeat(64)],
+    );
+    await expect(
+      call('begin_chat', [wA, cA, ownerA, id(), '', []]),
+    ).rejects.toThrow('INVALID_INPUT');
+    const run = await call<{ id: string }>('begin_chat', [
+      wA,
+      cA,
+      ownerA,
+      id(),
+      '',
+      [file],
+    ]);
+    expect(
+      (
+        await db.query<{ content: string; attachment_ids: string[] }>(
+          "select content,attachment_ids from messages where run_id=$1 and role='user'",
+          [run.id],
+        )
+      ).rows[0],
+    ).toEqual({ content: '', attachment_ids: [file] });
+    await call('complete_chat', [
+      run.id,
+      'I received the image.',
+      ['social'],
+      [],
+      'mock-test',
+      [],
+    ]);
+  });
   it('rate limits on durable database counters', async () => {
     for (let i = 0; i < 3; i++)
       await call('consume_rate', [wA, ownerA, 'test', 3]);

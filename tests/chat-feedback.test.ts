@@ -1,5 +1,10 @@
 import { afterEach, expect, it, vi } from 'vitest';
-import { chatBlockedReason, chatStatus, submitChat } from '../lib/chat-client';
+import {
+  canSendChat,
+  chatBlockedReason,
+  chatStatus,
+  submitChat,
+} from '../lib/chat-client';
 import { aiProblem } from '../lib/ai-diagnostics';
 afterEach(() => vi.restoreAllMocks());
 const input = { requestId: crypto.randomUUID(), text: 'A private test' };
@@ -71,6 +76,11 @@ it('explains paused processing beside the composer and respects provider consent
   expect(
     chatBlockedReason(true, enabled, { openai: true, anthropic: true }, true),
   ).toContain('Please wait');
+});
+it('enables Send for text or attachments and blocks a truly empty message', () => {
+  expect(canSendChat('Please check this', [])).toBe(true);
+  expect(canSendChat('', [crypto.randomUUID()])).toBe(true);
+  expect(canSendChat('   ', [])).toBe(false);
 });
 it('does not diagnose unknown AI_UNAVAILABLE failures as insufficient credit', () => {
   expect(aiProblem('AI_UNAVAILABLE')).toContain('does not establish');

@@ -50,6 +50,10 @@ export const chatStageLabel = (stage: ChatProgress['stage']) =>
     persistence: 'Saving your reply and proposals…',
   })[stage];
 
+export function canSendChat(text: string, attachmentIds: readonly string[]) {
+  return Boolean(text.trim() || attachmentIds.length);
+}
+
 export async function submitChat(
   token: string,
   input: unknown,

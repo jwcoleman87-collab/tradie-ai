@@ -1,7 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import { CalendarPayload, Proposal, ChatInput } from '../lib/contracts';
 import { supportPayload } from '../lib/server/privacy';
-import { validateFile, safeFilename } from '../lib/server/uploads';
+import {
+  prepareUpload,
+  validateFile,
+  safeFilename,
+} from '../lib/server/uploads';
+import { uploadMime } from '../lib/upload-mime';
 import { calendarEventId } from '../lib/server/calendar';
 const event = {
   summary: 'Service',
@@ -50,6 +55,24 @@ describe('approval contracts', () => {
         text: 'test',
       }).success,
     ).toBe(false));
+  it('allows an attachment-only chat but not an empty message', () => {
+    const identifiers = {
+      workspaceId: crypto.randomUUID(),
+      conversationId: crypto.randomUUID(),
+      requestId: crypto.randomUUID(),
+    };
+    expect(
+      ChatInput.parse({
+        ...identifiers,
+        text: '   ',
+        attachmentIds: [crypto.randomUUID()],
+      }).text,
+    ).toBe('');
+    expect(
+      ChatInput.safeParse({ ...identifiers, text: '', attachmentIds: [] })
+        .success,
+    ).toBe(false);
+  });
   it('creates a stable valid Google event ID', () => {
     const id = calendarEventId('aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee');
     expect(id).toBe('aaaaaaaabbbbccccddddeeeeeeeeeeee');
@@ -116,4 +139,31 @@ describe('privacy and files', () => {
   });
   it('normalises path traversal filenames', () =>
     expect(safeFilename('../../secret.html')).not.toContain('/'));
+  it('recovers browser MIME types from common photo extensions', () => {
+    expect(uploadMime('IMG_1001.HEIC')).toBe('image/heic');
+    expect(uploadMime('site.JPG', 'image/jpg')).toBe('image/jpeg');
+    expect(uploadMime('photo.webp', 'application/octet-stream')).toBe(
+      'image/webp',
+    );
+  });
+  it('converts a HEIF-family phone photo into a previewable JPEG', async () => {
+    const heifFixture = Uint8Array.from(
+      Buffer.from(
+        'AAAAHGZ0eXBhdmlmAAAAAG1pZjFhdmlmbWlhZgAAANZtZXRhAAAAAAAAACFoZGxyAAAAAAAAAABwaWN0AAAAAAAAAAAAAAAAAAAAACJpbG9jAAAAAERAAAEAAQAAAAAA+gABAAAAAAAAACcAAAAjaWluZgAAAAAAAQAAABVpbmZlAgAAAAABAABhdjAxAAAAAA5waXRtAAAAAAABAAAAVmlwcnAAAAA4aXBjbwAAAAxhdjFDgSACAAAAABRpc3BlAAAAAAAAAAIAAAACAAAAEHBpeGkAAAAAAwgICAAAABZpcG1hAAAAAAAAAAEAAQOBAgMAAAAvbWRhdBIACgc4ADaQENBpMhoTwmMmgADwgAAAAEhZFD/7xHaYtqZTYOwWsA==',
+        'base64',
+      ),
+    );
+    const prepared = await prepareUpload(
+      heifFixture,
+      'IMG_1001.HEIC',
+      'image/heic',
+    );
+    expect(prepared).toMatchObject({
+      filename: 'IMG_1001.jpg',
+      mime: 'image/jpeg',
+    });
+    expect(prepared.bytes.slice(0, 3)).toEqual(
+      Uint8Array.from([255, 216, 255]),
+    );
+  });
 });
