@@ -16,7 +16,6 @@ import { BrandMark } from './brand';
 import { findWorkspaceBrand } from '@/lib/brands';
 import type { Snapshot } from '@/lib/contracts';
 import type { ConnectionInfo } from '@/lib/integrations';
-import { MessageCopy } from './message-copy';
 
 export function SplitTitle({ title }: { title: string }) {
   const separator = title.indexOf(' — ');
@@ -233,37 +232,6 @@ export function MetadataDisclosure({
       </summary>
       <div className="metadata-disclosure-body">{children}</div>
     </details>
-  );
-}
-
-export function CompactChatReply({ text }: { text: string }) {
-  const [expanded, setExpanded] = useState(false);
-  const shouldFold = text.length > 400;
-  if (!shouldFold) return <MessageCopy text={text} />;
-  const paragraphs = text.split(/\n\s*\n/);
-  const hasCoverage = text.startsWith('Data coverage: ');
-  const first = paragraphs[hasCoverage ? 1 : 0] || text;
-  const summary =
-    first.length > 260 ? `${first.slice(0, 257).trimEnd()}…` : first;
-  return (
-    <div className="compact-chat-reply">
-      {expanded ? (
-        <MessageCopy text={text} />
-      ) : (
-        <MessageCopy
-          text={hasCoverage ? `${paragraphs[0]}\n\n${summary}` : summary}
-        />
-      )}
-      <button
-        className="brief-toggle"
-        type="button"
-        aria-expanded={expanded}
-        onClick={() => setExpanded((value) => !value)}
-      >
-        {expanded ? 'Hide full brief' : 'Show full brief'}
-        <ChevronDown size={13} />
-      </button>
-    </div>
   );
 }
 
