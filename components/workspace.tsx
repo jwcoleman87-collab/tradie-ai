@@ -51,7 +51,8 @@ import { BrandMark, BrandMentions } from './brand';
 import { eligibleAIProviders, aiProviderLabel } from '@/lib/ai-settings';
 import { aiBrands } from '@/lib/brands';
 import { aiProblem, timeoutCopyContext } from '@/lib/ai-diagnostics';
-import { chatBlockedReason } from '@/lib/chat-client';
+import { canSendChat, chatBlockedReason } from '@/lib/chat-client';
+import { uploadMime } from '@/lib/upload-mime';
 import { useChatRun } from '@/lib/use-chat-run';
 import { bindWorkspaceViewport } from '@/lib/workspace-viewport';
 import { bindChatScroll } from '@/lib/chat-scroll';
@@ -81,6 +82,7 @@ import {
   Archive,
   RotateCcw,
   RefreshCw,
+  X,
   Building2,
   ChevronDown,
   Settings,
@@ -572,7 +574,7 @@ export default function Workspace() {
       sending.current ||
       voice.isActive() ||
       !canChat ||
-      !text.trim() ||
+      !canSendChat(text, selectedFiles) ||
       !snapshot?.conversationId
     )
       return;
@@ -613,6 +615,7 @@ export default function Workspace() {
   async function upload(files: FileList | null) {
     if (!files || !snapshot?.conversationId) return;
     await perform(async () => {
+      const uploadedIds: string[] = [];
       for (const file of Array.from(files).slice(0, 4)) {
         if (file.size > 10 * 1024 * 1024)
           throw Error('Each file must be 10 MB or less.');
@@ -626,12 +629,7 @@ export default function Workspace() {
           headers: {
             Authorization: `Bearer ${token}`,
             'Content-Type':
-              file.type ||
-              (/\.csv$/i.test(file.name)
-                ? 'text/csv'
-                : /\.txt$/i.test(file.name)
-                  ? 'text/plain'
-                  : 'application/octet-stream'),
+              uploadMime(file.name, file.type) || 'application/octet-stream',
           },
           body: file,
         });
@@ -641,9 +639,10 @@ export default function Workspace() {
         };
         if (!response.ok)
           throw Error(data.error?.message || 'The upload failed.');
-        setSelectedFiles((prev) => [...prev, data.id].slice(-4));
+        uploadedIds.push(data.id);
       }
       await refresh();
+      setSelectedFiles((prev) => [...prev, ...uploadedIds].slice(-4));
       setNotice(
         'Files saved privately. Selected attachments will be sent to your Workbench crew with your next message.',
       );
@@ -1673,28 +1672,24 @@ export default function Workspace() {
               }}
             />
             {selectedFiles.length > 0 && (
-              <div className="agent-tags">
-                {selectedFiles.map((id) => (
-                  <button
-                    type="button"
-                    key={id}
-                    onClick={() =>
-                      setSelectedFiles((p) => p.filter((f) => f !== id))
-                    }
-                  >
-                    {snapshot?.uploads.find((f) => f.id === id)?.filename ||
-                      'Attachment'}{' '}
-                    ×
-                  </button>
-                ))}
-              </div>
+              <ComposerAttachments
+                files={selectedFiles
+                  .map((id) => snapshot?.uploads.find((file) => file.id === id))
+                  .filter((file): file is Upload => Boolean(file))}
+                token={token}
+                onRemove={(id) =>
+                  setSelectedFiles((current) =>
+                    current.filter((fileId) => fileId !== id),
+                  )
+                }
+              />
             )}
             <div className="composer-footer">
               <input
                 ref={fileInput}
                 type="file"
                 multiple
-                accept="image/jpeg,image/png,image/webp,application/pdf,text/plain,text/csv,.csv,.txt"
+                accept="image/jpeg,image/png,image/webp,image/heic,image/heif,application/pdf,text/plain,text/csv,.jpg,.jpeg,.png,.webp,.heic,.heif,.csv,.txt,.pdf"
                 hidden
                 onChange={(e) => upload(e.target.files)}
               />
@@ -1726,7 +1721,7 @@ export default function Workspace() {
                     Keep
                   </Button>
                 </div>
-              ) : !text.trim() && voice.supported ? (
+              ) : !canSendChat(text, selectedFiles) && voice.supported ? (
                 <Button
                   type="button"
                   size="icon"
@@ -1742,7 +1737,7 @@ export default function Workspace() {
                   size="icon"
                   aria-label="Send message"
                   className="composer-send"
-                  disabled={!canChat || !text.trim()}
+                  disabled={!canChat || !canSendChat(text, selectedFiles)}
                 >
                   <ArrowUp /> <span>Send</span>
                 </Button>
@@ -3355,6 +3350,44 @@ function isImageUpload(file: Upload) {
   return file.mime_type.startsWith('image/');
 }
 
+export function ComposerAttachments({
+  files,
+  token,
+  onRemove,
+}: {
+  files: Upload[];
+  token: string;
+  onRemove: (id: string) => void;
+}) {
+  if (!files.length) return null;
+  return (
+    <div
+      className="agent-tags composer-attachments"
+      aria-label="Selected attachments"
+    >
+      {files.map((file) => (
+        <div className="composer-attachment" key={file.id}>
+          {isImageUpload(file) ? (
+            <PrivateImagePreview file={file} token={token} variant="composer" />
+          ) : (
+            <span className="attachment-file composer-document">
+              <FileText size={13} /> {file.filename}
+            </span>
+          )}
+          <button
+            type="button"
+            className="composer-attachment-remove"
+            aria-label={`Remove ${file.filename}`}
+            onClick={() => onRemove(file.id)}
+          >
+            <X size={13} aria-hidden="true" />
+          </button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function PrivateImagePreview({
   file,
   token,
@@ -3362,7 +3395,7 @@ function PrivateImagePreview({
 }: {
   file: Upload;
   token: string;
-  variant?: 'thumbnail' | 'feature' | 'message';
+  variant?: 'thumbnail' | 'feature' | 'message' | 'composer';
 }) {
   const [url, setUrl] = useState('');
   const [error, setError] = useState('');

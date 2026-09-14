@@ -116,10 +116,18 @@ export const ChatInput = z
     workspaceId: Uuid,
     conversationId: Uuid,
     requestId: Uuid,
-    text: Body,
+    text: z.string().trim().max(12000),
     attachmentIds: z.array(Uuid).max(4).default([]),
   })
-  .strict();
+  .strict()
+  .superRefine((input, context) => {
+    if (!input.text && input.attachmentIds.length === 0)
+      context.addIssue({
+        code: 'custom',
+        path: ['text'],
+        message: 'Add a message or attach a file.',
+      });
+  });
 export const RouteOutput = z
   .object({
     agents: z.array(Agent).min(1).max(5),

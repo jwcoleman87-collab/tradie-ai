@@ -3,7 +3,10 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { expect, it } from 'vitest';
 import { ActionOutcome, ActionStatusChip } from '../components/action-status';
 import { MessageCopy } from '../components/message-copy';
-import { ReferencedImagePreviews } from '../components/workspace';
+import {
+  ComposerAttachments,
+  ReferencedImagePreviews,
+} from '../components/workspace';
 import { financeDisclosure } from '../lib/server/record-context';
 import type { Action, Upload } from '../lib/contracts';
 
@@ -81,4 +84,24 @@ it('renders a thumbnail slot when an assistant reply names a trusted image', () 
   expect(result).toContain('aria-label="Images referenced in this reply"');
   expect(result).toContain('private-image-loading message');
   expect(result).toContain('Loading image…');
+});
+
+it('shows a visual image slot and removal control before sending', () => {
+  const image: Upload = {
+    id: '1ba9bded-cff9-4bd8-ab78-201fa407d0bd',
+    filename: 'green-vac-job.png',
+    mime_type: 'image/png',
+    size_bytes: 2048,
+    status: 'ready',
+  };
+  const result = renderToStaticMarkup(
+    createElement(ComposerAttachments, {
+      files: [image],
+      token: 'private-token',
+      onRemove: () => {},
+    }),
+  );
+  expect(result).toContain('aria-label="Selected attachments"');
+  expect(result).toContain('private-image-loading composer');
+  expect(result).toContain('aria-label="Remove green-vac-job.png"');
 });

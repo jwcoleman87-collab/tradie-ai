@@ -1,4 +1,5 @@
 import { AppError, requireValue } from './errors';
+import { isHeifUpload, uploadMime } from '../upload-mime';
 export const MAX_FILE_SIZE = 10 * 1024 * 1024;
 export const allowedMime = [
   'image/jpeg',
@@ -58,6 +59,58 @@ export function validateFile(bytes: Uint8Array, mime: string) {
     415,
     'The file contents do not match the supported file type.',
   );
+}
+
+function jpegFilename(filename: string) {
+  const base = filename.replace(/\.(?:heic|heif)$/i, '');
+  return safeFilename(`${base || 'photo'}.jpg`);
+}
+
+export async function prepareUpload(
+  bytes: Uint8Array,
+  filename: string,
+  browserMime: string,
+) {
+  const safeName = safeFilename(filename),
+    mime = uploadMime(safeName, browserMime);
+  if (!isHeifUpload(mime)) {
+    validateFile(bytes, mime);
+    return { bytes, filename: safeName, mime };
+  }
+
+  try {
+    const { default: sharp } = await import('sharp');
+    const source = sharp(bytes, {
+      failOn: 'error',
+      limitInputPixels: 80_000_000,
+    });
+    const metadata = await source.metadata();
+    requireValue(metadata.format === 'heif', 'FILE_CONTENT_MISMATCH', 415);
+    const converted = new Uint8Array(
+      await source
+        .rotate()
+        .resize({
+          width: 4096,
+          height: 4096,
+          fit: 'inside',
+          withoutEnlargement: true,
+        })
+        .jpeg({ quality: 85 })
+        .toBuffer(),
+    );
+    validateFile(converted, 'image/jpeg');
+    return {
+      bytes: converted,
+      filename: jpegFilename(safeName),
+      mime: 'image/jpeg',
+    };
+  } catch {
+    throw new AppError(
+      'FILE_CONTENT_MISMATCH',
+      415,
+      'That iPhone or iPad photo could not be read. Choose the original photo again or export it as JPEG.',
+    );
+  }
 }
 export async function readFileBody(request: Request) {
   const reader = request.body?.getReader();
