@@ -11,6 +11,7 @@ import { body, endpoint, json, noStore } from './http';
 import { env, publicConfig } from './config';
 import { AppError, requireValue } from './errors';
 import { runTeam } from './ai';
+import { diagnose } from './diagnosis';
 import { facebookPreparationAvailable } from '../facebook-readiness';
 import { createAIProvider } from './ai-provider';
 import { AIConsentInput, type AIPreferences } from '../ai-settings';
@@ -64,6 +65,8 @@ async function handleApi(
   const { db, user } = await authenticate(request);
   const authenticationMs = Date.now() - requestStartedAt;
   const admin = adminDb();
+  if (path === 'diagnosis' && method === 'POST')
+    return diagnose(request, db, admin, user.id);
   const onboardingResponse = await onboardingApi(request, path, db, user.id);
   if (onboardingResponse) return onboardingResponse;
   const integrationResponse = await integrationApi(request, path, db, user.id);

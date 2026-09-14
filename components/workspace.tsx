@@ -23,6 +23,7 @@ import {
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { ConnectionsPanel } from './connections-panel';
+import { DiagnosisPanel } from './diagnosis-panel';
 import { MessageCopy } from './message-copy';
 import {
   BusinessBanner,
@@ -1985,6 +1986,19 @@ export default function Workspace() {
                     <p className="auth-hint break-all mt-2">
                       Request: {run.id}
                     </p>
+                    {run.status === 'failed' && (
+                      <DiagnosisPanel
+                        key={`${workspaceId}:${run.id}`}
+                        token={token}
+                        workspaceId={workspaceId}
+                        kind="run"
+                        targetId={run.id}
+                        disabled={
+                          snapshot.workspace.status !== 'active' ||
+                          !snapshot.workspace.ai_consent_at
+                        }
+                      />
+                    )}
                   </article>
                 ))}
               {view === 'actions' && (
@@ -3233,6 +3247,16 @@ export function ActionCard({
           )}
         {a.error_code && /^[A-Z_]{1,80}$/.test(a.error_code) && (
           <p className="auth-hint">Reference: {a.error_code}</p>
+        )}
+        {(a.status === 'failed' || a.error_code) && (
+          <DiagnosisPanel
+            key={`${a.workspace_id}:${a.id}`}
+            token={token}
+            workspaceId={a.workspace_id}
+            kind="action"
+            targetId={a.id}
+            disabled={disabled}
+          />
         )}
         {a.error_code === 'PUBLISHING_DISABLED' && (
           <div className="action-connection-error">
