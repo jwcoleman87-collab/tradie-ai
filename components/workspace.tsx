@@ -28,10 +28,11 @@ import {
   BusinessBanner,
   BusinessDetails,
   BriefDisclosure,
-  CompactChatReply,
   MetadataDisclosure,
   SplitTitle,
 } from './workbench-handoff';
+import { ChatReply } from './chat-reply';
+import { appendChatRequest } from '@/lib/chat-reply-actions';
 import { RecordPreview } from './record-preview';
 import {
   proposalImage,
@@ -1453,7 +1454,31 @@ export default function Workspace() {
                                 : ''}
                             </span>
                             {m.role === 'assistant' ? (
-                              <CompactChatReply text={m.content} />
+                              <ChatReply
+                                text={m.content}
+                                workspaceName={snapshot?.workspace.name || ''}
+                                showActions={m.id === chat.messages.at(-1)?.id}
+                                actionsEnabled={canCompose && !voice.active}
+                                onChoosePrompt={(prompt) => {
+                                  if (!canCompose || voice.isActive())
+                                    return false;
+                                  const next = appendChatRequest(text, prompt);
+                                  if (
+                                    next === text &&
+                                    !text.trimEnd().endsWith(prompt)
+                                  ) {
+                                    setNotice(
+                                      'Your message is near the 12,000-character limit. Shorten it before adding another request.',
+                                    );
+                                    return false;
+                                  }
+                                  setText((current) =>
+                                    appendChatRequest(current, prompt),
+                                  );
+                                  focusMagic();
+                                  return true;
+                                }}
+                              />
                             ) : (
                               <MessageCopy text={m.content} />
                             )}

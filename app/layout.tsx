@@ -6,6 +6,7 @@ import './workbench.css';
 import './public.css';
 import './setout.css';
 import './handoff.css';
+import './chat-reply.css';
 
 const inter = Inter({
   variable: '--font-inter',
