@@ -11,7 +11,11 @@ Functions; Supabase still owns Auth, Postgres and Storage. No second backend rep
 Chat request → begin_chat (idempotency, consent, tenancy, rate limit) → structured
 model routing → selected Markdown skills → validated response → complete_chat
 (message, run, skill hashes and proposals in one transaction). Model output is
-never an executable tool call. Only four allowlisted proposal types exist:
+never an external execution instruction. Outside the gated Manager rollout this
+remains the existing structured-generation path. Enabled owner/test workspaces
+instead use the bounded, provider-neutral [Manager runtime](MANAGER-RUNTIME.md)
+to request typed server-side capabilities, gather scoped evidence and prepare
+the same proposals before the same completion transaction. Only four allowlisted proposal types exist:
 calendar.create, draft.save, record.create and facebook.publish.
 
 Owner Accept → decide_action (immutable approval receipt) → separate
@@ -56,8 +60,10 @@ API, timeouts and a host allow-list before it can populate discovered facts.
 Workspaces choose a primary provider, a backup setting and an allowlist of
 providers that may receive context. Existing consent migrates to OpenAI-only.
 The server intersects this allowlist with configured private keys; no model
-output can select or authorise a provider. Responses and Messages adapters share
-the original strict Zod output contracts and have no execution tools. Claude’s
+output can select or authorise a provider. Legacy Responses and Messages adapters share
+the original strict Zod output contracts and have no execution tools. Gated
+Manager adapters implement native governed function calls, but cannot approve or
+execute external actions. Claude’s
 transport schema removes unsupported constraints but original validation remains.
 
 Availability/quota fallback can advance once to the other eligible provider and

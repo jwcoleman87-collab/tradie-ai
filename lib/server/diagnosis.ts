@@ -118,6 +118,22 @@ export async function diagnose(
   userId: string,
 ) {
   const input = DiagnosisInput.parse(await body(request, 1024));
+  return json(
+    await diagnoseOperation(input, db, admin, userId, request.signal),
+  );
+}
+
+// Shared service for the button and governed Manager tool. Both paths retain
+// exactly the same access checks, evidence selection and durable rate limit.
+export async function diagnoseOperation(
+  value: unknown,
+  db: SupabaseClient,
+  admin: SupabaseClient,
+  userId: string,
+  parentSignal?: AbortSignal,
+  observe?: (provider: ReturnType<typeof createAIProvider>) => void,
+) {
+  const input = DiagnosisInput.parse(value);
   await membership(db, userId, input.workspaceId);
   const preferences = checked(
     await db
@@ -135,7 +151,7 @@ export async function diagnose(
     403,
     'Enable AI processing in Connections before requesting a diagnosis.',
   );
-  const signal = callSignal({ signal: request.signal }, 55_000);
+  const signal = callSignal({ signal: parentSignal }, 55_000);
   let evidence: Record<string, unknown>;
   if (input.kind === 'run') {
     const row = checked(
@@ -238,6 +254,7 @@ export async function diagnose(
       error instanceof AppError ? error.code : 'AI_FAILED';
   }
   result.model = provider.model;
+  observe?.(provider);
   result.usage = provider.usage.map(({ inputTokens, outputTokens }) => ({
     inputTokens,
     outputTokens,
@@ -263,5 +280,5 @@ export async function diagnose(
         requestId: result.requestId,
       }),
     );
-  return json(result);
+  return result;
 }

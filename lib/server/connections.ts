@@ -35,16 +35,17 @@ export const credentialContext = (
 ) => workspace + ':' + provider + ':' + connection;
 export async function connectionList(
   workspaceId: string,
+  database = adminDb(),
+  signal?: AbortSignal,
 ): Promise<ConnectionInfo[]> {
-  const rows =
-    checked(
-      await adminDb()
-        .from('integration_credentials')
-        .select(
-          'provider,connection_id,external_id,display_name,status,verified_at,last_error_code,last_error_at',
-        )
-        .eq('workspace_id', workspaceId),
-    ) || [];
+  let query = database
+    .from('integration_credentials')
+    .select(
+      'provider,connection_id,external_id,display_name,status,verified_at,last_error_code,last_error_at',
+    )
+    .eq('workspace_id', workspaceId);
+  if (signal) query = query.abortSignal(signal);
+  const rows = checked(await query) || [];
   return providers.map((provider) => {
     const row = rows.find((r) => r.provider === provider);
     const configured =

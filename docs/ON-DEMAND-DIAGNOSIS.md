@@ -2,7 +2,7 @@
 
 Open a failed action, or go to Workspace settings > Audit and find a failed AI request. Choose **Diagnose this failure** to generate a short assessment from its recorded evidence. The panel shows the likely cause, AI confidence, next steps for the workspace owner or Workbench operator, missing evidence, a timestamped evidence snapshot, and reported token usage.
 
-This is a separate, read-only diagnostic path. Ordinary chats do not receive additional context or incur diagnostic calls. The existing provider preferences, consent and fallback rules apply. A request may use a backup provider if allowed; each attempt is capped at 2,500 output tokens and all attempts share a 55-second deadline. The existing durable rate limiter allows three diagnostic requests per user/workspace per minute. These controls are not a dollar-spend cap.
+This is a read-only diagnostic path. Ordinary chats outside the Manager rollout do not receive additional context or incur diagnostic calls. In explicitly enabled owner/test workspaces, the [Manager runtime](MANAGER-RUNTIME.md) can invoke the same `diagnoseOperation` service through `diagnosis.run`; the owner does not need to ferry its report between screens. The existing provider preferences, consent and fallback rules apply. A request may use a backup provider if allowed; each attempt is capped at 2,500 output tokens and all attempts share a 55-second deadline. The existing durable rate limiter allows three diagnostic requests per user/workspace per minute, shared by both interfaces. These controls are not a dollar-spend cap.
 
 ## Evidence and boundaries
 
@@ -14,7 +14,7 @@ For actions, it contains action type/status/error, timestamps, attempt count, sa
 
 Evidence is rebuilt field by field. Customer prompts, conversation text, action payloads, file contents, account names, access tokens, raw provider bodies and arbitrary log text are excluded. The model has no tools, and its strict result schema has no proposals or executable actions. Confirmed publication and uncertain external outcomes must be reconciled rather than blindly repeated.
 
-The result is displayed in the selected panel until it is unmounted or refreshed. It is not added to business records or Chat history. Metadata-only audit entries record target, request reference, model, status and token usage. If the model fails, the panel still returns its evidence snapshot. Failed audit persistence is logged by reference only and does not discard the report.
+The button result is displayed in the selected panel until it is unmounted or refreshed. It is not added to business records or Chat history. When Manager requests diagnosis, the result becomes evidence for its persisted Chat explanation. Metadata-only audit entries record target, request reference, model, status and token usage. If the model fails, both paths still return the evidence snapshot. Failed audit persistence is logged by reference only and does not discard the report.
 
 ## Validation
 
