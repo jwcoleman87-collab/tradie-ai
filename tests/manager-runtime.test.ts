@@ -19,6 +19,7 @@ import {
 } from '../lib/server/manager/adapters';
 import { AppError } from '../lib/server/errors';
 import { managerEnabled } from '../lib/server/manager/config';
+import { ManagerAnswer } from '../lib/server/manager/contracts';
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -79,6 +80,13 @@ const request = (
   calls: [{ id: crypto.randomUUID(), name, arguments: args }],
 });
 const final: ManagerTurnResult = { kind: 'final', answer };
+
+it('rejects model-authored support escalation outside the governed tool registry', () => {
+  expect(
+    ManagerAnswer.safeParse({ ...answer, escalation: 'integration_error' })
+      .success,
+  ).toBe(false);
+});
 
 it('keeps ancillary model usage within the existing two-provider storage contract', () => {
   const row = { inputTokens: 10, outputTokens: 20, totalTokens: 30 };

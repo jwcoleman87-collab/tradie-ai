@@ -886,7 +886,7 @@ async function handleApi(
           /* The committed reply can also be read by the status endpoint. */
         }
         let notice: string | undefined;
-        if (result.escalation !== 'none') {
+        if (!useManager && result.escalation !== 'none') {
           // No AI-authored free text or transcript is included in escalation.
           // The reply is already committed. A case failure must not relabel it failed.
           try {

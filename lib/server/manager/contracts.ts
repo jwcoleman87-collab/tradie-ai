@@ -12,6 +12,9 @@ export const Consequence = z.enum([
 export type ConsequenceClass = z.infer<typeof Consequence>;
 export const ManagerAnswer = AgentOutput.omit({ proposals: true })
   .extend({
+    // Support-case creation is not a governed Manager capability. A diagnosis
+    // recommendation must not trigger the legacy Chat escalation writer.
+    escalation: z.literal('none'),
     attention: z.enum(['contained', 'deferred', 'batched', 'interrupt']),
     shortcut: z
       .enum(['facebook_connection', 'calendar_connection', 'actions'])

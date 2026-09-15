@@ -43,6 +43,7 @@ function database() {
       {
         id: workspaceId,
         name: 'GreenVac',
+        workspace_type: 'sandbox',
         time_zone: 'Australia/Sydney',
         status: 'active',
         ai_consent_at: '2026-09-01',
@@ -54,6 +55,13 @@ function database() {
         workspace_id: workspaceId,
         onboarding_status: 'confirmed',
         display_name: 'GreenVac',
+        website_url: null,
+        base_location: 'Braidwood NSW',
+        service_areas: ['Queanbeyan'],
+        services: ['Hydro excavation'],
+        preferred_job_types: [],
+        brand_summary: null,
+        confirmed_at: '2026-09-01T00:00:00Z',
         managed_pack: 'greenvac',
       },
     ],
@@ -285,6 +293,23 @@ it('retains prepared work and checkpoints a truthful partial result after a late
     },
   });
   expect(writes[0]).toMatchObject({ table: 'agent_runs' });
+});
+
+it('identifies the selected sandbox explicitly even when the business name matches', async () => {
+  const { tools } = setup();
+  const result = await tools.invoke('workspace.read_summary', {}, signal());
+  expect(result).toMatchObject({
+    data: { id: workspaceId, name: 'GreenVac', workspace_type: 'sandbox' },
+  });
+  expect(
+    queries
+      .filter((query) => query.table === 'workspaces')
+      .every((query) =>
+        query.filters.some(
+          ([key, value]) => key === 'id' && value === workspaceId,
+        ),
+      ),
+  ).toBe(true);
 });
 
 it('reads live workspace records without merging another business', async () => {
