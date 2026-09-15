@@ -312,11 +312,13 @@ export function createManagerTools(
   }
   add(
     'workspace.read_summary',
-    'Read the current workspace business identity and confirmed profile. Use before resolving business identity or missing profile facts.',
+    'Read the current workspace ID, sandbox/business type, business identity and confirmed profile. Use before resolving workspace identity or missing profile facts.',
     empty,
     z
       .object({
+        id: z.uuid(),
         name: z.string().max(500),
+        workspace_type: z.enum(['business', 'sandbox']),
         time_zone: z.string().max(80),
         profile: z.json(),
       })
@@ -325,13 +327,15 @@ export function createManagerTools(
       const row = checked(
         await db
           .from('workspaces')
-          .select('name,time_zone')
+          .select('id,name,workspace_type,time_zone')
           .eq('id', workspaceId)
           .abortSignal(signal)
           .single(),
       )!;
       return {
+        id: row.id,
         name: row.name,
+        workspace_type: row.workspace_type,
         time_zone: row.time_zone,
         profile: await profile(signal),
       };
