@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   from: vi.fn(),
   rpc: vi.fn(),
   runTeam: vi.fn(),
+  runManager: vi.fn(),
   connections: vi.fn(),
   provider: {
     usage: [],
@@ -37,6 +38,9 @@ vi.mock('../lib/server/db', async (importOriginal) => ({
   rpc: mocks.rpc,
 }));
 vi.mock('../lib/server/ai', () => ({ runTeam: mocks.runTeam }));
+vi.mock('../lib/server/manager/chat', () => ({
+  runManagerChat: mocks.runManager,
+}));
 vi.mock('../lib/server/ai-provider', () => ({
   createAIProvider: () => mocks.provider,
 }));
@@ -162,6 +166,7 @@ const send = (stream = false, signal?: AbortSignal) =>
     }),
   );
 beforeEach(() => {
+  mocks.runManager.mockReset();
   writes.length = 0;
   consent = true;
   failTable = '';
@@ -189,6 +194,62 @@ beforeEach(() => {
   vi.spyOn(console, 'info').mockImplementation(() => {});
 });
 afterEach(() => vi.restoreAllMocks());
+
+it('routes an eligible owner through Manager and persists prepared actions through complete_chat only', async () => {
+  vi.stubEnv('MANAGER_ENABLED', 'true');
+  vi.stubEnv('MANAGER_WORKSPACE_IDS', input.workspaceId);
+  vi.stubEnv('MANAGER_OWNER_IDS', 'test-user');
+  const proposal = {
+    type: 'draft.save',
+    agent: 'finance',
+    summary: 'Test quote',
+    payload: {
+      kind: 'note',
+      title: 'Test quote',
+      body: 'AUD 740 inc GST, prepared for review.',
+    },
+  };
+  mocks.runManager.mockResolvedValue({
+    reply: 'Quote prepared.',
+    agents: ['finance'],
+    versions: [],
+    model: 'gpt-6-astra',
+    usage: [],
+    providerTrace: [],
+    proposals: [proposal],
+    escalation: 'none',
+    partial: false,
+  });
+  try {
+    const response = await send();
+    expect(response.status).toBe(200);
+    expect(mocks.runManager).toHaveBeenCalledOnce();
+    expect(mocks.runTeam).not.toHaveBeenCalled();
+    expect(mocks.rpc.mock.calls.map((call) => call[1])).toEqual([
+      'begin_chat',
+      'complete_chat',
+    ]);
+    expect(mocks.rpc.mock.calls[1][2]).toMatchObject({
+      p_model: 'gpt-6-astra',
+      p_proposals: [{ ...proposal, connectionId: null }],
+    });
+  } finally {
+    vi.unstubAllEnvs();
+  }
+});
+
+it('keeps a non-allowlisted workspace on the existing Chat path', async () => {
+  vi.stubEnv('MANAGER_ENABLED', 'true');
+  vi.stubEnv('MANAGER_WORKSPACE_IDS', crypto.randomUUID());
+  vi.stubEnv('MANAGER_OWNER_IDS', 'test-user');
+  try {
+    expect((await send()).status).toBe(200);
+    expect(mocks.runManager).not.toHaveBeenCalled();
+    expect(mocks.runTeam).toHaveBeenCalledOnce();
+  } finally {
+    vi.unstubAllEnvs();
+  }
+});
 
 it('returns a saved receipt only after the completed reply transaction', async () => {
   const response = await send();

@@ -12,6 +12,8 @@ import { env, publicConfig } from './config';
 import { AppError, requireValue } from './errors';
 import { runTeam } from './ai';
 import { diagnose } from './diagnosis';
+import { managerEnabled } from './manager/config';
+import { runManagerChat } from './manager/chat';
 import { facebookPreparationAvailable } from '../facebook-readiness';
 import { createAIProvider } from './ai-provider';
 import { AIConsentInput, type AIPreferences } from '../ai-settings';
@@ -422,7 +424,8 @@ async function handleApi(
   }
   if (path === 'chat' && method === 'POST') {
     const input = ChatInput.parse(await body(request));
-    await membership(db, user.id, input.workspaceId);
+    const chatRole = await membership(db, user.id, input.workspaceId);
+    const useManager = managerEnabled(input.workspaceId, user.id, chatRole);
     const preferences = checked(
       await db
         .from('workspaces')
@@ -588,13 +591,15 @@ async function handleApi(
               .abortSignal(contextSignal)
               .maybeSingle(),
             connectionList(input.workspaceId),
-            loadActionData(
-              db,
-              admin,
-              input.workspaceId,
-              input.conversationId,
-              contextSignal,
-            ),
+            useManager
+              ? Promise.resolve({ actions: [], coverage: {} })
+              : loadActionData(
+                  db,
+                  admin,
+                  input.workspaceId,
+                  input.conversationId,
+                  contextSignal,
+                ),
             db
               .from('business_profiles')
               .select(
@@ -726,40 +731,67 @@ async function handleApi(
             return remaining >= 0;
           })
           .reverse();
-        let result = await withinBudget(
-          runTeam(provider, {
-            history: bounded,
-            actionHistory: {
-              actions: actionData.actions.map(actionContext),
-              coverage: actionData.coverage,
-            },
-            businessProfile: {
-              ...profile,
-              workspace_id: input.workspaceId,
-            },
-            loadRecords: (agents) =>
-              loadRecordContext(
-                db,
-                input.workspaceId,
-                agents,
-                workSignal,
-                recentUserFocusText(bounded),
-              ),
-            timeZone: workspace.time_zone,
-            loadCalendar: connection
-              ? (signal) =>
-                  calendarContext(
+        let result = await withinBudget<
+          | Awaited<ReturnType<typeof runTeam>>
+          | Awaited<ReturnType<typeof runManagerChat>>
+        >(
+          useManager
+            ? runManagerChat(
+                {
+                  db,
+                  admin,
+                  workspaceId: input.workspaceId,
+                  conversationId: input.conversationId,
+                  userId: user.id,
+                  preferences: preferences as AIPreferences,
+                },
+                {
+                  history: bounded,
+                  name: workspace.name,
+                  timeZone: workspace.time_zone,
+                  runId: run.id,
+                  signal: workSignal,
+                  deadlineAt: leaseStartedAt + CHAT_WORK_MS - 7000,
+                  onStage: progress,
+                  loadAttachments,
+                },
+              )
+            : runTeam(provider, {
+                history: bounded,
+                actionHistory: {
+                  actions: actionData.actions.map(actionContext),
+                  coverage: actionData.coverage as Awaited<
+                    ReturnType<typeof loadActionData>
+                  >['coverage'],
+                },
+                businessProfile: {
+                  ...profile,
+                  workspace_id: input.workspaceId,
+                },
+                loadRecords: (agents) =>
+                  loadRecordContext(
+                    db,
                     input.workspaceId,
-                    signal,
-                    connection.connection_id,
-                  )
-              : undefined,
-            loadAttachments,
-            signal: workSignal,
-            onStage: progress,
-            onTiming: (stage, elapsedMs) => timings.push({ stage, elapsedMs }),
-            integrations,
-          }),
+                    agents,
+                    workSignal,
+                    recentUserFocusText(bounded),
+                  ),
+                timeZone: workspace.time_zone,
+                loadCalendar: connection
+                  ? (signal) =>
+                      calendarContext(
+                        input.workspaceId,
+                        signal,
+                        connection.connection_id,
+                      )
+                  : undefined,
+                loadAttachments,
+                signal: workSignal,
+                onStage: progress,
+                onTiming: (stage, elapsedMs) =>
+                  timings.push({ stage, elapsedMs }),
+                integrations,
+              }),
           workSignal,
         );
         if (
@@ -912,8 +944,9 @@ async function handleApi(
               .update({
                 status: 'failed',
                 error_code: code,
-                usage: provider.usage,
-                provider_trace: provider.attempts,
+                ...(!useManager
+                  ? { usage: provider.usage, provider_trace: provider.attempts }
+                  : {}),
                 finished_at: new Date().toISOString(),
               })
               .eq('id', run.id)
@@ -933,7 +966,7 @@ async function handleApi(
                 entity_id: run.id,
                 metadata: {
                   error_code: code,
-                  provider_trace: provider.attempts,
+                  ...(!useManager ? { provider_trace: provider.attempts } : {}),
                 },
               }),
               failureSignal,
