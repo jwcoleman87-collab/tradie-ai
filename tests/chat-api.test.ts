@@ -195,48 +195,55 @@ beforeEach(() => {
 });
 afterEach(() => vi.restoreAllMocks());
 
-it('routes an eligible owner through Manager and persists prepared actions through complete_chat only', async () => {
-  vi.stubEnv('MANAGER_ENABLED', 'true');
-  vi.stubEnv('MANAGER_WORKSPACE_IDS', input.workspaceId);
-  vi.stubEnv('MANAGER_OWNER_IDS', 'test-user');
-  const proposal = {
-    type: 'draft.save',
-    agent: 'finance',
-    summary: 'Test quote',
-    payload: {
-      kind: 'note',
-      title: 'Test quote',
-      body: 'AUD 740 inc GST, prepared for review.',
-    },
-  };
-  mocks.runManager.mockResolvedValue({
-    reply: 'Quote prepared.',
-    agents: ['finance'],
-    versions: [],
-    model: 'gpt-6-astra',
-    usage: [],
-    providerTrace: [],
-    proposals: [proposal],
-    escalation: 'none',
-    partial: false,
-  });
-  try {
-    const response = await send();
-    expect(response.status).toBe(200);
-    expect(mocks.runManager).toHaveBeenCalledOnce();
-    expect(mocks.runTeam).not.toHaveBeenCalled();
-    expect(mocks.rpc.mock.calls.map((call) => call[1])).toEqual([
-      'begin_chat',
-      'complete_chat',
-    ]);
-    expect(mocks.rpc.mock.calls[1][2]).toMatchObject({
-      p_model: 'gpt-6-astra',
-      p_proposals: [{ ...proposal, connectionId: null }],
+it.each(['none', 'integration_error'])(
+  'routes Manager through complete_chat without an automatic support case when escalation=%s',
+  async (escalation) => {
+    vi.stubEnv('MANAGER_ENABLED', 'true');
+    vi.stubEnv('MANAGER_WORKSPACE_IDS', input.workspaceId);
+    vi.stubEnv('MANAGER_OWNER_IDS', 'test-user');
+    const proposal = {
+      type: 'draft.save',
+      agent: 'finance',
+      summary: 'Test quote',
+      payload: {
+        kind: 'note',
+        title: 'Test quote',
+        body: 'AUD 740 inc GST, prepared for review.',
+      },
+    };
+    mocks.runManager.mockResolvedValue({
+      reply: 'Quote prepared.',
+      agents: ['finance'],
+      versions: [],
+      model: 'gpt-6-astra',
+      usage: [],
+      providerTrace: [],
+      proposals: [proposal],
+      escalation,
+      partial: false,
     });
-  } finally {
-    vi.unstubAllEnvs();
-  }
-});
+    try {
+      const response = await send();
+      expect(response.status).toBe(200);
+      expect(mocks.runManager).toHaveBeenCalledOnce();
+      expect(writes.some((write) => write.table === 'escalation_cases')).toBe(
+        false,
+      );
+      expect((await response.json()).notice).toBeUndefined();
+      expect(mocks.runTeam).not.toHaveBeenCalled();
+      expect(mocks.rpc.mock.calls.map((call) => call[1])).toEqual([
+        'begin_chat',
+        'complete_chat',
+      ]);
+      expect(mocks.rpc.mock.calls[1][2]).toMatchObject({
+        p_model: 'gpt-6-astra',
+        p_proposals: [{ ...proposal, connectionId: null }],
+      });
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  },
+);
 
 it('keeps a non-allowlisted workspace on the existing Chat path', async () => {
   vi.stubEnv('MANAGER_ENABLED', 'true');

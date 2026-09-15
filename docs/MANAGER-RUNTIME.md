@@ -66,7 +66,7 @@ before using the existing pinned verification service.
 
 | Capability                           | Implementation and bound                                                                                                             |
 | ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------ |
-| `workspace.read_summary`             | Current workspace and confirmed business profile                                                                                     |
+| `workspace.read_summary`             | Current workspace UUID, explicit business/sandbox type and confirmed business profile                                                |
 | `records.search`, `records.get`      | Active workspace records; literal search, 8 results, coverage disclosure, full selected record                                       |
 | `actions.list`, `actions.get_status` | Latest 8 matching workspace actions across conversations; durable publication state and safe receipt interpretation                  |
 | `diagnosis.run`                      | Same `diagnoseOperation` used by the diagnosis button; same membership/consent checks, metadata sanitisation and 3/minute rate limit |
@@ -83,6 +83,9 @@ before using the existing pinned verification service.
 
 The registry deliberately does not expose arbitrary HTTP, SQL, execution, source
 editing, approval, credential changes, record deletion or external sending.
+Manager answers cannot create support cases through the legacy Chat escalation
+path. The answer schema requires `escalation: none`, and the API independently
+skips that writer for Manager runs. Recommendations stay in the reply.
 Status reconciliation means interpreting existing receipts; it does not clear
 uncertain publication markers or manufacture a new execution receipt.
 
