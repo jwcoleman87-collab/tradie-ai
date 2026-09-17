@@ -7,3 +7,11 @@ This version has breaking changes — APIs, conventions, and file structure may 
 This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
 
 <!-- END:nextjs-agent-rules -->
+
+# Manager token economy
+
+Every Manager capability must follow `docs/TOKEN-ECONOMY.md`: minimum context by
+default, just-in-time retrieval, compact tool projections, deterministic work
+before model work, an explicit per-run token budget and economy telemetry. Add a
+regression to `tests/manager-token-economy.test.ts` when a change introduces a
+new context-loading path.

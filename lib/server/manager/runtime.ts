@@ -3,8 +3,10 @@ import { callSignal, withinBudget } from '../chat-budget';
 import {
   ManagerAnswer,
   type ManagerModelAdapter,
+  type ManagerEconomy,
   type ManagerToolTrace,
   type ManagerTurnInput,
+  type ManagerUsage,
   type ToolDefinition,
   type ToolResult,
 } from './contracts';
@@ -22,7 +24,23 @@ export const MANAGER_LIMITS = {
   outputChars: 24_000,
   inputChars: 16_000,
   outputTokens: 3500,
+  // Model-token budget for the whole run. Checked after every model call, so
+  // the run stops before spending another call once the budget is spent.
+  inputTokens: 60_000,
+  totalTokens: 80_000,
 } as const;
+
+export function sumUsage(usage: ManagerUsage[]) {
+  return usage.reduce(
+    (acc, row) => ({
+      inputTokens: acc.inputTokens + row.inputTokens,
+      outputTokens: acc.outputTokens + row.outputTokens,
+      totalTokens: acc.totalTokens + row.totalTokens,
+      cachedInputTokens: acc.cachedInputTokens + (row.cachedInputTokens || 0),
+    }),
+    { inputTokens: 0, outputTokens: 0, totalTokens: 0, cachedInputTokens: 0 },
+  );
+}
 
 export function authorityDecision(tool: ToolDefinition, role: string) {
   if (tool.authority === 'owner' && role !== 'owner') return 'deny';
@@ -33,6 +51,20 @@ export function authorityDecision(tool: ToolDefinition, role: string) {
 export class ManagerRuntime {
   readonly toolTrace: ManagerToolTrace[] = [];
   readonly results: ToolResult[] = [];
+  readonly economy: ManagerEconomy = {
+    modelCalls: 0,
+    toolCalls: 0,
+    inputTokens: 0,
+    outputTokens: 0,
+    totalTokens: 0,
+    cachedInputTokens: 0,
+    contextChars: 0,
+    evidenceChars: {},
+    stopReason: 'error',
+  };
+  private refreshEconomy() {
+    Object.assign(this.economy, sumUsage(this.adapter.usage));
+  }
   constructor(
     readonly adapter: ManagerModelAdapter,
     readonly tools: ManagerTools,
@@ -45,10 +77,23 @@ export class ManagerRuntime {
     const signal = callSignal({ signal: input.signal }, budget.deadlineMs);
     const seen = new Set<string>();
     let calls = 0;
+    this.economy.contextChars =
+      input.instructions.length +
+      input.messages.reduce((n, m) => n + m.content.length, 0) +
+      JSON.stringify(input.context).length;
     try {
       for (let turn = 0; turn < budget.turns; turn++) {
         if (this.tools.authorize)
           await withinBudget(this.tools.authorize(signal), signal);
+        // Token-aware continuation: a model call is the expensive step. Never
+        // start one after the run's token budget is spent.
+        this.refreshEconomy();
+        if (
+          this.economy.inputTokens >= budget.inputTokens ||
+          this.economy.totalTokens >= budget.totalTokens
+        )
+          throw new AppError('MANAGER_TOKEN_LIMIT', 409);
+        this.economy.modelCalls++;
         const next = await withinBudget(
           this.adapter.runTurn({
             ...input,
@@ -67,13 +112,17 @@ export class ManagerRuntime {
           }),
           signal,
         );
-        if (next.kind === 'final')
+        this.refreshEconomy();
+        if (next.kind === 'final') {
+          this.economy.stopReason = 'final';
           return { answer: ManagerAnswer.parse(next.answer), partial: false };
+        }
         if (!next.calls.length)
           throw new AppError('MANAGER_INVALID_RESPONSE', 502);
         for (const call of next.calls) {
           if (++calls > budget.tools)
             throw new AppError('MANAGER_TOOL_LIMIT', 409);
+          this.economy.toolCalls = calls;
           const known = this.tools.definitions.find(
             (tool) => tool.name === call.name,
           );
@@ -125,8 +174,11 @@ export class ManagerRuntime {
             const output = known.output.safeParse(value);
             if (!output.success)
               throw new AppError('MANAGER_OUTPUT_INVALID', 502);
-            if (JSON.stringify(output.data).length > budget.outputChars)
+            const evidenceChars = JSON.stringify(output.data).length;
+            if (evidenceChars > budget.outputChars)
               throw new AppError('MANAGER_OUTPUT_TOO_LARGE', 502);
+            this.economy.evidenceChars[known.name] =
+              (this.economy.evidenceChars[known.name] || 0) + evidenceChars;
             result = {
               callId: call.id,
               name: known.name,
@@ -158,6 +210,13 @@ export class ManagerRuntime {
         error instanceof AppError && /^[A-Z_]{2,80}$/.test(error.code)
           ? error.code
           : 'MANAGER_FAILED';
+      this.refreshEconomy();
+      this.economy.stopReason =
+        code === 'MANAGER_TOKEN_LIMIT' ||
+        code === 'MANAGER_TURN_LIMIT' ||
+        code === 'MANAGER_TOOL_LIMIT'
+          ? 'budget'
+          : 'error';
       return {
         partial: true,
         errorCode: code,

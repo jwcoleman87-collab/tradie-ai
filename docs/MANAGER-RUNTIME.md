@@ -122,8 +122,11 @@ changes use existing variation proposals, never overwrite the original quote.
 ## Run budgets and attention
 
 Six model turns, twelve total tool calls, one availability fallback, an
-85-second Manager deadline, 3,500 output tokens per model attempt, 16,000 input
-characters per tool call and 24,000 output characters per tool result. Ordinary
+85-second Manager deadline, 3,500 output tokens per model attempt, 60,000 input
+and 80,000 total model tokens per run, 16,000 input characters per tool call and
+24,000 output characters per tool result. Token usage is re-summed after every
+model call; once spent, the next call is refused with `MANAGER_TOKEN_LIMIT` and
+the run returns a truthful partial answer. Ordinary
 tools have 15 seconds; diagnosis has 55 and research 25, always capped by the
 remaining run signal. Identical normalized tool requests are rejected after the
 first attempt. These are resource limits, not a dollar cap.
@@ -133,6 +136,10 @@ The Manager's smaller budget leaves time for its metadata checkpoint and atomic
 completion. Failures preserve safe trace metadata and return a truthful partial
 answer instead of inventing success. No background loops or unattended worker
 are introduced.
+
+Conversation history is a bounded recent window (8 messages, 12,000 characters)
+rather than a transcript replay; older facts are fetched as evidence. The full
+token-economy rule and its implementation map live in `docs/TOKEN-ECONOMY.md`.
 
 The Manager responds with the outcome, recommendation and actual owner decision.
 Attention is `contained`, `deferred`, `batched` or `interrupt`, recorded in run
@@ -153,7 +160,11 @@ Manager metadata entry fit the existing eight-entry trace constraint. Usage is
 aggregated by provider (at most two rows); model identities remain on attempts.
 The terminal entry records adapter/version, final/partial status, attention,
 selected skills, tool names, consequences, allowed/denied/failed outcomes,
-approval requirements, timings and safe ancillary diagnosis/research attempts.
+approval requirements, timings, safe ancillary diagnosis/research attempts and
+an `economy` block (model calls, tool calls, input/output/total/cached tokens,
+first-turn context characters, evidence characters per tool, stop reason).
+Anthropic requests mark the system prompt and tool list as a cache prefix, and
+both adapters record cached input tokens.
 No prompt, tool arguments, record/file contents, raw response payloads, reasoning
 or credentials are stored in traces. No new schema or permission grant is needed.
 

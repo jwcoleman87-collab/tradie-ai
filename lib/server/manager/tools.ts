@@ -636,7 +636,7 @@ export function createManagerTools(
   );
   add(
     'skills.read',
-    'Load one or more specialist instruction packs: finance, social, marketing, maintenance, website. They are resources for the Manager; you own the final answer.',
+    'Load specialist instruction packs: finance, social, marketing, maintenance, website. Load only the pack the task needs; each costs model context. You own the final answer.',
     SkillSelection,
     z
       .array(
