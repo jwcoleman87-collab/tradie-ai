@@ -126,6 +126,8 @@ function database() {
     uploaded_files: [],
     external_publish_attempts: [],
     agent_runs: [],
+    business_profile_facts: [],
+    audit_logs: [],
   };
   function from(table: string) {
     let fields = '*',
@@ -192,6 +194,17 @@ function database() {
         return chain;
       },
       insert: (value: unknown) => {
+        data = value;
+        return chain;
+      },
+      upsert: (value: Row, options?: { onConflict?: string }) => {
+        const keys = (options?.onConflict || 'id').split(',');
+        const rows = (tables[table] ||= []);
+        const index = rows.findIndex((row) =>
+          keys.every((key) => row[key] === value[key]),
+        );
+        if (index >= 0) rows[index] = { ...rows[index], ...value };
+        else rows.push({ ...value });
         data = value;
         return chain;
       },
@@ -633,4 +646,164 @@ it('checkpoints model identity and safe tool metadata in agent_runs using a fake
   expect(JSON.stringify(writes)).not.toMatch(
     /PRIVATE-PROMPT|PRIVATE-OAUTH|multiply|"left"/,
   );
+});
+
+it('Nora: natural conversation progressively builds structured profile state through fable-19 without a form gate', async () => {
+  const { context, tools } = setup();
+  // Nora's workspace starts with an unconfirmed, empty profile.
+  await context.admin.from('business_profiles').upsert(
+    {
+      workspace_id: workspaceId,
+      display_name: 'My business',
+      base_location: null,
+      services: [],
+      onboarding_status: 'in_progress',
+      managed_pack: null,
+    },
+    { onConflict: 'workspace_id' },
+  );
+  writes.length = 0;
+  const script: { name: string; arguments: unknown }[] = [
+    { name: 'profile.read', arguments: {} },
+    {
+      name: 'profile.record_facts',
+      arguments: {
+        facts: [
+          {
+            fieldPath: 'display_name',
+            value: 'Nora’s Garden Care',
+            confidence: 'high',
+            factState: 'owner_supplied',
+          },
+          {
+            fieldPath: 'base_location',
+            value: 'Wollongong NSW',
+            confidence: 'high',
+            factState: 'owner_supplied',
+          },
+          {
+            fieldPath: 'services',
+            value: ['Garden maintenance', 'Hedge trimming'],
+            confidence: 'medium',
+            factState: 'inferred',
+          },
+        ],
+      },
+    },
+  ];
+  const adapter: ManagerModelAdapter = {
+    provider: 'fable',
+    model: 'fable-19',
+    version: 'fake-v1',
+    usage: [],
+    attempts: [],
+    async runTurn(input) {
+      const next = script.shift();
+      if (next)
+        return { kind: 'tools', calls: [{ id: crypto.randomUUID(), ...next }] };
+      const recorded = input.results.at(-1)!.evidence as {
+        data: { onboardingStatus: string; openGoals: string[] };
+      };
+      expect(input.results[0]).toMatchObject({ ok: true });
+      expect(recorded.data.onboardingStatus).toBe('review');
+      expect(recorded.data.openGoals).toContain('preferred_work');
+      return {
+        kind: 'final',
+        answer: {
+          reply:
+            'Lovely. I have set up Nora’s Garden Care in Wollongong doing garden maintenance and hedge trimming. Which jobs would you most like more of?',
+          escalation: 'none',
+          attention: 'contained',
+          shortcut: null,
+        },
+      };
+    },
+  };
+  const result = await runManagerChat(
+    context,
+    {
+      history: [
+        {
+          role: 'user',
+          content:
+            'Hi, I want help starting a small business. I am Nora, I do garden maintenance and hedge trimming around Wollongong and want to call it Nora’s Garden Care.',
+        },
+      ],
+      name: 'My business',
+      timeZone: 'Australia/Sydney',
+      runId: crypto.randomUUID(),
+      signal: signal(),
+    },
+    adapter,
+  );
+  expect(result.partial).toBe(false);
+  expect(result.model).toBe('fable-19');
+  // Structured state was written by Workbench, not a form: profile columns,
+  // provenance-tracked facts and an audit entry, with no approval card.
+  const profile = writes.find((w) => w.table === 'business_profiles')!
+    .data as Row;
+  expect(profile).toMatchObject({
+    display_name: 'Nora’s Garden Care',
+    base_location: 'Wollongong NSW',
+    services: ['Garden maintenance', 'Hedge trimming'],
+    onboarding_status: 'review',
+  });
+  const facts = writes.filter((w) => w.table === 'business_profile_facts');
+  expect(facts.map((w) => (w.data as Row).field_path)).toEqual([
+    'display_name',
+    'base_location',
+    'services',
+  ]);
+  expect(
+    facts.every((w) => (w.data as Row).source_type === 'owner_message'),
+  ).toBe(true);
+  expect(writes.find((w) => w.table === 'audit_logs')!.data).toMatchObject({
+    event: 'profile.facts_recorded',
+  });
+  expect(result.proposals).toHaveLength(0);
+  expect(tools.selected.size).toBe(0);
+  // Confirmation of the finished profile is still the owner's decision.
+  expect(profile.onboarding_status).not.toBe('confirmed');
+  expect(result.reply).not.toMatch(/record|database|integration|provenance/i);
+  // A second turn adds structure without re-asking known fields.
+  const second = await tools.invoke(
+    'profile.record_facts',
+    {
+      facts: [
+        {
+          fieldPath: 'preferred_job_types',
+          value: ['Regular fortnightly maintenance'],
+          confidence: 'high',
+          factState: 'owner_supplied',
+        },
+      ],
+    },
+    signal(),
+  );
+  expect(
+    (second as { data: { openGoals: string[] } }).data.openGoals,
+  ).not.toContain('preferred_work');
+  const read = (await tools.invoke('profile.read', {}, signal())) as {
+    data: { knownFields: string[]; onboardingStatus: string };
+  };
+  expect(read.data.knownFields).toEqual(
+    expect.arrayContaining(['display_name', 'services', 'preferred_job_types']),
+  );
+  // Unknown or unsafe fields never reach the database.
+  await expect(
+    tools.invoke(
+      'profile.record_facts',
+      {
+        facts: [
+          {
+            fieldPath: 'abn',
+            value: '123',
+            confidence: 'high',
+            factState: 'owner_supplied',
+          },
+        ],
+      },
+      signal(),
+    ),
+  ).rejects.toMatchObject({ code: 'MANAGER_INPUT_INVALID' });
 });

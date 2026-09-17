@@ -5,7 +5,6 @@ import {
   OnboardingTurnInput,
   Uuid,
   type OnboardingFact,
-  type OnboardingField,
   type OnboardingMessage,
   type OnboardingSnapshot,
 } from '../contracts';
@@ -17,9 +16,9 @@ import { createAIProvider } from './ai-provider';
 import { env } from './config';
 import { preferredWorkspace } from '../workspace-selection';
 import {
-  factValueForProfile,
   firstOnboardingPrompt,
   prepareOnboardingAnswer,
+  profilePatch,
   provisionalBusinessName,
   runOnboardingMagic,
   type OnboardingGoalName,
@@ -182,30 +181,6 @@ async function snapshot(
   };
 }
 
-const profileColumns: Record<OnboardingField, string> = {
-  display_name: 'display_name',
-  website_url: 'website_url',
-  base_location: 'base_location',
-  service_areas: 'service_areas',
-  services: 'services',
-  preferred_job_types: 'preferred_job_types',
-  enquiry_channels: 'enquiry_channels',
-  primary_goal: 'primary_goal',
-  admin_bottleneck: 'admin_bottleneck',
-  brand_summary: 'brand_summary',
-};
-
-function profilePatch(
-  facts: { fieldPath: OnboardingField; value: string | string[] }[],
-) {
-  return Object.fromEntries(
-    facts.map((fact) => [
-      profileColumns[fact.fieldPath],
-      factValueForProfile(fact.value),
-    ]),
-  );
-}
-
 export async function onboardingApi(
   request: Request,
   path: string,
@@ -313,9 +288,7 @@ export async function onboardingApi(
             unresolved_questions: [],
             discovery_status:
               session?.discovery_status ||
-              (env('WEB_SEARCH_ENABLED') === 'true'
-                ? 'ready'
-                : 'unavailable'),
+              (env('WEB_SEARCH_ENABLED') === 'true' ? 'ready' : 'unavailable'),
             prompt_count: promptCount,
             status: profileWasConfirmed
               ? 'completed'

@@ -67,6 +67,8 @@ before using the existing pinned verification service.
 | Capability                           | Implementation and bound                                                                                                             |
 | ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------ |
 | `workspace.read_summary`             | Current workspace UUID, explicit business/sandbox type and confirmed business profile                                                |
+| `profile.read`                       | Business profile at any setup stage: known facts, open profile goals, one suggested question                                         |
+| `profile.record_facts`               | Owner-established facts → existing `business_profiles`/`business_profile_facts` with provenance; owner still confirms the profile    |
 | `records.search`, `records.get`      | Active workspace records; literal search, 8 results, coverage disclosure, full selected record                                       |
 | `actions.list`, `actions.get_status` | Latest 8 matching workspace actions across conversations; durable publication state and safe receipt interpretation                  |
 | `diagnosis.run`                      | Same `diagnoseOperation` used by the diagnosis button; same membership/consent checks, metadata sanitisation and 3/minute rate limit |
@@ -88,6 +90,17 @@ path. The answer schema requires `escalation: none`, and the API independently
 skips that writer for Manager runs. Recommendations stay in the reply.
 Status reconciliation means interpreting existing receipts; it does not clear
 uncertain publication markers or manufacture a new execution receipt.
+
+## Nora: progressive profile building from Chat
+
+A non-technical owner can describe a business they are starting in ordinary
+Chat. The Manager reads the current profile state, records the facts the owner
+actually established (with conservative inferred structure), and asks at most
+one necessary question chosen from the open profile goals. Facts land in the
+same tables, provenance and goal model the onboarding page uses, so the two
+paths stay consistent. Recording is internal and reversible; confirming the
+finished profile remains the owner's explicit decision. Decisions are framed as
+Approve / Change / Ask, never as technical instructions.
 
 ## Consequence policy and durable preparation
 
