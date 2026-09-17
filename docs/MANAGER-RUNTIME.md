@@ -67,6 +67,8 @@ before using the existing pinned verification service.
 | Capability                           | Implementation and bound                                                                                                             |
 | ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------ |
 | `workspace.read_summary`             | Current workspace UUID, explicit business/sandbox type and confirmed business profile                                                |
+| `profile.read`                       | Business profile at any setup stage: known facts, open profile goals, one suggested question                                         |
+| `profile.record_facts`               | Owner-established facts → existing `business_profiles`/`business_profile_facts` with provenance; owner still confirms the profile    |
 | `records.search`, `records.get`      | Active workspace records; literal search, 8 results, coverage disclosure, full selected record                                       |
 | `actions.list`, `actions.get_status` | Latest 8 matching workspace actions across conversations; durable publication state and safe receipt interpretation                  |
 | `diagnosis.run`                      | Same `diagnoseOperation` used by the diagnosis button; same membership/consent checks, metadata sanitisation and 3/minute rate limit |
@@ -88,6 +90,17 @@ path. The answer schema requires `escalation: none`, and the API independently
 skips that writer for Manager runs. Recommendations stay in the reply.
 Status reconciliation means interpreting existing receipts; it does not clear
 uncertain publication markers or manufacture a new execution receipt.
+
+## Nora: progressive profile building from Chat
+
+A non-technical owner can describe a business they are starting in ordinary
+Chat. The Manager reads the current profile state, records the facts the owner
+actually established (with conservative inferred structure), and asks at most
+one necessary question chosen from the open profile goals. Facts land in the
+same tables, provenance and goal model the onboarding page uses, so the two
+paths stay consistent. Recording is internal and reversible; confirming the
+finished profile remains the owner's explicit decision. Decisions are framed as
+Approve / Change / Ask, never as technical instructions.
 
 ## Consequence policy and durable preparation
 
@@ -122,8 +135,11 @@ changes use existing variation proposals, never overwrite the original quote.
 ## Run budgets and attention
 
 Six model turns, twelve total tool calls, one availability fallback, an
-85-second Manager deadline, 3,500 output tokens per model attempt, 16,000 input
-characters per tool call and 24,000 output characters per tool result. Ordinary
+85-second Manager deadline, 3,500 output tokens per model attempt, 60,000 input
+and 80,000 total model tokens per run, 16,000 input characters per tool call and
+24,000 output characters per tool result. Token usage is re-summed after every
+model call; once spent, the next call is refused with `MANAGER_TOKEN_LIMIT` and
+the run returns a truthful partial answer. Ordinary
 tools have 15 seconds; diagnosis has 55 and research 25, always capped by the
 remaining run signal. Identical normalized tool requests are rejected after the
 first attempt. These are resource limits, not a dollar cap.
@@ -133,6 +149,10 @@ The Manager's smaller budget leaves time for its metadata checkpoint and atomic
 completion. Failures preserve safe trace metadata and return a truthful partial
 answer instead of inventing success. No background loops or unattended worker
 are introduced.
+
+Conversation history is a bounded recent window (8 messages, 12,000 characters)
+rather than a transcript replay; older facts are fetched as evidence. The full
+token-economy rule and its implementation map live in `docs/TOKEN-ECONOMY.md`.
 
 The Manager responds with the outcome, recommendation and actual owner decision.
 Attention is `contained`, `deferred`, `batched` or `interrupt`, recorded in run
@@ -153,7 +173,11 @@ Manager metadata entry fit the existing eight-entry trace constraint. Usage is
 aggregated by provider (at most two rows); model identities remain on attempts.
 The terminal entry records adapter/version, final/partial status, attention,
 selected skills, tool names, consequences, allowed/denied/failed outcomes,
-approval requirements, timings and safe ancillary diagnosis/research attempts.
+approval requirements, timings, safe ancillary diagnosis/research attempts and
+an `economy` block (model calls, tool calls, input/output/total/cached tokens,
+first-turn context characters, evidence characters per tool, stop reason).
+Anthropic requests mark the system prompt and tool list as a cache prefix, and
+both adapters record cached input tokens.
 No prompt, tool arguments, record/file contents, raw response payloads, reasoning
 or credentials are stored in traces. No new schema or permission grant is needed.
 

@@ -47,6 +47,22 @@ export type ManagerUsage = {
   inputTokens: number;
   outputTokens: number;
   totalTokens: number;
+  /** Input tokens served from a provider prompt cache; a subset of inputTokens. */
+  cachedInputTokens?: number;
+};
+/** Per-run token-economy telemetry. Counts and sizes only; never content. */
+export type ManagerEconomy = {
+  modelCalls: number;
+  toolCalls: number;
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+  cachedInputTokens: number;
+  /** Characters the harness supplied on the first turn: instructions, history, context. */
+  contextChars: number;
+  /** Characters of validated tool evidence handed to the model, by tool name. */
+  evidenceChars: Record<string, number>;
+  stopReason: 'final' | 'budget' | 'error';
 };
 export type ManagerAttempt = Partial<ModelDiagnostic> & {
   provider: string;

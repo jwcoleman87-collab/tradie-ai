@@ -31,6 +31,8 @@ import {
   type ManagerUsage,
 } from './contracts';
 import { QuoteInput, calculateManagedQuote } from './quote';
+import { OnboardingFactValue, OnboardingFieldPath } from '../../contracts';
+import { onboardingGoalProgress, profilePatch } from '../onboarding';
 import type { ProviderAttempt } from '../ai-provider';
 
 const empty = z.object({}).strict();
@@ -341,6 +343,196 @@ export function createManagerTools(
       };
     },
   );
+  const profileFact = z
+    .object({
+      fieldPath: OnboardingFieldPath,
+      value: OnboardingFactValue,
+      confidence: z.enum(['high', 'medium', 'low']),
+      factState: z.enum(['owner_supplied', 'inferred', 'needs_confirmation']),
+    })
+    .strict();
+  const profileFields =
+    'display_name,website_url,base_location,service_areas,services,preferred_job_types,enquiry_channels,primary_goal,admin_bottleneck,brand_summary,onboarding_status,confirmed_at';
+  async function profileState(signal: AbortSignal) {
+    const [profileResult, factsResult] = await Promise.all([
+      db
+        .from('business_profiles')
+        .select(profileFields)
+        .eq('workspace_id', workspaceId)
+        .abortSignal(signal)
+        .maybeSingle(),
+      db
+        .from('business_profile_facts')
+        .select('field_path,value,confidence,fact_state')
+        .eq('workspace_id', workspaceId)
+        .abortSignal(signal),
+    ]);
+    const row = checked(profileResult);
+    const facts = (checked(factsResult) || []) as {
+      field_path: z.infer<typeof OnboardingFieldPath>;
+      value: string | string[];
+      confidence: string;
+      fact_state: string;
+    }[];
+    const progress = onboardingGoalProgress(facts.map((f) => f.field_path));
+    return {
+      onboardingStatus: (row?.onboarding_status || 'not_started') as
+        | 'not_started'
+        | 'in_progress'
+        | 'review'
+        | 'confirmed',
+      profile: row
+        ? Object.fromEntries(
+            OnboardingFieldPath.options.map((key) => [key, row[key] ?? null]),
+          )
+        : null,
+      facts: facts.map((fact) => ({
+        fieldPath: fact.field_path,
+        value: fact.value,
+        confidence: fact.confidence,
+        factState: fact.fact_state,
+      })),
+      knownFields: progress.knownFields,
+      openGoals: progress.openGoals,
+      suggestedQuestion: progress.suggestedQuestion,
+    };
+  }
+  add(
+    'profile.read',
+    'Read the business profile being built for this workspace at any setup stage: known facts, open profile goals and one suggested question. Use before asking the owner anything about their business.',
+    empty,
+    z
+      .object({
+        onboardingStatus: z.enum([
+          'not_started',
+          'in_progress',
+          'review',
+          'confirmed',
+        ]),
+        profile: z.record(z.string(), z.json()).nullable(),
+        facts: z
+          .array(
+            profileFact
+              .omit({ confidence: true, factState: true })
+              .extend({ confidence: z.string(), factState: z.string() }),
+          )
+          .max(20),
+        knownFields: z.array(OnboardingFieldPath).max(10),
+        openGoals: z.array(z.string()).max(4),
+        suggestedQuestion: z.string().nullable(),
+      })
+      .strict(),
+    (_, signal) => profileState(signal),
+  );
+  add(
+    'profile.record_facts',
+    'Save business facts the owner established in this conversation into their profile (name, location, services, areas, enquiry channels, goal, bottleneck, summary). Only owner-stated or conservatively inferred facts; never copy raw chat. Confirmation of the finished profile stays with the owner.',
+    z.object({ facts: z.array(profileFact).min(1).max(12) }).strict(),
+    z
+      .object({
+        recorded: z.array(OnboardingFieldPath).max(12),
+        onboardingStatus: z.enum(['in_progress', 'review', 'confirmed']),
+        openGoals: z.array(z.string()).max(4),
+        confirmationRequired: z.boolean(),
+      })
+      .strict(),
+    async ({ facts }, signal) => {
+      const now = new Date().toISOString();
+      const existing = checked(
+        await admin
+          .from('business_profiles')
+          .select('display_name,onboarding_status')
+          .eq('workspace_id', workspaceId)
+          .abortSignal(signal)
+          .maybeSingle(),
+      );
+      const existingFacts = (checked(
+        await admin
+          .from('business_profile_facts')
+          .select('field_path')
+          .eq('workspace_id', workspaceId)
+          .abortSignal(signal),
+      ) || []) as { field_path: z.infer<typeof OnboardingFieldPath> }[];
+      const patch = profilePatch(facts);
+      const known = new Set([
+        ...existingFacts.map((fact) => fact.field_path),
+        ...facts.map((fact) => fact.fieldPath),
+      ]);
+      const useful =
+        known.has('display_name') &&
+        ['services', 'primary_goal', 'brand_summary'].some((field) =>
+          known.has(field as z.infer<typeof OnboardingFieldPath>),
+        );
+      const onboardingStatus =
+        existing?.onboarding_status === 'confirmed'
+          ? 'confirmed'
+          : useful
+            ? 'review'
+            : 'in_progress';
+      const workspace = existing
+        ? null
+        : checked(
+            await db
+              .from('workspaces')
+              .select('name')
+              .eq('id', workspaceId)
+              .abortSignal(signal)
+              .single(),
+          );
+      checked(
+        await admin.from('business_profiles').upsert(
+          {
+            workspace_id: workspaceId,
+            display_name:
+              typeof patch.display_name === 'string'
+                ? patch.display_name
+                : existing?.display_name || workspace?.name || 'My business',
+            ...patch,
+            onboarding_status: onboardingStatus,
+            updated_at: now,
+          },
+          { onConflict: 'workspace_id', ignoreDuplicates: false },
+        ),
+      );
+      for (const fact of facts)
+        checked(
+          await admin.from('business_profile_facts').upsert(
+            {
+              workspace_id: workspaceId,
+              field_path: fact.fieldPath,
+              value: fact.value,
+              source_type: 'owner_message',
+              source_label: 'Your chat conversation',
+              source_url: `owner://chat/${conversationId}`,
+              confidence: fact.confidence,
+              fact_state: fact.factState,
+              observed_at: now,
+              confirmed_at: null,
+            },
+            { onConflict: 'workspace_id,field_path', ignoreDuplicates: false },
+          ),
+        );
+      checked(
+        await admin.from('audit_logs').insert({
+          workspace_id: workspaceId,
+          actor_id: userId,
+          event: 'profile.facts_recorded',
+          entity_id: conversationId,
+          metadata: {
+            fields: facts.map((fact) => fact.fieldPath),
+            onboarding_status: onboardingStatus,
+          },
+        }),
+      );
+      return {
+        recorded: facts.map((fact) => fact.fieldPath),
+        onboardingStatus,
+        openGoals: onboardingGoalProgress(known).openGoals,
+        confirmationRequired: onboardingStatus !== 'confirmed',
+      };
+    },
+    'internal_reversible',
+  );
   add(
     'records.search',
     'Search active records in this workspace by a literal title/body phrase. Returns up to 8 newest matches, not complete financial-period coverage. Use records.get for a full selected record.',
@@ -636,7 +828,7 @@ export function createManagerTools(
   );
   add(
     'skills.read',
-    'Load one or more specialist instruction packs: finance, social, marketing, maintenance, website. They are resources for the Manager; you own the final answer.',
+    'Load specialist instruction packs: finance, social, marketing, maintenance, website. Load only the pack the task needs; each costs model context. You own the final answer.',
     SkillSelection,
     z
       .array(

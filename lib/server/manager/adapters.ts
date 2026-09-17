@@ -29,7 +29,15 @@ const openaiOutput = z.object({
   status: z.string(),
   output: z.array(z.object({ type: z.string() }).loose()).max(40),
   usage: z
-    .object({ input_tokens: count, output_tokens: count, total_tokens: count })
+    .object({
+      input_tokens: count,
+      output_tokens: count,
+      total_tokens: count,
+      input_tokens_details: z
+        .object({ cached_tokens: count.optional() })
+        .loose()
+        .optional(),
+    })
     .optional(),
 });
 const anthropicOutput = z.object({
@@ -143,6 +151,8 @@ export class ResponsesManagerAdapter implements ManagerModelAdapter {
           inputTokens: data.usage.input_tokens,
           outputTokens: data.usage.output_tokens,
           totalTokens: data.usage.total_tokens,
+          cachedInputTokens:
+            data.usage.input_tokens_details?.cached_tokens || 0,
         });
       if (
         data.output.some(
@@ -249,14 +259,12 @@ export class AnthropicManagerAdapter implements ManagerModelAdapter {
     } else {
       this.transcript.push({
         role: 'user',
-        content: input.results
-          .slice(this.delivered)
-          .map((result) => ({
-            type: 'tool_result',
-            tool_use_id: result.callId,
-            content: JSON.stringify(result),
-            is_error: !result.ok,
-          })),
+        content: input.results.slice(this.delivered).map((result) => ({
+          type: 'tool_result',
+          tool_use_id: result.callId,
+          content: JSON.stringify(result),
+          is_error: !result.ok,
+        })),
       });
       this.delivered = input.results.length;
     }
@@ -276,13 +284,26 @@ export class AnthropicManagerAdapter implements ManagerModelAdapter {
           },
           body: JSON.stringify({
             model: this.model,
-            system: input.instructions,
+            // Instructions and tool definitions are identical on every turn of
+            // a run and across runs. Mark them as a cacheable prefix so repeat
+            // turns re-read them from the provider cache instead of paying
+            // full input price again.
+            system: [
+              {
+                type: 'text',
+                text: input.instructions,
+                cache_control: { type: 'ephemeral' },
+              },
+            ],
             messages: this.transcript,
             max_tokens: input.maxOutputTokens,
-            tools: input.tools.map((tool) => ({
+            tools: input.tools.map((tool, index) => ({
               name: wireName(tool.name),
               description: tool.description,
               input_schema: modelSchema(tool.input, 'anthropic'),
+              ...(index === input.tools.length - 1
+                ? { cache_control: { type: 'ephemeral' } }
+                : {}),
             })),
             output_config: {
               format: {
@@ -310,6 +331,7 @@ export class AnthropicManagerAdapter implements ManagerModelAdapter {
           inputTokens,
           outputTokens: data.usage.output_tokens,
           totalTokens: inputTokens + data.usage.output_tokens,
+          cachedInputTokens: data.usage.cache_read_input_tokens || 0,
         });
       }
       if (data.stop_reason === 'refusal') throw new AppError('AI_REFUSED', 422);
@@ -439,6 +461,9 @@ export function aggregateManagerUsage(usage: ManagerUsage[]) {
       current.inputTokens += row.inputTokens;
       current.outputTokens += row.outputTokens;
       current.totalTokens += row.totalTokens;
+      if (row.cachedInputTokens)
+        current.cachedInputTokens =
+          (current.cachedInputTokens || 0) + row.cachedInputTokens;
       if (!current.model.split(',').includes(row.model))
         current.model += ',' + row.model;
     } else totals.set(key, { ...row });
