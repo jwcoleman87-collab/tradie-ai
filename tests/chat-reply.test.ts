@@ -8,7 +8,6 @@ const render = (text: string, actions = false) =>
   renderToStaticMarkup(
     createElement(ChatReply, {
       text,
-      workspaceName: 'Example business',
       showActions: actions,
       actionsEnabled: actions,
       onChoosePrompt: () => true,
