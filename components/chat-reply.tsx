@@ -22,7 +22,7 @@ import {
 import { BrandMark } from './brand';
 import { Button } from './workbench-controls';
 import { MessageCopy, parseResearchMessage } from './message-copy';
-import { findWorkspaceBrand, type BrandId } from '@/lib/brands';
+import { type BrandId } from '@/lib/brands';
 import {
   parseChatSections,
   type ReplyBlock,
@@ -220,14 +220,18 @@ function ReplySectionView({
     </div>
   );
   if (primary) {
+    // A plain conversational answer reads as prose, with no surrounding card or
+    // repeated title. Structured briefs keep their heading.
+    const bare = section.kind === 'answer';
     return (
       <section
         className="chat-reply-section"
         data-kind={section.kind}
         data-primary="true"
+        data-bare={bare || undefined}
         aria-label={section.title}
       >
-        <h3 className="chat-reply-primary-title">{heading}</h3>
+        {!bare && <h3 className="chat-reply-primary-title">{heading}</h3>}
         {content}
       </section>
     );
@@ -303,13 +307,11 @@ function ReplyActions({
 /** Renders saved reply content only; presentation never supplies business facts. */
 export const ChatReply = memo(function ChatReply({
   text,
-  workspaceName,
   showActions = false,
   actionsEnabled = false,
   onChoosePrompt,
 }: {
   text: string;
-  workspaceName: string;
   showActions?: boolean;
   actionsEnabled?: boolean;
   onChoosePrompt?: (prompt: string) => boolean;
@@ -340,23 +342,6 @@ export const ChatReply = memo(function ChatReply({
     ) : null;
   return (
     <div className="chat-reply" data-compact={compact}>
-      {!compact && (
-        <div className="chat-reply-heading">
-          <div className="chat-reply-identity">
-            {overview && (
-              <BrandMark
-                brand={findWorkspaceBrand(workspaceName)}
-                alt={workspaceName}
-                compact
-              />
-            )}
-            <span>{overview ? workspaceName : 'Your crew'}</span>
-          </div>
-          <span className="chat-reply-label">
-            {overview ? 'Business brief' : 'Chat brief'}
-          </span>
-        </div>
-      )}
       {coverage && (
         <div className="chat-reply-coverage">
           <MessageCopy text={coverage[0]} />

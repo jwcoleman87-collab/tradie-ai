@@ -1,4 +1,6 @@
-/* Expandable assistant replies. Keep the existing user-message presentation. */
+/* Expandable assistant replies. Keep the existing user-message presentation.
+   The reply itself carries no card, header or frame: the answer reads as plain
+   conversation, and only supporting detail keeps a visible container. */
 .message.assistant:has(.chat-reply),
 .app-shell article.message.assistant:has(.chat-reply),
 .app-shell.handoff-shell article.message.assistant:has(.chat-reply) {
@@ -6,9 +8,9 @@
   max-width: 100%;
   min-width: 0;
   padding: 0;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--card);
+  border: 0;
+  border-radius: 0;
+  background: transparent;
   color: var(--card-foreground);
   box-shadow: none;
 }
@@ -24,8 +26,7 @@
   container: chat-reply / inline-size;
   width: 100%;
   min-width: 0;
-  border-radius: 6px;
-  background: var(--reply-base);
+  background: transparent;
   color: var(--reply-ink);
   font-family: var(--font-body);
   font-size: 14px;
@@ -50,45 +51,8 @@
   margin: 0;
 }
 
-.chat-reply .chat-reply-heading {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 10px 16px;
-  padding: 16px 20px;
-  border-bottom: 2px solid var(--workbench-yellow);
-  border-radius: 5px 5px 0 0;
-  background: var(--workbench-ink);
-  color: var(--workbench-paper);
-}
-
-.chat-reply .chat-reply-identity {
-  display: flex;
-  align-items: center;
-  min-width: 0;
-  gap: 10px;
-  font-family: var(--font-display);
-  font-size: 17px;
-  font-weight: 600;
-  letter-spacing: -0.2px;
-}
-
-.chat-reply .chat-reply-identity .brand-logo-box {
-  width: 32px;
-  height: 32px;
-  min-width: 32px;
-  flex-basis: 32px;
-  border-radius: 4px;
-}
-
-.chat-reply .chat-reply-label {
-  font-size: 11px;
-  line-height: 1.5;
-}
-
 .chat-reply .chat-reply-coverage {
-  margin: 16px 20px 0;
+  margin: 0 0 14px;
   padding: 10px 12px;
   border-left: 3px solid var(--workbench-yellow);
   background: var(--reply-surface);
@@ -100,8 +64,8 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   align-items: start;
-  gap: 16px;
-  padding: 20px;
+  gap: 12px;
+  padding: 0;
 }
 
 .chat-reply .chat-reply-section {
@@ -132,6 +96,17 @@
 
 .chat-reply .chat-reply-section[data-primary='true'] {
   grid-column: 1 / -1;
+}
+
+.chat-reply .chat-reply-section[data-bare] {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.chat-reply .chat-reply-section[data-bare] > .chat-reply-section-body {
+  padding: 0;
+  font-size: 14px;
 }
 
 .chat-reply .chat-reply-primary-title {
@@ -190,7 +165,7 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 10px 14px;
+  padding: 0 0 6px;
 }
 
 .chat-reply .chat-reply-section-body > * + * {
@@ -380,7 +355,7 @@
 
 .chat-reply .chat-reply-action-panel {
   min-width: 0;
-  margin: 0 20px 20px;
+  margin: 12px 0 0;
   border: 1px solid var(--reply-line);
   border-radius: 6px;
   background: var(--reply-surface);
@@ -485,7 +460,7 @@
 }
 
 .chat-reply .chat-reply-tools {
-  margin: 0 20px;
+  margin: 12px 0 0;
   border-top: 1px solid var(--reply-line);
 }
 
@@ -496,12 +471,11 @@
 }
 
 .chat-reply .chat-reply-tools .chat-reply-action-panel {
-  margin: 0 0 20px;
+  margin: 0 0 12px;
 }
 
 .chat-reply[data-compact='true'] .chat-reply-sections {
   gap: 12px;
-  padding-block: 16px;
 }
 
 .chat-reply :is(summary, button, a):focus-visible,
@@ -524,21 +498,8 @@
 }
 
 @container chat-reply (max-width: 579px) {
-  .chat-reply .chat-reply-heading {
-    padding: 14px;
-  }
-
   .chat-reply .chat-reply-sections {
     gap: 12px;
-    padding: 14px;
-  }
-
-  .chat-reply .chat-reply-coverage {
-    margin: 14px 14px 0;
-  }
-
-  .chat-reply .chat-reply-action-panel {
-    margin: 0 14px 14px;
   }
 
   .chat-reply .chat-reply-action-groups {
@@ -556,10 +517,6 @@
 
   .chat-reply .chat-reply-action {
     min-height: 49px;
-  }
-
-  .chat-reply .chat-reply-tools {
-    margin-inline: 14px;
   }
 
   .chat-reply .chat-reply-metric {

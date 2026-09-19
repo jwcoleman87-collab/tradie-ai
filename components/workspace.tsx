@@ -1457,7 +1457,6 @@ export default function Workspace() {
                             {m.role === 'assistant' ? (
                               <ChatReply
                                 text={m.content}
-                                workspaceName={snapshot?.workspace.name || ''}
                                 showActions={m.id === chat.messages.at(-1)?.id}
                                 actionsEnabled={canCompose && !voice.active}
                                 onChoosePrompt={(prompt) => {
